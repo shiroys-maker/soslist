@@ -106,7 +106,7 @@ document.getElementById('confirmEdit').addEventListener('click', () => {
   const time = document.getElementById('timeSelect').value;
   if (!date || !time || !editingDocId) return;
   const jstDateTimeStr = `${date}T${time}`;
-  const assumedUtcDate = new Date(jstDateTimeStr);
+  const assumedUtcDate = new Date(new Date(jstDate).getTime() + 9 * 60 * 60 * 1000);
   const dataToUpdate = {
     appointmentDateTime: firebase.firestore.Timestamp.fromDate(assumedUtcDate),
     appointmentDate: `${jstDateTimeStr}:00`
