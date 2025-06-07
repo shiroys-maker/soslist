@@ -18,18 +18,20 @@ const storage = firebase.storage();
 // --- データ表示機能 ---
 const tableBody = document.querySelector("#appointmentsTable tbody");
 
-// Firestoreの'appointments'コレクションを監視
+// ▼▼▼ onSnapshotからget()に変更してテスト ▼▼▼
 db.collection("appointments")
-  .orderBy("appointmentDateTime", "desc") // appointmentDateTimeで降順ソート
-  .onSnapshot(snapshot => {
+  .orderBy("appointmentDateTime", "desc")
+  .get()
+  .then(querySnapshot => {
+      console.log("Firestoreからのデータ取得に成功！");
       tableBody.innerHTML = ""; // テーブルを一旦空にする
-      snapshot.forEach(doc => {
+      if (querySnapshot.empty) {
+        console.log("データは空でした。");
+        return;
+      }
+      querySnapshot.forEach(doc => {
           const data = doc.data();
-
-          // 日付を読みやすい形式にフォーマット
           const date = data.appointmentDateTime.toDate().toLocaleString('ja-JP');
-          
-          // ▼▼▼ 文字列の構文を修正 ▼▼▼
           const row = `
               <tr>
                   <td>${date}</td>
@@ -39,10 +41,14 @@ db.collection("appointments")
                   <td>${(data.services || []).join(', ')}</td>
               </tr>
           `;
-          // ▲▲▲ 文字列の構文を修正 ▲▲▲
           tableBody.innerHTML += row;
       });
+  })
+  .catch(error => {
+      console.error("Firestoreからのデータ取得でエラーが発生しました:", error);
   });
+// ▲▲▲ onSnapshotからget()に変更してテスト ▲▲▲
+
 
 // --- PDFアップロード機能 ---
 const uploader = document.getElementById('pdfUploader');
@@ -56,9 +62,7 @@ uploadButton.addEventListener('click', () => {
         return;
     }
 
-    // ▼▼▼ ファイル名の文字列構文を修正 ▼▼▼
     const fileName = `${new Date().getTime()}_${file.name}`;
-    // ▲▲▲ ファイル名の文字列構文を修正 ▲▲▲
     const storageRef = storage.ref(`uploads/${fileName}`);
 
     const task = storageRef.put(file);
