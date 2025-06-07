@@ -1,4 +1,4 @@
-// ▼▼▼ ここにFirebaseプロジェクトの設定情報を貼り付け ▼▼▼
+// ▼▼▼ ここにあなたのFirebaseプロジェクトの設定情報を貼り付けてください ▼▼▼
 const firebaseConfig = {
   apiKey: "AIzaSyBIkxaIgnjkrOYfx3oyA0BGX5dubL5QhvI",
   authDomain: "sos-list-4d150.firebaseapp.com",
@@ -75,7 +75,6 @@ logoutButton.addEventListener('click', () => {
 
 // PDFアップロードボタン
 uploadButton.addEventListener('click', () => {
-    // (この中のコードは変更なし)
     const files = uploader.files;
     if (files.length === 0) {
         uploadStatus.textContent = 'ファイルが選択されていません。';
@@ -113,6 +112,7 @@ function setupRealtimeListener() {
           querySnapshot.forEach(doc => {
               const data = doc.data();
               const date = data.appointmentDateTime ? data.appointmentDateTime.toDate().toLocaleString('ja-JP') : '日付なし';
+              // 編集・削除ボタンのために、各行にドキュメントIDを付与
               const row = `
                   <tr data-id="${doc.id}">
                       <td>${date}</td>
@@ -141,3 +141,66 @@ function startLogoutTimer() {
         auth.signOut();
     }, 300000); // 5分 = 300,000ミリ秒
 }
+
+
+// ▼▼▼ ここからが追加されたコード ▼▼▼
+// --- テーブルのボタン処理 ---
+tableBody.addEventListener('click', (e) => {
+    const target = e.target;
+    const docId = target.closest('tr').dataset.id;
+
+    if (!docId) return;
+
+    // 削除ボタンが押された場合
+    if (target.classList.contains('delete-btn')) {
+        if (confirm('このデータを本当に削除しますか？')) {
+            db.collection('appointments').doc(docId).delete()
+                .then(() => {
+                    console.log('ドキュメントの削除に成功しました。');
+                })
+                .catch(error => {
+                    console.error('ドキュメントの削除中にエラーが発生しました:', error);
+                    alert('削除に失敗しました。');
+                });
+        }
+    }
+
+    // 編集ボタンが押された場合
+    if (target.classList.contains('edit-btn')) {
+        handleEdit(docId);
+    }
+});
+
+// 編集処理を行う関数
+function handleEdit(docId) {
+    const docRef = db.collection('appointments').doc(docId);
+    docRef.get().then(doc => {
+        if (!doc.exists) {
+            console.log('ドキュメントが見つかりません');
+            return;
+        }
+
+        const currentData = doc.data();
+        
+        // promptで新しい値を入力させる (より高度なUIも可能)
+        const newName = prompt('新しい氏名を入力してください:', currentData.claimantName || '');
+        const newContract = prompt('新しい契約番号を入力してください:', currentData.contractNumber || '');
+
+        const dataToUpdate = {};
+        if (newName !== null) dataToUpdate.claimantName = newName;
+        if (newContract !== null) dataToUpdate.contractNumber = newContract;
+
+        // 何か更新するデータがある場合のみ実行
+        if (Object.keys(dataToUpdate).length > 0) {
+            docRef.update(dataToUpdate)
+                .then(() => {
+                    console.log('ドキュメントの更新に成功しました。');
+                })
+                .catch(error => {
+                    console.error('ドキュメントの更新中にエラーが発生しました:', error);
+                    alert('更新に失敗しました。');
+                });
+        }
+    });
+}
+// ▲▲▲ ここまでが追加されたコード ▲▲▲
