@@ -113,15 +113,16 @@ function setupRealtimeListener() {
               if (appointmentDate && appointmentDate < filterDate) return;
 
               const date = appointmentDate
-                  ? new Date(appointmentDate.getTime() - 9 * 60 * 60 * 1000).toLocaleString('ja-JP', {
-                      year: 'numeric',
-                      month: '2-digit',
-                      day: '2-digit',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      hour12: false
-                    })
-                  : '日付なし';
+    ? new Date(appointmentDate.getTime() - 9 * 60 * 60 * 1000).toLocaleString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+        timeZone: 'Asia/Tokyo'
+      })
+    : 'No date';
 
               const row = `
                   <tr data-id="${doc.id}">
