@@ -111,7 +111,7 @@ function setupRealtimeListener() {
           tableBody.innerHTML = "";
           querySnapshot.forEach(doc => {
               const data = doc.data();
-              const date = data.appointmentDateTime ? data.appointmentDateTime.toDate().toLocaleString('ja-JP') : '日付なし';
+              const date = data.appointmentDateTime? data.appointmentDateTime.toDate().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }): '日付なし';
               const row = `
                   <tr data-id="${doc.id}">
                       <td>${date}</td>
