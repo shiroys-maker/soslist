@@ -197,6 +197,7 @@ function handleEdit(docId) {
 }
 ;
         if (newDate !== null) dataToUpdate.appointmentDateTime = newDate;
+        if (newPhone !== null) dataToUpdate.japanCellPhone = newPhone;
         if (Object.keys(dataToUpdate).length > 0) {
             docRef.update(dataToUpdate)
                 .then(() => console.log('更新成功'))
@@ -207,3 +208,30 @@ function handleEdit(docId) {
         }
     });
 }
+
+
+document.getElementById("saveEditBtn").addEventListener("click", () => {
+  const date = document.getElementById("dateSelect").value;
+  const time = document.getElementById("timeSelect").value;
+  const jstDateTimeStr = `${date}T${time}`;
+
+  // JSTとして入力された日時をUTCに補正
+  const utcDate = new Date(new Date(jstDateTimeStr).getTime() - 9 * 60 * 60 * 1000);
+
+  const dataToUpdate = {
+    appointmentDateTime: firebase.firestore.Timestamp.fromDate(utcDate),
+    appointmentDate: `${jstDateTimeStr}:00`
+  };
+
+  if (editingDocId) {
+    db.collection('appointments').doc(editingDocId).update(dataToUpdate)
+      .then(() => {
+        console.log('更新成功');
+        document.getElementById('editModal').style.display = 'none';
+      })
+      .catch(error => {
+        console.error('更新エラー:', error);
+        alert('更新に失敗しました。');
+      });
+  }
+});
