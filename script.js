@@ -29,36 +29,31 @@ const tableBody = document.querySelector("#appointmentsTable tbody");
 const uploader = document.getElementById('pdfUploader');
 const uploadButton = document.getElementById('uploadButton');
 const uploadStatus = document.getElementById('uploadStatus');
+const dateFilter = document.getElementById('dateFilter');
 
-let logoutTimer; // ログアウトタイマー用の変数を宣言
+let logoutTimer;
 
 // --- ログイン状態の監視 ---
 auth.onAuthStateChanged(user => {
     if (user) {
-        // ログインしている場合
         loginContainer.style.display = 'none';
         mainAppContainer.style.display = 'block';
         userEmailSpan.textContent = user.email;
 
-        // ログイン時にFirestoreの監視を開始
+        // 日付フィルターを本日に設定
+        const today = new Date();
+        dateFilter.value = today.toISOString().split('T')[0];
+
         setupRealtimeListener();
-
-        // 5分後に自動ログアウトするタイマーを開始
         startLogoutTimer();
-
     } else {
-        // ログアウトしている場合
         loginContainer.style.display = 'block';
         mainAppContainer.style.display = 'none';
-        
-        // ログアウトタイマーを解除
         clearTimeout(logoutTimer);
     }
 });
 
 // --- イベントリスナー ---
-
-// ログインボタン
 loginButton.addEventListener('click', () => {
     const email = loginEmailInput.value;
     const password = loginPasswordInput.value;
@@ -68,12 +63,10 @@ loginButton.addEventListener('click', () => {
         });
 });
 
-// ログアウトボタン
 logoutButton.addEventListener('click', () => {
     auth.signOut();
 });
 
-// PDFアップロードボタン
 uploadButton.addEventListener('click', () => {
     const files = uploader.files;
     if (files.length === 0) {
@@ -84,14 +77,14 @@ uploadButton.addEventListener('click', () => {
         const fileName = `${new Date().getTime()}_${file.name}`;
         const storageRef = storage.ref(`uploads/${fileName}`);
         const task = storageRef.put(file);
-        task.on('state_changed', 
+        task.on('state_changed',
             (snapshot) => {
                 uploadStatus.textContent = `${file.name} をアップロード中...`;
-            }, 
-            (error) => { 
+            },
+            (error) => {
                 console.error(`${file.name} のアップロード失敗:`, error);
-            }, 
-            () => { 
+            },
+            () => {
                 console.log(`${file.name} のアップロード完了！`);
                 uploadStatus.textContent = '全てのアップロードが完了しました。';
             }
@@ -100,27 +93,36 @@ uploadButton.addEventListener('click', () => {
     uploader.value = '';
 });
 
+// --- 日付フィルター変更で再読み込み ---
+dateFilter.addEventListener('change', () => {
+    setupRealtimeListener();
+});
 
-// --- 関数 ---
-
-// Firestoreのリアルタイム監視を設定する関数
+// --- Firestoreのリアルタイム監視 ---
 function setupRealtimeListener() {
+    const filterDate = new Date(dateFilter.value + 'T00:00:00+09:00');
+
     db.collection("appointments")
       .orderBy("appointmentDateTime", "asc")
       .onSnapshot(querySnapshot => {
           tableBody.innerHTML = "";
           querySnapshot.forEach(doc => {
               const data = doc.data();
-              const date = data.appointmentDateTime
-    ? new Date(data.appointmentDateTime.toDate().getTime() - 9 * 60 * 60 * 1000).toLocaleString('ja-JP', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
-      })
-    : '日付なし';
+              const appointmentDate = data.appointmentDateTime?.toDate();
+
+              if (appointmentDate && appointmentDate < filterDate) return;
+
+              const date = appointmentDate
+                  ? new Date(appointmentDate.getTime() - 9 * 60 * 60 * 1000).toLocaleString('ja-JP', {
+                      year: 'numeric',
+                      month: '2-digit',
+                      day: '2-digit',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: false
+                    })
+                  : '日付なし';
+
               const row = `
                   <tr data-id="${doc.id}">
                       <td>${date}</td>
@@ -141,7 +143,6 @@ function setupRealtimeListener() {
       });
 }
 
-// 5分間の自動ログアウトタイマーを開始する関数
 function startLogoutTimer() {
     clearTimeout(logoutTimer);
     logoutTimer = setTimeout(() => {
@@ -150,48 +151,29 @@ function startLogoutTimer() {
     }, 300000);
 }
 
-
-// ▼▼▼ ここからがデバッグコード付きのブロック ▼▼▼
 // --- テーブルのボタン処理 ---
 tableBody.addEventListener('click', (e) => {
-    console.log("テーブルがクリックされました！"); // デバッグ1
     const target = e.target;
-    console.log("クリックされた要素:", target); // デバッグ2
-
     const tr = target.closest('tr');
-    console.log("一番近いTR要素:", tr); // デバッグ3
+    if (!tr) return;
 
-    if (!tr) {
-        console.log("TR要素が見つかりませんでした。");
-        return;
-    }
-    
     const docId = tr.dataset.id;
-    console.log("取得したドキュメントID:", docId); // デバッグ4
+    if (!docId) return;
 
-    if (!docId) {
-        console.log("ドキュメントIDが取得できませんでした。");
-        return;
-    }
-
-    // 削除ボタンが押された場合
     if (target.classList.contains('delete-btn')) {
-        console.log("削除ボタンがクリックされました。"); // デバッグ5
         if (confirm('このデータを本当に削除しますか？')) {
             db.collection('appointments').doc(docId).delete()
                 .then(() => {
-                    console.log('ドキュメントの削除に成功しました。');
+                    console.log('削除成功');
                 })
                 .catch(error => {
-                    console.error('ドキュメントの削除中にエラーが発生しました:', error);
+                    console.error('削除エラー:', error);
                     alert('削除に失敗しました。');
                 });
         }
     }
 
-    // 編集ボタンが押された場合
     if (target.classList.contains('edit-btn')) {
-        console.log("編集ボタンがクリックされました。"); // デバッグ6
         handleEdit(docId);
     }
 });
@@ -200,26 +182,20 @@ tableBody.addEventListener('click', (e) => {
 function handleEdit(docId) {
     const docRef = db.collection('appointments').doc(docId);
     docRef.get().then(doc => {
-        if (!doc.exists) {
-            console.log('ドキュメントが見つかりません');
-            return;
-        }
+        if (!doc.exists) return;
         const currentData = doc.data();
         const newDate = prompt('新しい予約日時を入力して下さい:', currentData.appointmentDateTime || '');
         const newPhone = prompt('新しい電話番号を入力してください:', currentData.japanCellPhone || '');
         const dataToUpdate = {};
         if (newDate !== null) dataToUpdate.appointmentDateTime = newDate;
-        if (newPhone !== null) dataToUpdate.japanCellPhone = newPhone; 
+        if (newPhone !== null) dataToUpdate.japanCellPhone = newPhone;
         if (Object.keys(dataToUpdate).length > 0) {
             docRef.update(dataToUpdate)
-                .then(() => {
-                    console.log('ドキュメントの更新に成功しました。');
-                })
+                .then(() => console.log('更新成功'))
                 .catch(error => {
-                    console.error('ドキュメントの更新中にエラーが発生しました:', error);
+                    console.error('更新エラー:', error);
                     alert('更新に失敗しました。');
                 });
         }
     });
 }
-// ▲▲▲ ここまでがデバッグコード付きのブロック ▲▲▲
