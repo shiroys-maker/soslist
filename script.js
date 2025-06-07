@@ -1,3 +1,4 @@
+document.addEventListener('DOMContentLoaded', () => {
 // ▼▼▼ ここにあなたのFirebaseプロジェクトの設定情報を貼り付けてください ▼▼▼
 const firebaseConfig = {
   apiKey: "AIzaSyBIkxaIgnjkrOYfx3oyA0BGX5dubL5QhvI",
@@ -234,4 +235,5 @@ document.getElementById("saveEditBtn").addEventListener("click", () => {
         alert('更新に失敗しました。');
       });
   }
+});
 });
