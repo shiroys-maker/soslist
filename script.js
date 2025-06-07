@@ -106,7 +106,7 @@ uploadButton.addEventListener('click', () => {
 // Firestoreのリアルタイム監視を設定する関数
 function setupRealtimeListener() {
     db.collection("appointments")
-      .orderBy("appointmentDateTime", "desc")
+      .orderBy("appointmentDateTime", "asc")
       .onSnapshot(querySnapshot => {
           tableBody.innerHTML = "";
           querySnapshot.forEach(doc => {
@@ -196,11 +196,11 @@ function handleEdit(docId) {
             return;
         }
         const currentData = doc.data();
-        const newName = prompt('新しい氏名を入力してください:', currentData.claimantName || '');
-        const newContract = prompt('新しい契約番号を入力してください:', currentData.contractNumber || '');
+        const newDate = prompt('新しい予約日時を入力して下さい:', currentData.appointmentDateTime || '');
+        const newPhone = prompt('新しい電話番号を入力してください:', currentData.japanCellPhone || '');
         const dataToUpdate = {};
-        if (newName !== null) dataToUpdate.claimantName = newName;
-        if (newContract !== null) dataToUpdate.contractNumber = newContract;
+        if (newDate !== null) dataToUpdate.appointmentDateTime = newDate;
+        if (newPhone !== null) dataToUpdate.japanCellPhone = newPhone; 
         if (Object.keys(dataToUpdate).length > 0) {
             docRef.update(dataToUpdate)
                 .then(() => {
