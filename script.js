@@ -1,4 +1,4 @@
-// ▼▼▼ ここにあなたのFirebaseプロジェクトの設定情報を貼り付けてください ▼▼▼
+// ▼▼▼ Firebaseプロジェクトの設定情報 ▼▼▼
 const firebaseConfig = {
   apiKey: "AIzaSyBIkxaIgnjkrOYfx3oyA0BGX5dubL5QhvI",
   authDomain: "sos-list-4d150.firebaseapp.com",
@@ -30,8 +30,14 @@ const uploader = document.getElementById('pdfUploader');
 const uploadButton = document.getElementById('uploadButton');
 const uploadStatus = document.getElementById('uploadStatus');
 const dateFilter = document.getElementById('dateFilter');
+const editModal = document.getElementById('editModal');
+const dateSelect = document.getElementById('dateSelect');
+const timeSelect = document.getElementById('timeSelect');
+const confirmEditBtn = document.getElementById('confirmEdit');
+const cancelEditBtn = document.getElementById('cancelEdit');
 
 let logoutTimer;
+let editingDocId = null; // 編集中のドキュメントIDを保持する変数
 
 // --- ログイン状態の監視 ---
 auth.onAuthStateChanged(user => {
@@ -40,15 +46,17 @@ auth.onAuthStateChanged(user => {
         mainAppContainer.style.display = 'block';
         userEmailSpan.textContent = user.email;
 
-        // 日付フィルターを本日に設定
         const today = new Date();
-        dateFilter.value = today.toISOString().split('T')[0];
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        dateFilter.value = `${year}-${month}-${day}`;
 
         setupRealtimeListener();
         startLogoutTimer();
     } else {
-        loginContainer.style.display = 'block';
-        mainAppContainer.style.display = 'none';
+        loginContainer.style.display = 'none';
+        mainAppContainer.style.display = 'block'; // 修正: ログイン画面を非表示にし、メインアプリを表示
         clearTimeout(logoutTimer);
     }
 });
@@ -78,64 +86,37 @@ uploadButton.addEventListener('click', () => {
         const storageRef = storage.ref(`uploads/${fileName}`);
         const task = storageRef.put(file);
         task.on('state_changed',
-            (snapshot) => {
-                uploadStatus.textContent = `${file.name} をアップロード中...`;
-            },
-            (error) => {
-                console.error(`${file.name} のアップロード失敗:`, error);
-            },
-            () => {
-                console.log(`${file.name} のアップロード完了！`);
-                uploadStatus.textContent = '全てのアップロードが完了しました。';
-            }
+            (snapshot) => uploadStatus.textContent = `${file.name} をアップロード中...`,
+            (error) => console.error(`${file.name} のアップロード失敗:`, error),
+            () => console.log(`${file.name} のアップロード完了！`)
         );
     }
     uploader.value = '';
+    uploadStatus.textContent = '全てのファイルのアップロードを開始しました。';
 });
 
-// --- 日付フィルター変更で再読み込み ---
 dateFilter.addEventListener('change', () => {
     setupRealtimeListener();
 });
 
 // --- Firestoreのリアルタイム監視 ---
 function setupRealtimeListener() {
-    const filterDate = new Date(dateFilter.value + 'T00:00:00+09:00');
-
+    const localDate = new Date(dateFilter.value);
+    const filterDate = new Date(localDate.getTime() - (localDate.getTimezoneOffset() * 60000));
+    
     db.collection("appointments")
+      .where("appointmentDateTime", ">=", filterDate)
       .orderBy("appointmentDateTime", "asc")
       .onSnapshot(querySnapshot => {
           tableBody.innerHTML = "";
           querySnapshot.forEach(doc => {
               const data = doc.data();
               const appointmentDate = data.appointmentDateTime?.toDate();
+              
+              const dateOptions = { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false };
+              const date = appointmentDate ? appointmentDate.toLocaleString('ja-JP', dateOptions) : '日付なし';
 
-              if (appointmentDate && appointmentDate < filterDate) return;
-
-              const date = appointmentDate
-                  ? new Date(appointmentDate.getTime() - 9 * 60 * 60 * 1000).toLocaleString('ja-JP', {
-                      year: 'numeric',
-                      month: '2-digit',
-                      day: '2-digit',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      hour12: false
-                    })
-                  : '日付なし';
-
-              const row = `
-                  <tr data-id="${doc.id}">
-                      <td>${date}</td>
-                      <td>${data.claimantName || ''}</td>
-                      <td>${data.contractNumber || ''}</td>
-                      <td>${data.japanCellPhone || ''}</td>
-                      <td>${(data.services || []).join(', ')}</td>
-                      <td>
-                          <button class="edit-btn">編集</button>
-                          <button class="delete-btn">削除</button>
-                      </td>
-                  </tr>
-              `;
+              const row = `<tr data-id="${doc.id}"><td>${date}</td><td>${data.claimantName || ''}</td><td>${data.contractNumber || ''}</td><td>${data.japanCellPhone || ''}</td><td>${(data.services || []).join(', ')}</td><td><button class="edit-btn">編集</button><button class="delete-btn">削除</button></td></tr>`;
               tableBody.innerHTML += row;
           });
       }, error => {
@@ -143,12 +124,13 @@ function setupRealtimeListener() {
       });
 }
 
+// --- 自動ログアウトタイマー ---
 function startLogoutTimer() {
     clearTimeout(logoutTimer);
     logoutTimer = setTimeout(() => {
         alert('30分間操作がなかったため、自動的にログアウトします。');
         auth.signOut();
-    }, 1800000);
+    }, 1800000); // 30分
 }
 
 // --- テーブルのボタン処理 ---
@@ -162,72 +144,53 @@ tableBody.addEventListener('click', (e) => {
 
     if (target.classList.contains('delete-btn')) {
         if (confirm('このデータを本当に削除しますか？')) {
-            db.collection('appointments').doc(docId).delete()
-                .then(() => {
-                    console.log('削除成功');
-                })
-                .catch(error => {
-                    console.error('削除エラー:', error);
-                    alert('削除に失敗しました。');
-                });
+            db.collection('appointments').doc(docId).delete().then(() => console.log('削除成功')).catch(error => console.error('削除エラー:', error));
         }
-    }
-
-    if (target.classList.contains('edit-btn')) {
-        handleEdit(docId);
+    } else if (target.classList.contains('edit-btn')) {
+        openEditModal(docId);
     }
 });
 
-// 編集処理を行う関数
-
-function handleEdit(docId) {
+// --- 編集モーダル関連の関数 ---
+function openEditModal(docId) {
   const docRef = db.collection('appointments').doc(docId);
   docRef.get().then(doc => {
     if (!doc.exists) return;
     const data = doc.data();
     const timestamp = data.appointmentDateTime?.toDate();
     if (timestamp) {
-      const jstDate = new Date(timestamp.getTime() - 9 * 60 * 60 * 1000);
-      document.getElementById('dateSelect').value = jstDate.toISOString().split('T')[0];
-      document.getElementById('timeSelect').value = jstDate.toTimeString().slice(0, 5);
+      const jstDate = new Date(timestamp.getTime() + 9 * 60 * 60 * 1000); // UTC to JST
+      dateSelect.value = jstDate.toISOString().split('T')[0];
+      timeSelect.value = jstDate.toISOString().substr(11, 5);
     }
     editingDocId = docId;
-    document.getElementById('editModal').style.display = 'flex';
+    editModal.style.display = 'flex';
   });
 }
-;
-        if (newDate !== null) dataToUpdate.appointmentDateTime = newDate;
-        if (Object.keys(dataToUpdate).length > 0) {
-            docRef.update(dataToUpdate)
-                .then(() => console.log('更新成功'))
-                .catch(error => {
-                    console.error('更新エラー:', error);
-                    alert('更新に失敗しました。');
-                });
-        }
 
+confirmEditBtn.addEventListener('click', () => {
+  if (!dateSelect.value || !timeSelect.value || !editingDocId) return;
 
-document.getElementById("saveEditBtn").addEventListener("click", () => {
-  const date = document.getElementById("dateSelect").value;
-  const time = document.getElementById("timeSelect").value;
-  const jstDateTimeStr = `${date}T${time}`;
-  const jstDate = `${jstDateTimeStr}:00`
-  const utcDate = new Date(new Date(jstDate).getTime() + 9 * 60 * 60 * 1000);
+  // JSTの文字列として日付と時間を結合
+  const jstDateTimeStr = `${dateSelect.value}T${timeSelect.value}:00`;
+  // 日本時間として解釈したDateオブジェクトを生成
+  const jstDate = new Date(jstDateTimeStr);
+  // FirestoreにはUTCで保存されるため、そのままTimestampに変換
+  const newTimestamp = firebase.firestore.Timestamp.fromDate(jstDate);
 
-  const dataToUpdate = {
-    appointmentDate: jstDate,
-    appointmentDateTime: utcDate
-  };
+  const dataToUpdate = { appointmentDateTime: newTimestamp };
 
-  if (editingDocId) {
-    db.collection('appointments').doc(editingDocId).update(dataToUpdate)
-      .then(() => {
+  db.collection('appointments').doc(editingDocId).update(dataToUpdate)
+    .then(() => {
         console.log('更新成功');
-        document.getElementById('editModal').style.display = 'none';
-      })
-      .catch(error => {
+        editModal.style.display = 'none';
+    })
+    .catch(error => {
         console.error('更新エラー:', error);
         alert('更新に失敗しました。');
-      });
-  }
+    });
+});
+
+cancelEditBtn.addEventListener('click', () => {
+  editModal.style.display = 'none';
 });
