@@ -184,11 +184,33 @@ function handleEdit(docId) {
     docRef.get().then(doc => {
         if (!doc.exists) return;
         const currentData = doc.data();
-        const newDate = prompt('新しい予約日時を入力して下さい:', currentData.appointmentDateTime || '');
+        const currentTimestamp = currentData.appointmentDateTime?.toDate();
+
+        // 表示は JST 補正後のISO文字列を短縮（例: 2025-06-19T13:30）
+        const jstDateStr = currentTimestamp
+            ? new Date(currentTimestamp.getTime() - 9 * 60 * 60 * 1000).toISOString().slice(0, 16)
+            : '';
+
+        const newDateInput = prompt('新しい予約日時を入力してください（例: 2025-06-19T13:30）', jstDateStr);
         const newPhone = prompt('新しい電話番号を入力してください:', currentData.japanCellPhone || '');
+
         const dataToUpdate = {};
-        if (newDate !== null) dataToUpdate.appointmentDateTime = newDate;
-        if (newPhone !== null) dataToUpdate.japanCellPhone = newPhone;
+
+        if (newDateInput !== null && newDateInput.trim() !== '') {
+            // ユーザーは JST で入力 → UTC に変換して Timestamp 作成
+            const jstDate = new Date(newDateInput);
+            const utcDate = new Date(jstDate.getTime() + 9 * 60 * 60 * 1000);
+
+            dataToUpdate.appointmentDateTime = firebase.firestore.Timestamp.fromDate(utcDate);
+
+            // 文字列として JST をそのまま保存（例: "2025-06-19T13:30:00"）
+            dataToUpdate.appointmentDate = `${newDateInput}:00`;
+        }
+
+        if (newPhone !== null) {
+            dataToUpdate.japanCellPhone = newPhone;
+        }
+
         if (Object.keys(dataToUpdate).length > 0) {
             docRef.update(dataToUpdate)
                 .then(() => console.log('更新成功'))
