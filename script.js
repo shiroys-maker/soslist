@@ -212,11 +212,8 @@ document.getElementById("saveEditBtn").addEventListener("click", () => {
   const time = document.getElementById("timeSelect").value;
   const jstDateTimeStr = `${date}T${time}`;
 
-  // JSTとして入力された日時をUTCに補正
-  const utcDate = new Date(new Date(jstDateTimeStr).getTime() + 18 * 60 * 60 * 1000);
-
   const dataToUpdate = {
-    appointmentDateTime: firebase.firestore.Timestamp.fromDate(utcDate),
+    appointmentDateTime: new Date(jstDateTimeStr),
     appointmentDate: `${jstDateTimeStr}:00`
   };
 
