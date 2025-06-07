@@ -187,7 +187,7 @@ function handleEdit(docId) {
     const data = doc.data();
     const timestamp = data.appointmentDateTime?.toDate();
     if (timestamp) {
-      const jstDate = new Date(timestamp.getTime() - 9 * 60 * 60 * 1000);
+      const jstDate = new Date(timestamp.getTime());
       document.getElementById('dateSelect').value = jstDate.toISOString().split('T')[0];
       document.getElementById('timeSelect').value = jstDate.toTimeString().slice(0, 5);
     }
