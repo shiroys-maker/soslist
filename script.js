@@ -112,8 +112,15 @@ function setupRealtimeListener() {
           querySnapshot.forEach(doc => {
               const data = doc.data();
               const date = data.appointmentDateTime
-                    ? new Date(data.appointmentDateTime.toDate().getTime() - 9 * 60 * 60 * 1000).toLocaleString('ja-JP')
-                    : '日付なし';
+    ? new Date(data.appointmentDateTime.toDate().getTime() - 9 * 60 * 60 * 1000).toLocaleString('ja-JP', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      })
+    : '日付なし';
               const row = `
                   <tr data-id="${doc.id}">
                       <td>${date}</td>
