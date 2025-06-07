@@ -17,6 +17,7 @@ const db = firebase.firestore();
 const storage = firebase.storage();
 
 // --- DOM要素の取得 ---
+// (変更なし)
 const loginContainer = document.getElementById('login-container');
 const mainAppContainer = document.getElementById('main-app-container');
 const loginButton = document.getElementById('loginButton');
@@ -37,7 +38,7 @@ const confirmEditBtn = document.getElementById('confirmEdit');
 const cancelEditBtn = document.getElementById('cancelEdit');
 
 let logoutTimer;
-let editingDocId = null; // 編集中のドキュメントIDを保持する変数
+let editingDocId = null;
 
 // --- ログイン状態の監視 ---
 auth.onAuthStateChanged(user => {
@@ -55,13 +56,14 @@ auth.onAuthStateChanged(user => {
         setupRealtimeListener();
         startLogoutTimer();
     } else {
-        loginContainer.style.display = 'none';
-        mainAppContainer.style.display = 'block'; // 修正: ログイン画面を非表示にし、メインアプリを表示
+        loginContainer.style.display = 'block';
+        mainAppContainer.style.display = 'none';
         clearTimeout(logoutTimer);
     }
 });
 
 // --- イベントリスナー ---
+// (変更なし)
 loginButton.addEventListener('click', () => {
     const email = loginEmailInput.value;
     const password = loginPasswordInput.value;
@@ -101,9 +103,12 @@ dateFilter.addEventListener('change', () => {
 
 // --- Firestoreのリアルタイム監視 ---
 function setupRealtimeListener() {
-    const localDate = new Date(dateFilter.value);
-    const filterDate = new Date(localDate.getTime() - (localDate.getTimezoneOffset() * 60000));
-    
+    const localDateStr = dateFilter.value;
+    if (!localDateStr) return;
+
+    // フィルターの日付をJSTの0時0分として解釈
+    const filterDate = new Date(`${localDateStr}T00:00:00`);
+
     db.collection("appointments")
       .where("appointmentDateTime", ">=", filterDate)
       .orderBy("appointmentDateTime", "asc")
@@ -112,9 +117,12 @@ function setupRealtimeListener() {
           querySnapshot.forEach(doc => {
               const data = doc.data();
               const appointmentDate = data.appointmentDateTime?.toDate();
-              
-              const dateOptions = { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false };
+
+              // ▼▼▼ ここが修正された部分です ▼▼▼
+              // UTC時刻に9時間を足すのではなく、toLocaleStringの機能で正しくJSTに変換・表示します
+              const dateOptions = { timeZone: 'Asia/Tokyo', year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false };
               const date = appointmentDate ? appointmentDate.toLocaleString('ja-JP', dateOptions) : '日付なし';
+              // ▲▲▲ ここが修正された部分です ▲▲▲
 
               const row = `<tr data-id="${doc.id}"><td>${date}</td><td>${data.claimantName || ''}</td><td>${data.contractNumber || ''}</td><td>${data.japanCellPhone || ''}</td><td>${(data.services || []).join(', ')}</td><td><button class="edit-btn">編集</button><button class="delete-btn">削除</button></td></tr>`;
               tableBody.innerHTML += row;
@@ -125,15 +133,17 @@ function setupRealtimeListener() {
 }
 
 // --- 自動ログアウトタイマー ---
+// (変更なし)
 function startLogoutTimer() {
     clearTimeout(logoutTimer);
     logoutTimer = setTimeout(() => {
         alert('30分間操作がなかったため、自動的にログアウトします。');
         auth.signOut();
-    }, 1800000); // 30分
+    }, 1800000);
 }
 
 // --- テーブルのボタン処理 ---
+// (変更なし)
 tableBody.addEventListener('click', (e) => {
     const target = e.target;
     const tr = target.closest('tr');
@@ -152,17 +162,25 @@ tableBody.addEventListener('click', (e) => {
 });
 
 // --- 編集モーダル関連の関数 ---
+// (変更なし、前回の修正で正常です)
 function openEditModal(docId) {
   const docRef = db.collection('appointments').doc(docId);
   docRef.get().then(doc => {
     if (!doc.exists) return;
     const data = doc.data();
     const timestamp = data.appointmentDateTime?.toDate();
+
     if (timestamp) {
-      const jstDate = new Date(timestamp.getTime() + 9 * 60 * 60 * 1000); // UTC to JST
-      dateSelect.value = jstDate.toISOString().split('T')[0];
-      timeSelect.value = jstDate.toISOString().substr(11, 5);
+      const dateOptions = { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' };
+      const timeOptions = { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit', hour12: false };
+      
+      const dateString = new Intl.DateTimeFormat('ja-JP', dateOptions).format(timestamp).replace(/\//g, '-');
+      const timeString = new Intl.DateTimeFormat('ja-JP', timeOptions).format(timestamp);
+      
+      dateSelect.value = dateString;
+      timeSelect.value = timeString;
     }
+    
     editingDocId = docId;
     editModal.style.display = 'flex';
   });
@@ -171,16 +189,11 @@ function openEditModal(docId) {
 confirmEditBtn.addEventListener('click', () => {
   if (!dateSelect.value || !timeSelect.value || !editingDocId) return;
 
-  // JSTの文字列として日付と時間を結合
   const jstDateTimeStr = `${dateSelect.value}T${timeSelect.value}:00`;
-  // 日本時間として解釈したDateオブジェクトを生成
-  const jstDate = new Date(jstDateTimeStr);
-  // FirestoreにはUTCで保存されるため、そのままTimestampに変換
-  const newTimestamp = firebase.firestore.Timestamp.fromDate(jstDate);
+  const dateInJST = new Date(jstDateTimeStr);
+  const newTimestamp = firebase.firestore.Timestamp.fromDate(dateInJST);
 
-  const dataToUpdate = { appointmentDateTime: newTimestamp };
-
-  db.collection('appointments').doc(editingDocId).update(dataToUpdate)
+  db.collection('appointments').doc(editingDocId).update({ appointmentDateTime: newTimestamp })
     .then(() => {
         console.log('更新成功');
         editModal.style.display = 'none';
