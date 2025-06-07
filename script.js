@@ -211,10 +211,12 @@ document.getElementById("saveEditBtn").addEventListener("click", () => {
   const date = document.getElementById("dateSelect").value;
   const time = document.getElementById("timeSelect").value;
   const jstDateTimeStr = `${date}T${time}`;
+  const jstDate = `${jstDateTimeStr}:00`
+  const utcDate = new Date(new Date(jstDate).getTime() + 9 * 60 * 60 * 1000);
 
   const dataToUpdate = {
-    appointmentDateTime: new Date(jstDateTimeStr),
-    appointmentDate: `${jstDateTimeStr}:00`
+    appointmentDate: jstDate,
+    appointmentDateTime: utcDate
   };
 
   if (editingDocId) {
