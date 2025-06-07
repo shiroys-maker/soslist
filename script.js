@@ -112,7 +112,6 @@ function setupRealtimeListener() {
           querySnapshot.forEach(doc => {
               const data = doc.data();
               const date = data.appointmentDateTime ? data.appointmentDateTime.toDate().toLocaleString('ja-JP') : '日付なし';
-              // 編集・削除ボタンのために、各行にドキュメントIDを付与
               const row = `
                   <tr data-id="${doc.id}">
                       <td>${date}</td>
@@ -135,24 +134,40 @@ function setupRealtimeListener() {
 
 // 5分間の自動ログアウトタイマーを開始する関数
 function startLogoutTimer() {
-    clearTimeout(logoutTimer); // 既存のタイマーをリセット
+    clearTimeout(logoutTimer);
     logoutTimer = setTimeout(() => {
         alert('5分間操作がなかったため、自動的にログアウトします。');
         auth.signOut();
-    }, 300000); // 5分 = 300,000ミリ秒
+    }, 300000);
 }
 
 
-// ▼▼▼ ここからが追加されたコード ▼▼▼
+// ▼▼▼ ここからがデバッグコード付きのブロック ▼▼▼
 // --- テーブルのボタン処理 ---
 tableBody.addEventListener('click', (e) => {
+    console.log("テーブルがクリックされました！"); // デバッグ1
     const target = e.target;
-    const docId = target.closest('tr').dataset.id;
+    console.log("クリックされた要素:", target); // デバッグ2
 
-    if (!docId) return;
+    const tr = target.closest('tr');
+    console.log("一番近いTR要素:", tr); // デバッグ3
+
+    if (!tr) {
+        console.log("TR要素が見つかりませんでした。");
+        return;
+    }
+    
+    const docId = tr.dataset.id;
+    console.log("取得したドキュメントID:", docId); // デバッグ4
+
+    if (!docId) {
+        console.log("ドキュメントIDが取得できませんでした。");
+        return;
+    }
 
     // 削除ボタンが押された場合
     if (target.classList.contains('delete-btn')) {
+        console.log("削除ボタンがクリックされました。"); // デバッグ5
         if (confirm('このデータを本当に削除しますか？')) {
             db.collection('appointments').doc(docId).delete()
                 .then(() => {
@@ -167,6 +182,7 @@ tableBody.addEventListener('click', (e) => {
 
     // 編集ボタンが押された場合
     if (target.classList.contains('edit-btn')) {
+        console.log("編集ボタンがクリックされました。"); // デバッグ6
         handleEdit(docId);
     }
 });
@@ -179,18 +195,12 @@ function handleEdit(docId) {
             console.log('ドキュメントが見つかりません');
             return;
         }
-
         const currentData = doc.data();
-        
-        // promptで新しい値を入力させる (より高度なUIも可能)
         const newName = prompt('新しい氏名を入力してください:', currentData.claimantName || '');
         const newContract = prompt('新しい契約番号を入力してください:', currentData.contractNumber || '');
-
         const dataToUpdate = {};
         if (newName !== null) dataToUpdate.claimantName = newName;
         if (newContract !== null) dataToUpdate.contractNumber = newContract;
-
-        // 何か更新するデータがある場合のみ実行
         if (Object.keys(dataToUpdate).length > 0) {
             docRef.update(dataToUpdate)
                 .then(() => {
@@ -203,4 +213,4 @@ function handleEdit(docId) {
         }
     });
 }
-// ▲▲▲ ここまでが追加されたコード ▲▲▲
+// ▲▲▲ ここまでがデバッグコード付きのブロック ▲▲▲
