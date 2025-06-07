@@ -185,7 +185,9 @@ function handleEdit(docId) {
     docRef.get().then(doc => {
         if (!doc.exists) return;
         const currentData = doc.data();
-        const currentTimestamp = currentData.appointmentDateTime?.toDate();
+        const currentTimestamp = currentData.appointmentDateTime instanceof firebase.firestore.Timestamp
+            ? currentData.appointmentDateTime.toDate()
+            : null;
 
         const jstDateStr = currentTimestamp
             ? new Date(currentTimestamp.getTime() - 9 * 60 * 60 * 1000).toISOString().slice(0, 16)
