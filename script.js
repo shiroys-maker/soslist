@@ -1,11 +1,12 @@
 // ▼▼▼ ここにFirebaseプロジェクトの設定情報を貼り付け ▼▼▼
 const firebaseConfig = {
-  apiKey: "AIzaSyCR9lTDkTFXbhbRsAmPDb8HAUfLxYiIrDI",
-  authDomain: "sos-list.firebaseapp.com",
-  projectId: "sos-list",
-  storageBucket: "sos-list.appspot.com", // ".firebasestorage.app" から ".appspot.com" に修正
-  messagingSenderId: "805971348088",
-  appId: "1:805971348088:web:629ff907765dc65582fb8d"
+  apiKey: "AIzaSyBIkxaIgnjkrOYfx3oyA0BGX5dubL5QhvI",
+  authDomain: "sos-list-4d150.firebaseapp.com",
+  projectId: "sos-list-4d150",
+  storageBucket: "sos-list-4d150.firebasestorage.app",
+  messagingSenderId: "455081821929",
+  appId: "1:455081821929:web:da87d8dd1f16bbe99e9278",
+  measurementId: "G-H3GQ56JJD8"
 };
 // ▲▲▲ ここまで ▲▲▲
 
