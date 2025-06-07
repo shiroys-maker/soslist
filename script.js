@@ -113,16 +113,15 @@ function setupRealtimeListener() {
               if (appointmentDate && appointmentDate < filterDate) return;
 
               const date = appointmentDate
-    ? new Date(appointmentDate.getTime() - 9 * 60 * 60 * 1000).toLocaleString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true,
-        timeZone: 'Asia/Tokyo'
-      })
-    : 'No date';
+                  ? new Date(appointmentDate.getTime() - 9 * 60 * 60 * 1000).toLocaleString('ja-JP', {
+                      year: 'numeric',
+                      month: '2-digit',
+                      day: '2-digit',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: false
+                    })
+                  : '日付なし';
 
               const row = `
                   <tr data-id="${doc.id}">
@@ -147,9 +146,9 @@ function setupRealtimeListener() {
 function startLogoutTimer() {
     clearTimeout(logoutTimer);
     logoutTimer = setTimeout(() => {
-        alert('15分間操作がなかったため、自動的にログアウトします。');
+        alert('5分間操作がなかったため、自動的にログアウトします。');
         auth.signOut();
-    }, 900000);
+    }, 300000);
 }
 
 // --- テーブルのボタン処理 ---
@@ -180,35 +179,24 @@ tableBody.addEventListener('click', (e) => {
 });
 
 // 編集処理を行う関数
+
 function handleEdit(docId) {
-    const docRef = db.collection('appointments').doc(docId);
-    docRef.get().then(doc => {
-        if (!doc.exists) return;
-        const currentData = doc.data();
-        const currentTimestamp = currentData.appointmentDateTime instanceof firebase.firestore.Timestamp
-            ? currentData.appointmentDateTime.toDate()
-            : null;
-
-        const jstDateStr = currentTimestamp
-            ? new Date(currentTimestamp.getTime() - 9 * 60 * 60 * 1000).toISOString().slice(0, 16)
-            : '';
-
-        const newDateInput = prompt('新しい予約日時を入力してください（例: 2025-06-19T13:30）', jstDateStr);
-        const newPhone = prompt('新しい電話番号を入力してください:', currentData.japanCellPhone || '');
-
-        const dataToUpdate = {};
-
-        if (newDateInput !== null && newDateInput.trim() !== '') {
-            // 補正せず、そのままUTCとして扱われる Date を使う（元々JSTとして入力されたもの）
-            const assumedUtcDate = new Date(newDateInput);
-            dataToUpdate.appointmentDateTime = firebase.firestore.Timestamp.fromDate(assumedUtcDate);
-            dataToUpdate.appointmentDate = `${newDateInput}:00`; // JSTそのまま記録
-        }
-
-        if (newPhone !== null) {
-            dataToUpdate.japanCellPhone = newPhone;
-        }
-
+  const docRef = db.collection('appointments').doc(docId);
+  docRef.get().then(doc => {
+    if (!doc.exists) return;
+    const data = doc.data();
+    const timestamp = data.appointmentDateTime?.toDate();
+    if (timestamp) {
+      const jstDate = new Date(timestamp.getTime() - 9 * 60 * 60 * 1000);
+      document.getElementById('dateSelect').value = jstDate.toISOString().split('T')[0];
+      document.getElementById('timeSelect').value = jstDate.toTimeString().slice(0, 5);
+    }
+    editingDocId = docId;
+    document.getElementById('editModal').style.display = 'flex';
+  });
+}
+;
+        if (newDate !== null) dataToUpdate.appointmentDateTime = newDate;
         if (Object.keys(dataToUpdate).length > 0) {
             docRef.update(dataToUpdate)
                 .then(() => console.log('更新成功'))
