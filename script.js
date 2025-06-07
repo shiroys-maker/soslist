@@ -18,20 +18,17 @@ const storage = firebase.storage();
 // --- データ表示機能 ---
 const tableBody = document.querySelector("#appointmentsTable tbody");
 
-// ▼▼▼ onSnapshotからget()に変更してテスト ▼▼▼
+// onSnapshotを使用して、Firestoreの変更をリアルタイムに監視する
 db.collection("appointments")
   .orderBy("appointmentDateTime", "desc")
-  .get()
-  .then(querySnapshot => {
-      console.log("Firestoreからのデータ取得に成功！");
+  .onSnapshot(querySnapshot => {
+      console.log("Firestoreのデータが更新されました。");
       tableBody.innerHTML = ""; // テーブルを一旦空にする
-      if (querySnapshot.empty) {
-        console.log("データは空でした。");
-        return;
-      }
       querySnapshot.forEach(doc => {
           const data = doc.data();
-          const date = data.appointmentDateTime.toDate().toLocaleString('ja-JP');
+          // 日付が存在する場合のみフォーマットする
+          const date = data.appointmentDateTime ? data.appointmentDateTime.toDate().toLocaleString('ja-JP') : '日付なし';
+          
           const row = `
               <tr>
                   <td>${date}</td>
@@ -43,11 +40,10 @@ db.collection("appointments")
           `;
           tableBody.innerHTML += row;
       });
-  })
-  .catch(error => {
-      console.error("Firestoreからのデータ取得でエラーが発生しました:", error);
+  }, error => {
+      // エラーハンドリングを追加
+      console.error("Firestoreのリアルタイム監視でエラーが発生しました:", error);
   });
-// ▲▲▲ onSnapshotからget()に変更してテスト ▲▲▲
 
 
 // --- PDFアップロード機能 ---
@@ -71,11 +67,11 @@ uploadButton.addEventListener('click', () => {
     task.on('state_changed', 
         (snapshot) => { /* 進捗表示（必要なら実装） */ }, 
         (error) => { 
-            console.error(error);
+            console.error("アップロードエラー:", error);
             uploadStatus.textContent = `アップロード失敗: ${error.message}`;
         }, 
         () => { 
-            uploadStatus.textContent = 'アップロード完了！バックエンドで処理中です。';
+            uploadStatus.textContent = 'アップロード完了！バックエンドで処理中です。（数秒で反映されます）';
             uploader.value = ''; // ファイル選択をリセット
         }
     );
