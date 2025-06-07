@@ -146,9 +146,9 @@ function setupRealtimeListener() {
 function startLogoutTimer() {
     clearTimeout(logoutTimer);
     logoutTimer = setTimeout(() => {
-        alert('15分間操作がなかったため、自動的にログアウトします。');
+        alert('30分間操作がなかったため、自動的にログアウトします。');
         auth.signOut();
-    }, 900000);
+    }, 1800000);
 }
 
 // --- テーブルのボタン処理 ---
