@@ -3,7 +3,7 @@ const firebaseConfig = {
   apiKey: "AIzaSyCR9lTDkTFXbhbRsAmPDb8HAUfLxYiIrDI",
   authDomain: "sos-list.firebaseapp.com",
   projectId: "sos-list",
-  storageBucket: "sos-list.firebasestorage.app",
+  storageBucket: "sos-list.appspot.com", // ".firebasestorage.app" から ".appspot.com" に修正
   messagingSenderId: "805971348088",
   appId: "1:805971348088:web:629ff907765dc65582fb8d"
 };
@@ -27,20 +27,22 @@ db.collection("appointments")
 
           // 日付を読みやすい形式にフォーマット
           const date = data.appointmentDateTime.toDate().toLocaleString('ja-JP');
-
+          
+          // ▼▼▼ 文字列の構文を修正 ▼▼▼
           const row = `
               <tr>
-                  <td><span class="math-inline">\{date\}</td\>
-                  <td>{data.claimantName || ''}</td>
-<td>data.contractNumber∣∣ 
-′′
- </td><td>{data.japanCellPhone || ''}</td>
-<td>${(data.services || []).join(', ')}</td>
-</tr>
-`;
-tableBody.innerHTML += row;
-});
-});
+                  <td>${date}</td>
+                  <td>${data.claimantName || ''}</td>
+                  <td>${data.contractNumber || ''}</td>
+                  <td>${data.japanCellPhone || ''}</td>
+                  <td>${(data.services || []).join(', ')}</td>
+              </tr>
+          `;
+          // ▲▲▲ 文字列の構文を修正 ▲▲▲
+          tableBody.innerHTML += row;
+      });
+  });
+
 // --- PDFアップロード機能 ---
 const uploader = document.getElementById('pdfUploader');
 const uploadButton = document.getElementById('uploadButton');
@@ -53,8 +55,9 @@ uploadButton.addEventListener('click', () => {
         return;
     }
 
-    // ファイル名にタイムスタンプを付けて一意にする
-    const fileName = `<span class="math-inline">\{new Date\(\)\.getTime\(\)\}\_</span>{file.name}`;
+    // ▼▼▼ ファイル名の文字列構文を修正 ▼▼▼
+    const fileName = `${new Date().getTime()}_${file.name}`;
+    // ▲▲▲ ファイル名の文字列構文を修正 ▲▲▲
     const storageRef = storage.ref(`uploads/${fileName}`);
 
     const task = storageRef.put(file);
@@ -72,5 +75,3 @@ uploadButton.addEventListener('click', () => {
         }
     );
 });
-```
-
