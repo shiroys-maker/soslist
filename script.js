@@ -194,6 +194,15 @@ function setupRealtimeListener() {
                   // 改行(<br>)を使って2段で表示
                   displayDate = `${datePart}<br>${timePart}`;
               }
+              // ▼▼▼ ここからが検査内容の省略ロジックです ▼▼▼
+              const originalServicesText = (data.services || []).join(', ');
+              const longStringToCheck = "COMPREHENSIVE AUDIO TESTING, TYMPANOMETRY & REFLEX THRESH, Audiologist Examination";
+              let displayServicesText = originalServicesText; // デフォルトは元のテキスト
+
+              if (originalServicesText === longStringToCheck) {
+                  displayServicesText = "Audiology"; // もし一致したら "Audiology" に置き換える
+              }
+              // ▲▲▲ ここまでが検査内容の省略ロジックです ▲▲▲
               tableRowsHTML += `
                   <tr data-id="${doc.id}">
                       <td class="date-cell">${displayDate}</td>
