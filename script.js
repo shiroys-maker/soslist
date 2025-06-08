@@ -39,7 +39,7 @@ const cancelEditBtn = document.getElementById('cancelEdit');
 // --- グローバル変数 ---
 let logoutTimer;
 let editingDocId = null; 
-let unsubscribe; // Firestoreのリスナーを解除するための変数
+let unsubscribe;
 
 // --- ログイン状態の監視 ---
 auth.onAuthStateChanged(user => {
@@ -60,7 +60,6 @@ auth.onAuthStateChanged(user => {
         loginContainer.style.display = 'block';
         mainAppContainer.style.display = 'none';
         clearTimeout(logoutTimer);
-        // ログアウト時にリスナーを解除
         if (unsubscribe) {
             unsubscribe();
         }
@@ -107,7 +106,6 @@ dateFilter.addEventListener('change', () => {
     setupRealtimeListener();
 });
 
-// --- テーブルのボタン処理 ---
 tableBody.addEventListener('click', (e) => {
     const target = e.target;
     const tr = target.closest('tr');
@@ -132,7 +130,6 @@ tableBody.addEventListener('click', (e) => {
     }
 });
 
-// --- 編集モーダル関連 ---
 confirmEditBtn.addEventListener('click', () => {
   if (!dateSelect.value || !timeSelect.value || !editingDocId) return;
 
@@ -164,7 +161,7 @@ cancelEditBtn.addEventListener('click', () => {
 // --- 関数定義 ---
 function setupRealtimeListener() {
     if (unsubscribe) {
-        unsubscribe(); // 既存のリスナーがあれば解除
+        unsubscribe();
     }
 
     const localDateStr = dateFilter.value;
@@ -182,34 +179,27 @@ function setupRealtimeListener() {
               let displayDate = '日付なし';
               if (data.appointmentDate) {
                   const dateObj = new Date(data.appointmentDate);
-
-                  // 日付部分のフォーマット (例: 06/08 (日))
                   const dateOptions = { month: '2-digit', day: '2-digit', weekday: 'short' };
-                  const datePart = new Intl.DateTimeFormat('ja-JP', dateOptions).format(dateObj);
-
-                  // 時刻部分のフォーマット (例: 09:30)
                   const timeOptions = { hour: '2-digit', minute: '2-digit', hour12: false };
+                  const datePart = new Intl.DateTimeFormat('ja-JP', dateOptions).format(dateObj);
                   const timePart = new Intl.DateTimeFormat('ja-JP', timeOptions).format(dateObj);
-
-                  // 改行(<br>)を使って2段で表示
                   displayDate = `${datePart}<br>${timePart}`;
               }
-              // ▼▼▼ ここが判定方法を修正したロジックです ▼▼▼
+              
               const originalServicesText = (data.services || []).join(', ');
-              let displayServicesText = originalServicesText; // デフォルトは元のテキスト
+              let displayServicesText = originalServicesText;
 
-              // 'Audiologist'という単語が含まれているかで判定
-              if (originalServicesText.includes("Audiologist")) {
+              if (originalServicesText.toLowerCase().includes("audiologist")) {
                   displayServicesText = "Audiology";
               }
-              // ▲▲▲ ここまでが修正部分です ▲▲▲
+              
               tableRowsHTML += `
                   <tr data-id="${doc.id}">
                       <td class="date-cell">${displayDate}</td>
                       <td>${data.claimantName || ''}</td>
                       <td>${data.contractNumber || ''}</td>
                       <td>${data.japanCellPhone || ''}</td>
-                      <td>${(data.services || []).join(', ')}</td>
+                      <td>${displayServicesText}</td>
                       <td>
                           <button class="view-pdf-btn">PDF表示</button>
                           <button class="delete-btn">削除</button>
@@ -224,9 +214,11 @@ function setupRealtimeListener() {
 
 function startLogoutTimer() {
     clearTimeout(logoutTimer);
-    logoutTimer = setTimeout(() => {
-        alert('30分間操作がなかったため、自動的にログアウトします。');
-        auth.signOut();
+    setTimeout(() => {
+        if (auth.currentUser) { // 念のため、ログイン中か確認
+            alert('30分間操作がなかったため、自動的にログアウトします。');
+            auth.signOut();
+        }
     }, 1800000);
 }
 
