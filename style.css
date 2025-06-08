@@ -1,6 +1,6 @@
 body { 
     font-family: sans-serif; 
-    margin: 2em; 
+    margin: 1em; /* スマホも考慮し、余白を少し調整 */
 }
 
 table { 
@@ -12,16 +12,25 @@ th, td {
     border: 1px solid #ccc; 
     padding: 8px; 
     text-align: left; 
-    font-size: 12px; /* ← 文字サイズを小さくするためにこの行を追加しました */
+    font-size: 14px; /* 基本の文字サイズを少し調整 */
+    vertical-align: middle; /* 文字の縦方向を中央揃えに */
 }
 
 th { 
     background-color: #f2f2f2; 
 }
 
-.upload-section, .data-section { 
+.upload-section, .filter-section, .data-section { 
     margin-bottom: 2em; 
 }
+
+/* ボタンの共通スタイル */
+button {
+    padding: 6px 12px;
+    font-size: 14px;
+    cursor: pointer;
+}
+
 
 /* モーダルのスタイル */
 .modal {
@@ -37,9 +46,53 @@ th {
     z-index: 1000;
 }
 
-.modal > div {
+.modal-content { /* クラス名を付けてスタイルを管理しやすくします */
     background: #fff;
     padding: 20px;
     border-radius: 8px;
     text-align: center;
+    width: 400px;
+}
+
+/* --- ▼▼▼ ここからがスマホ用の追加スタイルです ▼▼▼ --- */
+
+@media (max-width: 768px) {
+    body {
+        margin: 0.5em; /* スマホでは余白をさらに小さく */
+        -webkit-text-size-adjust: 100%; /* iPhoneで文字が勝手に大きくなるのを防ぐ */
+    }
+
+    /* 「表示する予約の開始日」の入力欄 */
+    .filter-section label, 
+    .filter-section input[type="date"] {
+        font-size: 16px; /* 文字サイズを大きく */
+    }
+    .filter-section input[type="date"] {
+        padding: 8px; /* 入力欄自体も大きく */
+    }
+
+    /* テーブル内のボタン */
+    td button {
+        padding: 10px 15px; /* ボタンを大きくしてタップしやすく */
+        font-size: 16px;
+    }
+
+    /* 編集モーダル（ポップアップ） */
+    .modal-content {
+        width: 90%; /* 画面幅いっぱいに広げる */
+    }
+
+    .modal-content h3 {
+        font-size: 20px;
+    }
+    
+    .modal-content label,
+    .modal-content input[type="date"],
+    .modal-content select,
+    .modal-content button {
+        font-size: 18px; /* モーダル内の文字や部品を大きく */
+        padding: 12px;
+        width: 80%;
+        margin-bottom: 10px;
+    }
 }
