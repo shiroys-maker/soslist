@@ -192,7 +192,7 @@ function setupRealtimeListener() {
               const data = doc.data();
               // --- ▼ここから変更▼ ---
               const isShown = data.isShown === true; // isShownがtrueならチェック、それ以外（false, undefinedなど）は空
-              const checkmark = isShown ? '✓' : '';
+              const checkmark = isShown ? '✅' : '';
               // --- ▲ここまで変更▲ ---
               let displayDate = '日付なし';
               if (data.appointmentDate) {
