@@ -113,6 +113,20 @@ tableBody.addEventListener('click', (e) => {
 
     const docId = tr.dataset.id;
     if (!docId) return;
+    // --- ▼ここから追加▼ ---
+    // SHOWセルのクリック処理
+    if (target.classList.contains('show-toggle-cell')) {
+        const docRef = db.collection('appointments').doc(docId);
+        // 現在の状態を取得して反転させる
+        docRef.get().then(doc => {
+            if (doc.exists) {
+                const currentIsShown = doc.data().isShown === true;
+                docRef.update({ isShown: !currentIsShown }); // 値を反転させて更新
+            }
+        });
+        return; // 他の処理は行わない
+    }
+    // --- ▲ここまで追加▲ ---
 
     if (target.closest('.date-cell')) {
         openEditModal(docId);
@@ -176,6 +190,10 @@ function setupRealtimeListener() {
           let tableRowsHTML = "";
           querySnapshot.forEach(doc => {
               const data = doc.data();
+              // --- ▼ここから変更▼ ---
+              const isShown = data.isShown === true; // isShownがtrueならチェック、それ以外（false, undefinedなど）は空
+              const checkmark = isShown ? '✓' : '';
+              // --- ▲ここまで変更▲ ---
               let displayDate = '日付なし';
               if (data.appointmentDate) {
                   const dateObj = new Date(data.appointmentDate);
