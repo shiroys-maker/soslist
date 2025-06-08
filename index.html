@@ -6,8 +6,10 @@
     <title>Appointment Uploader & Viewer</title>
     <link rel="stylesheet" href="style.css">
     <style>
-        /* 最初はメインアプリを非表示にする */
+        /* メインアプリを最初は非表示にする */
         #main-app-container { display: none; }
+        /* 日付セルにカーソルを合わせるとクリック可能に見せる */
+        .date-cell:hover { cursor: pointer; background-color: #f0f8ff; }
     </style>
 </head>
 <body>
@@ -48,8 +50,7 @@
                         <th>契約番号</th>
                         <th>電話番号</th>
                         <th>検査内容</th>
-                        <th>操作</th>
-                    </tr>
+                        <th>操作</th> </tr>
                 </thead>
                 <tbody>
                     </tbody>

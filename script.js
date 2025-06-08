@@ -17,6 +17,7 @@ const db = firebase.firestore();
 const storage = firebase.storage();
 
 // --- DOM要素の取得 ---
+// ... (変更なし) ...
 const loginContainer = document.getElementById('login-container');
 const mainAppContainer = document.getElementById('main-app-container');
 const loginButton = document.getElementById('loginButton');
@@ -41,17 +42,16 @@ let editingDocId = null;
 
 // --- ログイン状態の監視 ---
 auth.onAuthStateChanged(user => {
+    // ... (変更なし) ...
     if (user) {
         loginContainer.style.display = 'none';
         mainAppContainer.style.display = 'block';
         userEmailSpan.textContent = user.email;
-
         const today = new Date();
         const year = today.getFullYear();
         const month = String(today.getMonth() + 1).padStart(2, '0');
         const day = String(today.getDate()).padStart(2, '0');
         dateFilter.value = `${year}-${month}-${day}`;
-
         setupRealtimeListener();
         startLogoutTimer();
     } else {
@@ -61,44 +61,49 @@ auth.onAuthStateChanged(user => {
     }
 });
 
-// --- イベントリスナー (変更なし) ---
+// --- イベントリスナー ---
+// ... (ログイン、ログアウト、アップロード、日付フィルターのリスナーは変更なし) ...
 loginButton.addEventListener('click', () => { /* ... */ });
 logoutButton.addEventListener('click', () => { auth.signOut(); });
 dateFilter.addEventListener('change', () => { setupRealtimeListener(); });
 uploadButton.addEventListener('click', () => { /* ... */ });
-tableBody.addEventListener('click', (e) => { /* ... */ });
-cancelEditBtn.addEventListener('click', () => { editModal.style.display = 'none'; });
+
 
 // --- Firestoreのリアルタイム監視 ---
 function setupRealtimeListener() {
     const localDateStr = dateFilter.value;
     if (!localDateStr) return;
-
     const filterDate = new Date(`${localDateStr}T00:00:00`);
     
     db.collection("appointments")
       .where("appointmentDateTime", ">=", filterDate)
       .orderBy("appointmentDateTime", "asc")
       .onSnapshot(querySnapshot => {
-          tableBody.innerHTML = "";
+          let tableRowsHTML = "";
           querySnapshot.forEach(doc => {
               const data = doc.data();
-              
               let displayDate = '日付なし';
-              // ▼▼▼ 表示には `appointmentDate` (文字列) を「正」として使用 ▼▼▼
               if (data.appointmentDate) {
-                  // JSTの文字列からDateオブジェクトを生成すると、ブラウザがJSTとして解釈する
                   const dateObj = new Date(data.appointmentDate);
-                  displayDate = dateObj.toLocaleString('ja-JP', {
-                      year: 'numeric', month: 'numeric', day: 'numeric',
-                      hour: '2-digit', minute: '2-digit', second: '2-digit',
-                      hour12: false
-                  });
+                  displayDate = dateObj.toLocaleString('ja-JP', { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
               }
 
-              const row = `<tr data-id="${doc.id}"><td>${displayDate}</td><td>${data.claimantName || ''}</td><td>${data.contractNumber || ''}</td><td>${data.japanCellPhone || ''}</td><td>${(data.services || []).join(', ')}</td><td><button class="edit-btn">編集</button><button class="delete-btn">削除</button></td></tr>`;
-              tableBody.innerHTML += row;
+              // ▼▼▼ 行のHTML生成を修正 ▼▼▼
+              tableRowsHTML += `
+                  <tr data-id="${doc.id}">
+                      <td class="date-cell">${displayDate}</td>
+                      <td>${data.claimantName || ''}</td>
+                      <td>${data.contractNumber || ''}</td>
+                      <td>${data.japanCellPhone || ''}</td>
+                      <td>${(data.services || []).join(', ')}</td>
+                      <td>
+                          <button class="view-pdf-btn">PDF表示</button>
+                          <button class="delete-btn">削除</button>
+                      </td>
+                  </tr>`;
+              // ▲▲▲ 行のHTML生成を修正 ▲▲▲
           });
+          tableBody.innerHTML = tableRowsHTML;
       }, error => {
           console.error("Firestoreのリアルタイム監視でエラー:", error);
       });
@@ -107,50 +112,74 @@ function setupRealtimeListener() {
 // --- 自動ログアウトタイマー (変更なし) ---
 function startLogoutTimer() { /* ... */ }
 
-// --- 編集モーダル関連の関数 ---
-function openEditModal(docId) {
-  const docRef = db.collection('appointments').doc(docId);
-  docRef.get().then(doc => {
-    if (!doc.exists) return;
-    const data = doc.data();
-    
-    // ▼▼▼ モーダルの初期値も `appointmentDate` (文字列) を元に設定 ▼▼▼
-    const dateTimeString = data.appointmentDate; // 例: "2025-06-19T13:30:00"
-    if (dateTimeString && dateTimeString.includes('T')) {
-      dateSelect.value = dateTimeString.split('T')[0];
-      timeSelect.value = dateTimeString.split('T')[1].substr(0, 5);
+// --- テーブルのボタン処理 ---
+// ▼▼▼ クリック処理を修正 ▼▼▼
+tableBody.addEventListener('click', (e) => {
+    const target = e.target;
+    const tr = target.closest('tr');
+    if (!tr) return;
+    const docId = tr.dataset.id;
+    if (!docId) return;
+
+    // 日付セル（またはその中身）がクリックされた場合
+    if (target.matches('.date-cell, .date-cell *')) {
+        openEditModal(docId);
     }
-    
-    editingDocId = docId;
-    editModal.style.display = 'flex';
-  });
-}
-
-confirmEditBtn.addEventListener('click', () => {
-  if (!dateSelect.value || !timeSelect.value || !editingDocId) return;
-
-  const jstDateTimeStr = `${dateSelect.value}T${timeSelect.value}:00`;
-
-  // ▼▼▼ Cloud Functionの動作を再現し、両方のフィールドを更新 ▼▼▼
-  // 1. 文字列フィールド用のデータ
-  const appointmentDateString = jstDateTimeStr;
-
-  // 2. タイムスタンプフィールド用のデータ（UTCとして解釈させるため'Z'を付与）
-  const dateForTimestamp = new Date(jstDateTimeStr + 'Z');
-  const appointmentDateTimeTimestamp = firebase.firestore.Timestamp.fromDate(dateForTimestamp);
-
-  const dataToUpdate = {
-      appointmentDate: appointmentDateString,
-      appointmentDateTime: appointmentDateTimeTimestamp
-  };
-
-  db.collection('appointments').doc(editingDocId).update(dataToUpdate)
-    .then(() => {
-        console.log('更新成功');
-        editModal.style.display = 'none';
-    })
-    .catch(error => {
-        console.error('更新エラー:', error);
-        alert('更新に失敗しました。');
-    });
+    // 削除ボタンが押された場合
+    if (target.classList.contains('delete-btn')) {
+        if (confirm('このデータを本当に削除しますか？')) {
+            db.collection('appointments').doc(docId).delete().then(() => console.log('削除成功')).catch(error => console.error('削除エラー:', error));
+        }
+    }
+    // PDF表示ボタンが押された場合
+    if (target.classList.contains('view-pdf-btn')) {
+        handleViewPdf(docId);
+    }
 });
+// ▲▲▲ クリック処理を修正 ▲▲▲
+
+
+// ▼▼▼ PDF表示用の新しい関数を追加 ▼▼▼
+function handleViewPdf(docId) {
+    const docRef = db.collection('appointments').doc(docId);
+    docRef.get().then(doc => {
+        if (!doc.exists) {
+            alert('データベースにレコードが見つかりません。');
+            return;
+        }
+        const data = doc.data();
+        const fileName = data.originalFileName;
+
+        if (!fileName) {
+            alert('このレコードにPDFファイルは関連付けられていません。');
+            return;
+        }
+
+        // Cloud StorageからダウンロードURLを取得
+        const storageRef = storage.ref(fileName);
+        storageRef.getDownloadURL()
+            .then(url => {
+                // 新しいタブでPDFを開く
+                window.open(url, '_blank');
+            })
+            .catch(error => {
+                if (error.code === 'storage/object-not-found') {
+                    alert('PDFファイルがストレージに見つかりません。古いレコードのため削除された可能性があります。');
+                } else {
+                    console.error("PDF取得エラー:", error);
+                    alert('PDFの表示中にエラーが発生しました。');
+                }
+            });
+    });
+}
+// ▲▲▲ PDF表示用の新しい関数を追加 ▲▲▲
+
+
+// --- 編集モーダル関連の関数 ---
+// (変更なし)
+function openEditModal(docId) { /* ... */ }
+confirmEditBtn.addEventListener('click', () => { /* ... */ });
+cancelEditBtn.addEventListener('click', () => { editModal.style.display = 'none'; });
+
+// 省略した関数の内容をペーストしてください
+// loginButton, logoutButton, uploadButton, startLogoutTimer, openEditModal, confirmEditBtn
