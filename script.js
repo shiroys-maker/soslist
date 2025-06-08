@@ -213,6 +213,7 @@ function setupRealtimeListener() {
               
               tableRowsHTML += `
                   <tr data-id="${doc.id}">
+                      <td class="show-toggle-cell">${checkmark}</td>                 
                       <td class="date-cell">${displayDate}</td>
                       <td>${data.claimantName || ''}</td>
                       <td>${data.contractNumber || ''}</td>
