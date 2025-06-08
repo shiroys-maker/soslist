@@ -12,7 +12,7 @@ th, td {
     border: 1px solid #ccc; 
     padding: 8px; 
     text-align: left; 
-    font-size: 14px; /* ← 文字サイズを小さくするためにこの行を追加しました */
+    font-size: 12px; /* ← 文字サイズを小さくするためにこの行を追加しました */
 }
 
 th { 
