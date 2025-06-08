@@ -182,11 +182,17 @@ function setupRealtimeListener() {
               let displayDate = '日付なし';
               if (data.appointmentDate) {
                   const dateObj = new Date(data.appointmentDate);
-                  displayDate = dateObj.toLocaleString('ja-JP', {
-                      year: 'numeric', month: 'numeric', day: 'numeric',
-                      hour: '2-digit', minute: '2-digit', second: '2-digit',
-                      hour12: false
-                  });
+
+                  // 日付部分のフォーマット (例: 06/08 (日))
+                  const dateOptions = { month: '2-digit', day: '2-digit', weekday: 'short' };
+                  const datePart = new Intl.DateTimeFormat('ja-JP', dateOptions).format(dateObj);
+
+                  // 時刻部分のフォーマット (例: 09:30)
+                  const timeOptions = { hour: '2-digit', minute: '2-digit', hour12: false };
+                  const timePart = new Intl.DateTimeFormat('ja-JP', timeOptions).format(dateObj);
+
+                  // 改行(<br>)を使って2段で表示
+                  displayDate = `${datePart}<br>${timePart}`;
               }
               tableRowsHTML += `
                   <tr data-id="${doc.id}">
