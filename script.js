@@ -17,20 +17,12 @@ const db = firebase.firestore();
 const storage = firebase.storage();
 
 // --- DOM要素の取得 ---
-// ... (変更なし) ...
 const loginContainer = document.getElementById('login-container');
 const mainAppContainer = document.getElementById('main-app-container');
-const loginButton = document.getElementById('loginButton');
-const logoutButton = document.getElementById('logoutButton');
-const loginEmailInput = document.getElementById('loginEmail');
-const loginPasswordInput = document.getElementById('loginPassword');
-const loginError = document.getElementById('loginError');
-const userEmailSpan = document.getElementById('userEmail');
+// ... (他の要素取得は省略、変更なし) ...
 const tableBody = document.querySelector("#appointmentsTable tbody");
-const uploader = document.getElementById('pdfUploader');
-const uploadButton = document.getElementById('uploadButton');
-const uploadStatus = document.getElementById('uploadStatus');
 const dateFilter = document.getElementById('dateFilter');
+// ... (他の要素取得は省略、変更なし) ...
 const editModal = document.getElementById('editModal');
 const dateSelect = document.getElementById('dateSelect');
 const timeSelect = document.getElementById('timeSelect');
@@ -38,12 +30,12 @@ const confirmEditBtn = document.getElementById('confirmEdit');
 const cancelEditBtn = document.getElementById('cancelEdit');
 
 let logoutTimer;
-let editingDocId = null;
+let editingDocId = null; 
 
 // --- ログイン状態の監視 ---
 auth.onAuthStateChanged(user => {
-    // ... (変更なし) ...
     if (user) {
+        // ... (変更なし) ...
         loginContainer.style.display = 'none';
         mainAppContainer.style.display = 'block';
         userEmailSpan.textContent = user.email;
@@ -62,7 +54,7 @@ auth.onAuthStateChanged(user => {
 });
 
 // --- イベントリスナー ---
-// ... (ログイン、ログアウト、アップロード、日付フィルターのリスナーは変更なし) ...
+// ... (変更なし) ...
 loginButton.addEventListener('click', () => { /* ... */ });
 logoutButton.addEventListener('click', () => { auth.signOut(); });
 dateFilter.addEventListener('change', () => { setupRealtimeListener(); });
@@ -71,10 +63,10 @@ uploadButton.addEventListener('click', () => { /* ... */ });
 
 // --- Firestoreのリアルタイム監視 ---
 function setupRealtimeListener() {
+    // ... (変更なし) ...
     const localDateStr = dateFilter.value;
     if (!localDateStr) return;
     const filterDate = new Date(`${localDateStr}T00:00:00`);
-    
     db.collection("appointments")
       .where("appointmentDateTime", ">=", filterDate)
       .orderBy("appointmentDateTime", "asc")
@@ -87,10 +79,8 @@ function setupRealtimeListener() {
                   const dateObj = new Date(data.appointmentDate);
                   displayDate = dateObj.toLocaleString('ja-JP', { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
               }
-
-              // ▼▼▼ 行のHTML生成を修正 ▼▼▼
-              tableRowsHTML += `
-                  <tr data-id="${doc.id}">
+              // 日付セルに 'date-cell' クラスを付与
+              tableRowsHTML += `<tr data-id="${doc.id}">
                       <td class="date-cell">${displayDate}</td>
                       <td>${data.claimantName || ''}</td>
                       <td>${data.contractNumber || ''}</td>
@@ -101,7 +91,6 @@ function setupRealtimeListener() {
                           <button class="delete-btn">削除</button>
                       </td>
                   </tr>`;
-              // ▲▲▲ 行のHTML生成を修正 ▲▲▲
           });
           tableBody.innerHTML = tableRowsHTML;
       }, error => {
@@ -113,67 +102,40 @@ function setupRealtimeListener() {
 function startLogoutTimer() { /* ... */ }
 
 // --- テーブルのボタン処理 ---
-// ▼▼▼ クリック処理を修正 ▼▼▼
+// ▼▼▼ クリック処理をより確実な方法に修正 ▼▼▼
 tableBody.addEventListener('click', (e) => {
     const target = e.target;
+    // クリックされた要素から最も近い <tr> を探す
     const tr = target.closest('tr');
-    if (!tr) return;
-    const docId = tr.dataset.id;
-    if (!docId) return;
+    if (!tr) return; // <tr> の外側がクリックされた場合は何もしない
 
-    // 日付セル（またはその中身）がクリックされた場合
-    if (target.matches('.date-cell, .date-cell *')) {
+    const docId = tr.dataset.id;
+    if (!docId) return; // IDがない場合は何もしない
+
+    // 日付セル（またはその中身）がクリックされたか判定
+    // .closest('.date-cell') は、クリックされた要素自身か、その親をたどって .date-cell を見つける
+    if (target.closest('.date-cell')) {
         openEditModal(docId);
+        return; // 日付セルがクリックされたら、他の処理はしない
     }
+    
+    // PDF表示ボタンが押された場合
+    if (target.classList.contains('view-pdf-btn')) {
+        handleViewPdf(docId);
+    }
+
     // 削除ボタンが押された場合
     if (target.classList.contains('delete-btn')) {
         if (confirm('このデータを本当に削除しますか？')) {
             db.collection('appointments').doc(docId).delete().then(() => console.log('削除成功')).catch(error => console.error('削除エラー:', error));
         }
     }
-    // PDF表示ボタンが押された場合
-    if (target.classList.contains('view-pdf-btn')) {
-        handleViewPdf(docId);
-    }
 });
-// ▲▲▲ クリック処理を修正 ▲▲▲
+// ▲▲▲ クリック処理をより確実な方法に修正 ▲▲▲
 
 
-// ▼▼▼ PDF表示用の新しい関数を追加 ▼▼▼
-function handleViewPdf(docId) {
-    const docRef = db.collection('appointments').doc(docId);
-    docRef.get().then(doc => {
-        if (!doc.exists) {
-            alert('データベースにレコードが見つかりません。');
-            return;
-        }
-        const data = doc.data();
-        const fileName = data.originalFileName;
-
-        if (!fileName) {
-            alert('このレコードにPDFファイルは関連付けられていません。');
-            return;
-        }
-
-        // Cloud StorageからダウンロードURLを取得
-        const storageRef = storage.ref(fileName);
-        storageRef.getDownloadURL()
-            .then(url => {
-                // 新しいタブでPDFを開く
-                window.open(url, '_blank');
-            })
-            .catch(error => {
-                if (error.code === 'storage/object-not-found') {
-                    alert('PDFファイルがストレージに見つかりません。古いレコードのため削除された可能性があります。');
-                } else {
-                    console.error("PDF取得エラー:", error);
-                    alert('PDFの表示中にエラーが発生しました。');
-                }
-            });
-    });
-}
-// ▲▲▲ PDF表示用の新しい関数を追加 ▲▲▲
-
+// --- PDF表示用の新しい関数を追加 ---
+function handleViewPdf(docId) { /* ... (変更なし) ... */ }
 
 // --- 編集モーダル関連の関数 ---
 // (変更なし)
@@ -182,4 +144,4 @@ confirmEditBtn.addEventListener('click', () => { /* ... */ });
 cancelEditBtn.addEventListener('click', () => { editModal.style.display = 'none'; });
 
 // 省略した関数の内容をペーストしてください
-// loginButton, logoutButton, uploadButton, startLogoutTimer, openEditModal, confirmEditBtn
+// loginButton, logoutButton, uploadButton, startLogoutTimer, handleViewPdf, openEditModal, confirmEditBtn
