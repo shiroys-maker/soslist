@@ -19,55 +19,160 @@ const storage = firebase.storage();
 // --- DOM要素の取得 ---
 const loginContainer = document.getElementById('login-container');
 const mainAppContainer = document.getElementById('main-app-container');
-// ... (他の要素取得は省略、変更なし) ...
+const loginButton = document.getElementById('loginButton');
+const logoutButton = document.getElementById('logoutButton');
+const loginEmailInput = document.getElementById('loginEmail');
+const loginPasswordInput = document.getElementById('loginPassword');
+const loginError = document.getElementById('loginError');
+const userEmailSpan = document.getElementById('userEmail');
 const tableBody = document.querySelector("#appointmentsTable tbody");
+const uploader = document.getElementById('pdfUploader');
+const uploadButton = document.getElementById('uploadButton');
+const uploadStatus = document.getElementById('uploadStatus');
 const dateFilter = document.getElementById('dateFilter');
-// ... (他の要素取得は省略、変更なし) ...
 const editModal = document.getElementById('editModal');
 const dateSelect = document.getElementById('dateSelect');
 const timeSelect = document.getElementById('timeSelect');
 const confirmEditBtn = document.getElementById('confirmEdit');
 const cancelEditBtn = document.getElementById('cancelEdit');
 
+// --- グローバル変数 ---
 let logoutTimer;
 let editingDocId = null; 
+let unsubscribe; // Firestoreのリスナーを解除するための変数
 
 // --- ログイン状態の監視 ---
 auth.onAuthStateChanged(user => {
     if (user) {
-        // ... (変更なし) ...
         loginContainer.style.display = 'none';
         mainAppContainer.style.display = 'block';
         userEmailSpan.textContent = user.email;
+
         const today = new Date();
         const year = today.getFullYear();
         const month = String(today.getMonth() + 1).padStart(2, '0');
         const day = String(today.getDate()).padStart(2, '0');
         dateFilter.value = `${year}-${month}-${day}`;
+
         setupRealtimeListener();
         startLogoutTimer();
     } else {
         loginContainer.style.display = 'block';
         mainAppContainer.style.display = 'none';
         clearTimeout(logoutTimer);
+        // ログアウト時にリスナーを解除
+        if (unsubscribe) {
+            unsubscribe();
+        }
     }
 });
 
 // --- イベントリスナー ---
-// ... (変更なし) ...
-loginButton.addEventListener('click', () => { /* ... */ });
-logoutButton.addEventListener('click', () => { auth.signOut(); });
-dateFilter.addEventListener('change', () => { setupRealtimeListener(); });
-uploadButton.addEventListener('click', () => { /* ... */ });
+loginButton.addEventListener('click', () => {
+    const email = loginEmailInput.value;
+    const password = loginPasswordInput.value;
+    auth.signInWithEmailAndPassword(email, password)
+        .catch(error => {
+            loginError.textContent = `ログインに失敗しました: ${error.message}`;
+        });
+});
+
+logoutButton.addEventListener('click', () => {
+    auth.signOut();
+});
+
+uploadButton.addEventListener('click', () => {
+    const files = uploader.files;
+    if (files.length === 0) {
+        uploadStatus.textContent = 'ファイルが選択されていません。';
+        return;
+    }
+    for (const file of files) {
+        const fileName = `${new Date().getTime()}_${file.name}`;
+        const storageRef = storage.ref(`uploads/${fileName}`);
+        const task = storageRef.put(file);
+        task.on('state_changed',
+            (snapshot) => uploadStatus.textContent = `${file.name} をアップロード中...`,
+            (error) => console.error(`${file.name} のアップロード失敗:`, error),
+            () => {
+                console.log(`${file.name} のアップロード完了！`);
+                uploadStatus.textContent = 'アップロードが完了しました。';
+            }
+        );
+    }
+    uploader.value = '';
+});
+
+dateFilter.addEventListener('change', () => {
+    setupRealtimeListener();
+});
+
+// --- テーブルのボタン処理 ---
+tableBody.addEventListener('click', (e) => {
+    const target = e.target;
+    const tr = target.closest('tr');
+    if (!tr) return;
+
+    const docId = tr.dataset.id;
+    if (!docId) return;
+
+    if (target.closest('.date-cell')) {
+        openEditModal(docId);
+        return;
+    }
+    if (target.classList.contains('view-pdf-btn')) {
+        handleViewPdf(docId);
+    }
+    if (target.classList.contains('delete-btn')) {
+        if (confirm('このデータを本当に削除しますか？')) {
+            db.collection('appointments').doc(docId).delete()
+              .then(() => console.log('ドキュメントの削除に成功しました。'))
+              .catch(error => console.error('ドキュメントの削除中にエラーが発生しました:', error));
+        }
+    }
+});
+
+// --- 編集モーダル関連 ---
+confirmEditBtn.addEventListener('click', () => {
+  if (!dateSelect.value || !timeSelect.value || !editingDocId) return;
+
+  const jstDateTimeStr = `${dateSelect.value}T${timeSelect.value}:00`;
+  const dateInJST = new Date(jstDateTimeStr);
+  const newTimestamp = firebase.firestore.Timestamp.fromDate(dateInJST);
+
+  const dataToUpdate = {
+      appointmentDate: jstDateTimeStr,
+      appointmentDateTime: newTimestamp
+  };
+
+  db.collection('appointments').doc(editingDocId).update(dataToUpdate)
+    .then(() => {
+        console.log('更新成功');
+        closeEditModal();
+    })
+    .catch(error => {
+        console.error('更新エラー:', error);
+        alert('更新に失敗しました。');
+    });
+});
+
+cancelEditBtn.addEventListener('click', () => {
+    closeEditModal();
+});
 
 
-// --- Firestoreのリアルタイム監視 ---
+// --- 関数定義 ---
 function setupRealtimeListener() {
-    // ... (変更なし) ...
+    if (unsubscribe) {
+        unsubscribe(); // 既存のリスナーがあれば解除
+    }
+
     const localDateStr = dateFilter.value;
     if (!localDateStr) return;
+
     const filterDate = new Date(`${localDateStr}T00:00:00`);
-    db.collection("appointments")
+    
+    unsubscribe = db.collection("appointments")
       .where("appointmentDateTime", ">=", filterDate)
       .orderBy("appointmentDateTime", "asc")
       .onSnapshot(querySnapshot => {
@@ -77,10 +182,14 @@ function setupRealtimeListener() {
               let displayDate = '日付なし';
               if (data.appointmentDate) {
                   const dateObj = new Date(data.appointmentDate);
-                  displayDate = dateObj.toLocaleString('ja-JP', { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+                  displayDate = dateObj.toLocaleString('ja-JP', {
+                      year: 'numeric', month: 'numeric', day: 'numeric',
+                      hour: '2-digit', minute: '2-digit', second: '2-digit',
+                      hour12: false
+                  });
               }
-              // 日付セルに 'date-cell' クラスを付与
-              tableRowsHTML += `<tr data-id="${doc.id}">
+              tableRowsHTML += `
+                  <tr data-id="${doc.id}">
                       <td class="date-cell">${displayDate}</td>
                       <td>${data.claimantName || ''}</td>
                       <td>${data.contractNumber || ''}</td>
@@ -98,50 +207,59 @@ function setupRealtimeListener() {
       });
 }
 
-// --- 自動ログアウトタイマー (変更なし) ---
-function startLogoutTimer() { /* ... */ }
+function startLogoutTimer() {
+    clearTimeout(logoutTimer);
+    logoutTimer = setTimeout(() => {
+        alert('30分間操作がなかったため、自動的にログアウトします。');
+        auth.signOut();
+    }, 1800000);
+}
 
-// --- テーブルのボタン処理 ---
-// ▼▼▼ クリック処理をより確実な方法に修正 ▼▼▼
-tableBody.addEventListener('click', (e) => {
-    const target = e.target;
-    // クリックされた要素から最も近い <tr> を探す
-    const tr = target.closest('tr');
-    if (!tr) return; // <tr> の外側がクリックされた場合は何もしない
-
-    const docId = tr.dataset.id;
-    if (!docId) return; // IDがない場合は何もしない
-
-    // 日付セル（またはその中身）がクリックされたか判定
-    // .closest('.date-cell') は、クリックされた要素自身か、その親をたどって .date-cell を見つける
-    if (target.closest('.date-cell')) {
-        openEditModal(docId);
-        return; // 日付セルがクリックされたら、他の処理はしない
-    }
-    
-    // PDF表示ボタンが押された場合
-    if (target.classList.contains('view-pdf-btn')) {
-        handleViewPdf(docId);
-    }
-
-    // 削除ボタンが押された場合
-    if (target.classList.contains('delete-btn')) {
-        if (confirm('このデータを本当に削除しますか？')) {
-            db.collection('appointments').doc(docId).delete().then(() => console.log('削除成功')).catch(error => console.error('削除エラー:', error));
+function handleViewPdf(docId) {
+    const docRef = db.collection('appointments').doc(docId);
+    docRef.get().then(doc => {
+        if (!doc.exists) {
+            alert('データベースにレコードが見つかりません。');
+            return;
         }
+        const data = doc.data();
+        const fileName = data.originalFileName;
+        if (!fileName) {
+            alert('このレコードにPDFファイルは関連付けられていません。');
+            return;
+        }
+        const storageRef = storage.ref(fileName);
+        storageRef.getDownloadURL()
+            .then(url => {
+                window.open(url, '_blank');
+            })
+            .catch(error => {
+                if (error.code === 'storage/object-not-found') {
+                    alert('PDFファイルがストレージに見つかりません。古いレコードのため削除された可能性があります。');
+                } else {
+                    console.error("PDF取得エラー:", error);
+                    alert('PDFの表示中にエラーが発生しました。');
+                }
+            });
+    });
+}
+
+function openEditModal(docId) {
+  const docRef = db.collection('appointments').doc(docId);
+  docRef.get().then(doc => {
+    if (!doc.exists) return;
+    const data = doc.data();
+    const dateTimeString = data.appointmentDate;
+    if (dateTimeString && dateTimeString.includes('T')) {
+      dateSelect.value = dateTimeString.split('T')[0];
+      timeSelect.value = dateTimeString.split('T')[1].substr(0, 5);
     }
-});
-// ▲▲▲ クリック処理をより確実な方法に修正 ▲▲▲
+    editingDocId = docId;
+    editModal.style.display = 'flex';
+  });
+}
 
-
-// --- PDF表示用の新しい関数を追加 ---
-function handleViewPdf(docId) { /* ... (変更なし) ... */ }
-
-// --- 編集モーダル関連の関数 ---
-// (変更なし)
-function openEditModal(docId) { /* ... */ }
-confirmEditBtn.addEventListener('click', () => { /* ... */ });
-cancelEditBtn.addEventListener('click', () => { editModal.style.display = 'none'; });
-
-// 省略した関数の内容をペーストしてください
-// loginButton, logoutButton, uploadButton, startLogoutTimer, handleViewPdf, openEditModal, confirmEditBtn
+function closeEditModal() {
+    editModal.style.display = 'none';
+    editingDocId = null;
+}
