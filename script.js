@@ -194,15 +194,15 @@ function setupRealtimeListener() {
                   // 改行(<br>)を使って2段で表示
                   displayDate = `${datePart}<br>${timePart}`;
               }
-              // ▼▼▼ ここからが検査内容の省略ロジックです ▼▼▼
+              // ▼▼▼ ここが判定方法を修正したロジックです ▼▼▼
               const originalServicesText = (data.services || []).join(', ');
-              const longStringToCheck = "COMPREHENSIVE AUDIO TESTING, TYMPANOMETRY & REFLEX THRESH, Audiologist Examination";
               let displayServicesText = originalServicesText; // デフォルトは元のテキスト
 
-              if (originalServicesText === longStringToCheck) {
-                  displayServicesText = "Audiology"; // もし一致したら "Audiology" に置き換える
+              // 'Audiologist'という単語が含まれているかで判定
+              if (originalServicesText.includes("Audiologist")) {
+                  displayServicesText = "Audiology";
               }
-              // ▲▲▲ ここまでが検査内容の省略ロジックです ▲▲▲
+              // ▲▲▲ ここまでが修正部分です ▲▲▲
               tableRowsHTML += `
                   <tr data-id="${doc.id}">
                       <td class="date-cell">${displayDate}</td>
