@@ -196,7 +196,7 @@ function setupRealtimeListener() {
               // --- ▲ここまで変更▲ ---
               let displayDate = '日付なし';
               if (data.appointmentDate) {
-                  const dateObj = new Date(data.appointmentDate);
+                  const dateObj = data.appointmentDateTime.toDate();
                   const dateOptions = { month: '2-digit', day: '2-digit', weekday: 'short' };
                   const timeOptions = { hour: '2-digit', minute: '2-digit', hour12: false };
                   const datePart = new Intl.DateTimeFormat('ja-JP', dateOptions).format(dateObj);
