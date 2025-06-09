@@ -147,14 +147,17 @@ tableBody.addEventListener('click', (e) => {
 confirmEditBtn.addEventListener('click', () => {
   if (!dateSelect.value || !timeSelect.value || !editingDocId) return;
 
-  const jstDateTimeStr = `${dateSelect.value}T${timeSelect.value}:00`;
-  const dateInJST = new Date(jstDateTimeStr);
-  const newTimestamp = firebase.firestore.Timestamp.fromDate(dateInJST);
+  // ▼▼▼【ここから変更】時刻の文字列の最後に 'Z' を追加してUTCとして解釈させる ▼▼▼
+  const utcDateTimeStr = `${dateSelect.value}T${timeSelect.value}:00Z`; 
+  const dateInUTC = new Date(utcDateTimeStr);
+  const newTimestamp = firebase.firestore.Timestamp.fromDate(dateInUTC);
 
   const dataToUpdate = {
-      appointmentDate: jstDateTimeStr,
+      // appointmentDateは表示に使わなくなったので更新は任意ですが、念のため残します
+      appointmentDate: `${dateSelect.value}T${timeSelect.value}:00`, 
       appointmentDateTime: newTimestamp
   };
+  // ▲▲▲ ここまで変更 ▲▲▲
 
   db.collection('appointments').doc(editingDocId).update(dataToUpdate)
     .then(() => {
@@ -185,20 +188,36 @@ function setupRealtimeListener() {
     
     unsubscribe = db.collection("appointments")
       .where("appointmentDateTime", ">=", filterDate)
-      .orderBy("appointmentDateTime", "asc")
       .onSnapshot(querySnapshot => {
-          let tableRowsHTML = "";
+          
+          const appointments = [];
           querySnapshot.forEach(doc => {
-              const data = doc.data();
-              // --- ▼ここから変更▼ ---
-              const isShown = data.isShown === true; // isShownがtrueならチェック、それ以外（false, undefinedなど）は空
+              appointments.push({ id: doc.id, ...doc.data() });
+          });
+
+          appointments.sort((a, b) => {
+              const timeA = a.appointmentDateTime ? a.appointmentDateTime.toMillis() : 0;
+              const timeB = b.appointmentDateTime ? b.appointmentDateTime.toMillis() : 0;
+              return timeA - timeB;
+          });
+
+          let tableRowsHTML = "";
+          appointments.forEach(appointment => {
+              const docId = appointment.id;
+              const data = appointment; 
+
+              const isShown = data.isShown === true;
               const checkmark = isShown ? '✅' : '';
-              // --- ▲ここまで変更▲ ---
+              
               let displayDate = '日付なし';
-              if (data.appointmentDate) {
+              if (data.appointmentDateTime) {
                   const dateObj = data.appointmentDateTime.toDate();
-                  const dateOptions = { month: '2-digit', day: '2-digit', weekday: 'short' };
-                  const timeOptions = { hour: '2-digit', minute: '2-digit', hour12: false };
+                  
+                  // ▼▼▼【ここからが重要】タイムゾーンをUTCに固定する ▼▼▼
+                  const dateOptions = { month: '2-digit', day: '2-digit', weekday: 'short', timeZone: 'UTC' };
+                  const timeOptions = { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' };
+                  // ▲▲▲ ここまで ▲▲▲
+
                   const datePart = new Intl.DateTimeFormat('ja-JP', dateOptions).format(dateObj);
                   const timePart = new Intl.DateTimeFormat('ja-JP', timeOptions).format(dateObj);
                   displayDate = `${datePart}<br>${timePart}`;
@@ -206,13 +225,12 @@ function setupRealtimeListener() {
               
               const originalServicesText = (data.services || []).join(', ');
               let displayServicesText = originalServicesText;
-
               if (originalServicesText.toLowerCase().includes("audiologist")) {
                   displayServicesText = "Audiology";
               }
               
               tableRowsHTML += `
-                  <tr data-id="${doc.id}">
+                  <tr data-id="${docId}">
                       <td class="show-toggle-cell">${checkmark}</td>                 
                       <td class="date-cell">${displayDate}</td>
                       <td>${data.claimantName || ''}</td>
@@ -226,6 +244,7 @@ function setupRealtimeListener() {
                   </tr>`;
           });
           tableBody.innerHTML = tableRowsHTML;
+
       }, error => {
           console.error("Firestoreのリアルタイム監視でエラー:", error);
       });
