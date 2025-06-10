@@ -30,11 +30,19 @@ const uploader = document.getElementById('pdfUploader');
 const uploadButton = document.getElementById('uploadButton');
 const uploadStatus = document.getElementById('uploadStatus');
 const dateFilter = document.getElementById('dateFilter');
+// 日時編集モーダル
 const editModal = document.getElementById('editModal');
 const dateSelect = document.getElementById('dateSelect');
 const timeSelect = document.getElementById('timeSelect');
 const confirmEditBtn = document.getElementById('confirmEdit');
 const cancelEditBtn = document.getElementById('cancelEdit');
+// 詳細表示モーダル
+const detailsModal = document.getElementById('detailsModal');
+const detailsContentContainer = document.getElementById('details-content-container');
+const notesTextarea = document.getElementById('notesTextarea');
+const saveNotesButton = document.getElementById('saveNotesButton');
+const closeDetailsModalButton = document.getElementById('closeDetailsModalButton');
+
 
 // --- グローバル変数 ---
 let logoutTimer;
@@ -113,21 +121,21 @@ tableBody.addEventListener('click', (e) => {
 
     const docId = tr.dataset.id;
     if (!docId) return;
-    // --- ▼ここから追加▼ ---
-    // SHOWセルのクリック処理
+
+    if (target.classList.contains('name-cell')) {
+        openDetailsModal(docId);
+        return;
+    }
     if (target.classList.contains('show-toggle-cell')) {
         const docRef = db.collection('appointments').doc(docId);
-        // 現在の状態を取得して反転させる
         docRef.get().then(doc => {
             if (doc.exists) {
                 const currentIsShown = doc.data().isShown === true;
-                docRef.update({ isShown: !currentIsShown }); // 値を反転させて更新
+                docRef.update({ isShown: !currentIsShown });
             }
         });
-        return; // 他の処理は行わない
+        return;
     }
-    // --- ▲ここまで追加▲ ---
-
     if (target.closest('.date-cell')) {
         openEditModal(docId);
         return;
@@ -137,83 +145,56 @@ tableBody.addEventListener('click', (e) => {
     }
     if (target.classList.contains('delete-btn')) {
         if (confirm('このデータを本当に削除しますか？')) {
-            db.collection('appointments').doc(docId).delete()
-              .then(() => console.log('ドキュメントの削除に成功しました。'))
-              .catch(error => console.error('ドキュメントの削除中にエラーが発生しました:', error));
+            db.collection('appointments').doc(docId).delete();
         }
     }
 });
 
-confirmEditBtn.addEventListener('click', () => {
-  if (!dateSelect.value || !timeSelect.value || !editingDocId) return;
-
-  // ▼▼▼【ここから変更】時刻の文字列の最後に 'Z' を追加してUTCとして解釈させる ▼▼▼
-  const utcDateTimeStr = `${dateSelect.value}T${timeSelect.value}:00Z`; 
-  const dateInUTC = new Date(utcDateTimeStr);
-  const newTimestamp = firebase.firestore.Timestamp.fromDate(dateInUTC);
-
-  const dataToUpdate = {
-      // appointmentDateは表示に使わなくなったので更新は任意ですが、念のため残します
-      appointmentDate: `${dateSelect.value}T${timeSelect.value}:00`, 
-      appointmentDateTime: newTimestamp
-  };
-  // ▲▲▲ ここまで変更 ▲▲▲
-
-  db.collection('appointments').doc(editingDocId).update(dataToUpdate)
-    .then(() => {
-        console.log('更新成功');
-        closeEditModal();
-    })
-    .catch(error => {
-        console.error('更新エラー:', error);
-        alert('更新に失敗しました。');
-    });
-});
-
-cancelEditBtn.addEventListener('click', () => {
-    closeEditModal();
-});
-
-// 検査費入力欄からフォーカスが外れたときにデータを保存
 tableBody.addEventListener('blur', (e) => {
     if (e.target.classList.contains('fee-input')) {
         const inputElement = e.target;
         const docId = inputElement.closest('tr').dataset.id;
-        
         if (docId) {
             db.collection('appointments').doc(docId).update({
                 examinationFee: inputElement.value
-            })
-            .then(() => {
-                console.log(`検査費を更新しました: ${docId}`);
-            })
-            .catch(error => {
-                console.error('検査費の更新エラー:', error);
-            });
+            }).catch(error => console.error('検査費の更新エラー:', error));
         }
     }
-}, true); // `blur`イベントを子要素で捉えるためにtrueを指定
+}, true);
+
+confirmEditBtn.addEventListener('click', () => {
+    if (!dateSelect.value || !timeSelect.value || !editingDocId) return;
+    const utcDateTimeStr = `${dateSelect.value}T${timeSelect.value}:00Z`;
+    const dateInUTC = new Date(utcDateTimeStr);
+    const newTimestamp = firebase.firestore.Timestamp.fromDate(dateInUTC);
+    const dataToUpdate = {
+        appointmentDate: `${dateSelect.value}T${timeSelect.value}:00`,
+        appointmentDateTime: newTimestamp
+    };
+    db.collection('appointments').doc(editingDocId).update(dataToUpdate)
+      .then(() => closeEditModal())
+      .catch(error => alert('更新に失敗しました。'));
+});
+
+cancelEditBtn.addEventListener('click', closeEditModal);
+saveNotesButton.addEventListener('click', saveNotes);
+closeDetailsModalButton.addEventListener('click', closeDetailsModal);
+
 
 // --- 関数定義 ---
 function setupRealtimeListener() {
-    if (unsubscribe) {
-        unsubscribe();
-    }
-
+    if (unsubscribe) unsubscribe();
     const localDateStr = dateFilter.value;
     if (!localDateStr) return;
-
     const filterDate = new Date(`${localDateStr}T00:00:00`);
-    
+
     unsubscribe = db.collection("appointments")
       .where("appointmentDateTime", ">=", filterDate)
       .onSnapshot(querySnapshot => {
-          
           const appointments = [];
           querySnapshot.forEach(doc => {
               appointments.push({ id: doc.id, ...doc.data() });
           });
-
           appointments.sort((a, b) => {
               const timeA = a.appointmentDateTime ? a.appointmentDateTime.toMillis() : 0;
               const timeB = b.appointmentDateTime ? b.appointmentDateTime.toMillis() : 0;
@@ -223,45 +204,30 @@ function setupRealtimeListener() {
           let tableRowsHTML = "";
           appointments.forEach(appointment => {
               const docId = appointment.id;
-              const data = appointment; 
-
+              const data = appointment;
               const isShown = data.isShown === true;
               const checkmark = isShown ? '✅' : '';
-              
               let displayDate = '日付なし';
               if (data.appointmentDateTime) {
                   const dateObj = data.appointmentDateTime.toDate();
-                  
-                  // ▼▼▼【ここからが重要】タイムゾーンをUTCに固定する ▼▼▼
                   const dateOptions = { month: '2-digit', day: '2-digit', weekday: 'short', timeZone: 'UTC' };
                   const timeOptions = { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' };
-                  // ▲▲▲ ここまで ▲▲▲
-
                   const datePart = new Intl.DateTimeFormat('ja-JP', dateOptions).format(dateObj);
                   const timePart = new Intl.DateTimeFormat('ja-JP', timeOptions).format(dateObj);
                   displayDate = `${datePart}<br>${timePart}`;
               }
-              
-              const originalServicesText = (data.services || []).join(', ');
-              let displayServicesText = originalServicesText;
-              const originalCptcodeText = (data.cptCode || []).join(', ');
-              let displayCptcodeText = originalCptcodeText;
-              if (originalServicesText.toLowerCase().includes("audiologist")) {
-                  displayServicesText = "Audiology";
-              }
-              // ▼▼▼【ここから追加】検査費の初期値を決定するロジック ▼▼▼
-              let initialFeeValue = data.examinationFee || ''; // 保存済みの値があれば優先
-
-              // 保存済みの値がなく、CPTコードが条件と一致する場合
+              const displayServicesText = (data.services || []).join(', ').toLowerCase().includes("audiologist") ? "Audiology" : (data.services || []).join(', ');
+              const displayCptcodeText = (data.cptCode || []).join(', ');
+              let initialFeeValue = data.examinationFee || '';
               if (!initialFeeValue && displayCptcodeText.replace(/\s/g, '') === "92557,92550,VA0004") {
                   initialFeeValue = '220,000';
               }
-              // ▲▲▲ ここまで追加 ▲▲▲
+
               tableRowsHTML += `
                   <tr data-id="${docId}">
                       <td class="show-toggle-cell">${checkmark}</td>                 
                       <td class="date-cell">${displayDate}</td>
-                      <td>${data.claimantName || ''}</td>
+                      <td class="name-cell">${data.claimantName || ''}</td>
                       <td>${data.contractNumber || ''}</td>
                       <td>${data.japanCellPhone || ''}</td>
                       <td>${displayServicesText}</td>
@@ -277,7 +243,6 @@ function setupRealtimeListener() {
                   </tr>`;
           });
           tableBody.innerHTML = tableRowsHTML;
-
       }, error => {
           console.error("Firestoreのリアルタイム監視でエラー:", error);
       });
@@ -285,37 +250,26 @@ function setupRealtimeListener() {
 
 function startLogoutTimer() {
     clearTimeout(logoutTimer);
-    setTimeout(() => {
-        if (auth.currentUser) { // 念のため、ログイン中か確認
+    logoutTimer = setTimeout(() => {
+        if (auth.currentUser) {
             alert('30分間操作がなかったため、自動的にログアウトします。');
             auth.signOut();
         }
-    }, 1800000);
+    }, 1800000); // 30分
 }
 
 function handleViewPdf(docId) {
-    const docRef = db.collection('appointments').doc(docId);
-    docRef.get().then(doc => {
-        if (!doc.exists) {
-            alert('データベースにレコードが見つかりません。');
-            return;
-        }
-        const data = doc.data();
-        const fileName = data.originalFileName;
-        if (!fileName) {
-            alert('このレコードにPDFファイルは関連付けられていません。');
-            return;
-        }
-        const storageRef = storage.ref(fileName);
-        storageRef.getDownloadURL()
-            .then(url => {
-                window.open(url, '_blank');
-            })
+    db.collection('appointments').doc(docId).get().then(doc => {
+        if (!doc.exists) return alert('データベースにレコードが見つかりません。');
+        const fileName = doc.data().originalFileName;
+        if (!fileName) return alert('このレコードにPDFファイルは関連付けられていません。');
+        
+        storage.ref(fileName).getDownloadURL()
+            .then(url => window.open(url, '_blank'))
             .catch(error => {
                 if (error.code === 'storage/object-not-found') {
-                    alert('PDFファイルがストレージに見つかりません。古いレコードのため削除された可能性があります。');
+                    alert('PDFファイルがストレージに見つかりません。');
                 } else {
-                    console.error("PDF取得エラー:", error);
                     alert('PDFの表示中にエラーが発生しました。');
                 }
             });
@@ -323,14 +277,18 @@ function handleViewPdf(docId) {
 }
 
 function openEditModal(docId) {
-  const docRef = db.collection('appointments').doc(docId);
-  docRef.get().then(doc => {
+  db.collection('appointments').doc(docId).get().then(doc => {
     if (!doc.exists) return;
     const data = doc.data();
-    const dateTimeString = data.appointmentDate;
-    if (dateTimeString && dateTimeString.includes('T')) {
-      dateSelect.value = dateTimeString.split('T')[0];
-      timeSelect.value = dateTimeString.split('T')[1].substr(0, 5);
+    if (data.appointmentDateTime) {
+      const dateObj = data.appointmentDateTime.toDate();
+      const year = dateObj.getUTCFullYear();
+      const month = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(dateObj.getUTCDate()).padStart(2, '0');
+      const hours = String(dateObj.getUTCHours()).padStart(2, '0');
+      const minutes = String(dateObj.getUTCMinutes()).padStart(2, '0');
+      dateSelect.value = `${year}-${month}-${day}`;
+      timeSelect.value = `${hours}:${minutes}`;
     }
     editingDocId = docId;
     editModal.style.display = 'flex';
@@ -340,4 +298,51 @@ function openEditModal(docId) {
 function closeEditModal() {
     editModal.style.display = 'none';
     editingDocId = null;
+}
+
+function openDetailsModal(docId) {
+  db.collection('appointments').doc(docId).get().then(doc => {
+    if (!doc.exists) return alert('データが見つかりません');
+    const data = doc.data();
+    let detailsHTML = '';
+    const dateOptions = { month: '2-digit', day: '2-digit', weekday: 'short', timeZone: 'UTC' };
+    const timeOptions = { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' };
+    const displayDate = data.appointmentDateTime 
+        ? new Intl.DateTimeFormat('ja-JP', dateOptions).format(data.appointmentDateTime.toDate()) + ' ' + 
+          new Intl.DateTimeFormat('ja-JP', timeOptions).format(data.appointmentDateTime.toDate())
+        : '日付なし';
+
+    detailsHTML += `<p><strong>来</strong>: ${data.isShown ? '✅' : ' '}</p>`;
+    detailsHTML += `<p><strong>予約日時</strong>: ${displayDate.replace('<br>',' ')}</p>`;
+    detailsHTML += `<p><strong>氏名</strong>: ${data.claimantName || ''}</p>`;
+    detailsHTML += `<p><strong>契約番号</strong>: ${data.contractNumber || ''}</p>`;
+    detailsHTML += `<p><strong>電話番号</strong>: ${data.japanCellPhone || ''}</p>`;
+    detailsHTML += `<p><strong>検査内容</strong>: ${(data.services || []).join(', ')}</p>`;
+    detailsHTML += `<p><strong>生年月日</strong>: ${data.dateOfBirth || ''}</p>`;
+    
+    detailsContentContainer.innerHTML = detailsHTML;
+    notesTextarea.value = data.notes || '';
+    detailsModal.dataset.editingId = docId;
+    detailsModal.style.display = 'flex';
+  });
+}
+
+function closeDetailsModal() {
+    detailsModal.style.display = 'none';
+    detailsModal.dataset.editingId = '';
+}
+
+function saveNotes() {
+    const docId = detailsModal.dataset.editingId;
+    if (!docId) return;
+    db.collection('appointments').doc(docId).update({
+        notes: notesTextarea.value
+    })
+    .then(() => {
+        alert('メモを保存しました。');
+        closeDetailsModal();
+    })
+    .catch(error => {
+        alert('メモの保存に失敗しました。');
+    });
 }

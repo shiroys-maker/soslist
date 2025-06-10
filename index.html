@@ -45,16 +45,17 @@
             <table id="appointmentsTable">
                 <thead>
                     <tr>
-                        <th>来</th>
-                        <th>予約日時</th>
-                        <th>氏名</th>
-                        <th>契約番号</th>
-                        <th>電話番号</th>
-                        <th>検査内容</th>
-                        <th>操作</th> 
-                        <th>生年月日</th>
-                        <th>CPTCODE</th>
-                        <th>検査費</th> </tr>
+                        <th class="col-show">来</th>
+                        <th class="col-date">予約日時</th>
+                        <th class="col-name">氏名</th>
+                        <th class="col-contract">契約番号</th>
+                        <th class="col-phone">電話番号</th>
+                        <th class="col-services">検査内容</th>
+                        <th class="col-actions">操作</th> 
+                        <th class="col-dob">生年月日</th>
+                        <th class="col-cpt">CPTCODE</th>
+                        <th class="col-fee">検査費</th>
+                    </tr>
                 </thead>
                 <tbody>
                     </tbody>
@@ -78,6 +79,20 @@
         </select><br><br>
         <button id="confirmEdit">更新</button>
         <button id="cancelEdit">キャンセル</button>
+      </div>
+    </div>
+    
+    <div id="detailsModal" class="modal">
+      <div class="modal-content">
+        <h3>予約詳細</h3>
+        <div id="details-content-container">
+            </div>
+        <label for="notesTextarea">メモ (所見など):</label>
+        <textarea id="notesTextarea" placeholder="1500文字程度まで入力可能..."></textarea>
+        <div class="modal-actions">
+            <button id="saveNotesButton">メモを保存</button>
+            <button id="closeDetailsModalButton">閉じる</button>
+        </div>
       </div>
     </div>
 
