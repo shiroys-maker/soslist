@@ -60,20 +60,31 @@ button {
 #details-content-container {
     text-align: left;
     margin-bottom: 15px;
-    max-height: 30vh; /* コンテンツが多すぎる場合にスクロールさせる */
+    max-height: 60vh; /* コンテンツが多すぎる場合にスクロールさせる */
     overflow-y: auto;
 }
-#details-content-container p {
-    margin: 8px 0;
-    border-bottom: 1px solid #eee;
-    padding-bottom: 8px;
+/* 2列レイアウト用の行スタイル */
+.detail-row {
     display: flex;
+    justify-content: space-between;
+    padding: 12px 0;
+    border-bottom: 1px solid #eee;
 }
-#details-content-container p strong {
-    display: inline-block;
-    width: 100px; /* ラベルの幅を固定 */
-    flex-shrink: 0; /* ラベルが縮まないように */
+.detail-row:last-child {
+    border-bottom: none;
+}
+
+/* 2列レイアウトの各アイテムのスタイル */
+.detail-item {
+    flex-basis: 48%; /* 各アイテムが約半分の幅を持つように */
+}
+
+.detail-item strong {
+    display: block;
+    font-weight: bold;
     color: #555;
+    margin-bottom: 4px;
+    font-size: 0.8em;
 }
 
 /* メモ入力欄のスタイル */

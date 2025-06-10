@@ -300,10 +300,17 @@ function closeEditModal() {
     editingDocId = null;
 }
 
+// script.js
+
 function openDetailsModal(docId) {
   db.collection('appointments').doc(docId).get().then(doc => {
-    if (!doc.exists) return alert('データが見つかりません');
+    if (!doc.exists) {
+      alert('データが見つかりません');
+      return;
+    }
     const data = doc.data();
+
+    // --- ▼▼▼【ここから変更】HTML生成ロジックを2列レイアウトに変更 ▼▼▼ ---
     let detailsHTML = '';
     const dateOptions = { month: '2-digit', day: '2-digit', weekday: 'short', timeZone: 'UTC' };
     const timeOptions = { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' };
@@ -312,16 +319,30 @@ function openDetailsModal(docId) {
           new Intl.DateTimeFormat('ja-JP', timeOptions).format(data.appointmentDateTime.toDate())
         : '日付なし';
 
-    detailsHTML += `<p><strong>来</strong>: ${data.isShown ? '✅' : ' '}</p>`;
-    detailsHTML += `<p><strong>予約日時</strong>: ${displayDate.replace('<br>',' ')}</p>`;
-    detailsHTML += `<p><strong>氏名</strong>: ${data.claimantName || ''}</p>`;
-    detailsHTML += `<p><strong>契約番号</strong>: ${data.contractNumber || ''}</p>`;
-    detailsHTML += `<p><strong>電話番号</strong>: ${data.japanCellPhone || ''}</p>`;
-    detailsHTML += `<p><strong>検査内容</strong>: ${(data.services || []).join(', ')}</p>`;
-    detailsHTML += `<p><strong>生年月日</strong>: ${data.dateOfBirth || ''}</p>`;
+    // 年齢を計算
+    const age = calculateAge(data.dateOfBirth);
+    const displayAge = age ? `${age}歳` : '不明';
+
+    // 2列レイアウトのHTMLを生成
+    detailsHTML += `<div class="detail-row">
+                      <div class="detail-item"><strong>予約日時</strong><span>${displayDate.replace('<br>',' ')}</span></div>
+                      <div class="detail-item"><strong>契約番号</strong><span>${data.contractNumber || ''}</span></div>
+                    </div>`;
+
+    detailsHTML += `<div class="detail-row">
+                      <div class="detail-item"><strong>氏名</strong><span>${data.claimantName || ''}</span></div>
+                      <div class="detail-item"><strong>生年月日(年齢)</strong><span>${data.dateOfBirth || ''} (${displayAge})</span></div>
+                    </div>`;
     
+    detailsHTML += `<div class="detail-row">
+                      <div class="detail-item"><strong>検査内容</strong><span>${(data.services || []).join(', ')}</span></div>
+                    </div>`;
+
+   // --- ▲▲▲ ここまで変更 ▲▲▲ ---
+
     detailsContentContainer.innerHTML = detailsHTML;
     notesTextarea.value = data.notes || '';
+    
     detailsModal.dataset.editingId = docId;
     detailsModal.style.display = 'flex';
   });
@@ -345,4 +366,26 @@ function saveNotes() {
     .catch(error => {
         alert('メモの保存に失敗しました。');
     });
+}
+
+// script.js の「--- 関数定義 ---」セクションに追加
+
+function calculateAge(dobString) {
+    // 生年月日の文字列がない場合は空文字を返す
+    if (!dobString) return '';
+    
+    const dob = new Date(dobString);
+    // 日付が無効な場合は空文字を返す
+    if (isNaN(dob.getTime())) return '';
+
+    const today = new Date();
+    let age = today.getFullYear() - dob.getFullYear();
+    const monthDifference = today.getMonth() - dob.getMonth();
+    
+    // 今年の誕生日がまだ来ていない場合は1歳引く
+    if (monthDifference < 0 || (monthDifference === 0 && today.getDate() < dob.getDate())) {
+        age--;
+    }
+    
+    return age;
 }
