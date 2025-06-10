@@ -394,7 +394,6 @@ function calculateAge(dobString) {
     return age;
 }
 
-// script.js
 
 function printInvoice() {
     const fromDateStr = invoiceFromDate.value;
@@ -408,12 +407,11 @@ function printInvoice() {
     const fromDate = new Date(`${fromDateStr}T00:00:00`);
     const toDate = new Date(`${toDateStr}T23:59:59`);
 
-    // Firestoreから期間内でisShownがtrueのデータを取得
     db.collection("appointments")
       .where("isShown", "==", true)
       .where("appointmentDateTime", ">=", fromDate)
       .where("appointmentDateTime", "<=", toDate)
-      .orderBy("appointmentDateTime", "asc") // 日時でソート
+      .orderBy("appointmentDateTime", "asc")
       .get()
       .then(querySnapshot => {
           let records = [];
@@ -423,36 +421,41 @@ function printInvoice() {
               const data = doc.data();
               records.push(data);
 
-              // 検査費を集計（カンマを取り除いて数値に変換）
+              // --- ▼▼▼【ここから変更】合計金額の計算ロジックを修正 ▼▼▼ ---
+              let feeForSum = 0;
+              // 保存された検査費がある場合
               if (data.examinationFee) {
-                  const fee = parseInt(String(data.examinationFee).replace(/,/g, ''), 10);
-                  if (!isNaN(fee)) {
-                      totalFee += fee;
+                  const parsedFee = parseInt(String(data.examinationFee).replace(/,/g, ''), 10);
+                  if (!isNaN(parsedFee)) {
+                      feeForSum = parsedFee;
+                  }
+              } 
+              // 保存された費用がなく、CPTコードが条件に一致する場合
+              else {
+                  const cptCodeString = (data.cptCode || []).join(', ').replace(/\s/g, '');
+                  if (cptCodeString === "92557,92550,VA0004") {
+                      feeForSum = 220000;
                   }
               }
+              totalFee += feeForSum;
+              // --- ▲▲▲ ここまで変更 ▲▲▲ ---
           });
 
           if (records.length === 0) {
               alert('選択された期間に、SHOWがチェックされたレコードはありませんでした。');
               return;
           }
-
-          // 新しいウィンドウに表示するHTMLを生成
+          
           generateInvoiceHTML(records, fromDateStr, toDateStr, totalFee);
 
       })
       .catch(error => {
-          // --- ▼▼▼【変更点】エラーの表示方法をより具体的に変更 ▼▼▼ ---
-          console.log("-----------------------------------------");
-          console.log("【重要】Firestoreエラーの詳細情報:");
-          console.log("この下に表示されるオブジェクトを展開し、青いURLリンクをクリックしてください。");
-          console.dir(error); // エラーオブジェクトを詳細に表示
-          console.log("-----------------------------------------");
-
-          alert("データの取得中にエラーが発生しました。ブラウザのコンソールを開いて、エラーの詳細情報を確認してください。\n\n（複合インデックスの作成が必要な場合があります）");
-          // --- ▲▲▲ ここまで変更 ▲▲▲
-        });
+          console.error("Invoiceデータの取得エラー: ", error);
+          alert("データの取得中にエラーが発生しました。コンソールでエラー内容を確認してください。\n（複合インデックスの作成が必要な場合があります）");
+      });
 }
+
+// script.js
 
 function generateInvoiceHTML(records, from, to, total) {
     let tableRows = '';
@@ -463,6 +466,21 @@ function generateInvoiceHTML(records, from, to, total) {
             ? new Intl.DateTimeFormat('en-US', dateOptions).format(data.appointmentDateTime.toDate()) + ' ' + 
               new Intl.DateTimeFormat('ja-JP', timeOptions).format(data.appointmentDateTime.toDate())
             : '日付なし';
+        
+        // --- ▼▼▼【ここから追加】各行の検査費表示ロジック ▼▼▼ ---
+        let displayFee = data.examinationFee || ''; // 保存された値を優先
+        // 保存された値がなく、CPTコードが条件と一致する場合
+        if (!displayFee) {
+            const cptCodeString = (data.cptCode || []).join(', ').replace(/\s/g, '');
+            if (cptCodeString === "92557,92550,VA0004") {
+                displayFee = '220,000';
+            }
+        }
+        // それでも値がなければ'0'を表示
+        if (!displayFee) {
+            displayFee = '0';
+        }
+        // --- ▲▲▲ ここまで追加 ▲▲▲ ---
 
         tableRows += `
             <tr>
@@ -471,7 +489,7 @@ function generateInvoiceHTML(records, from, to, total) {
                 <td>${data.claimantName || ''}</td>
                 <td>${data.dateOfBirth || ''}</td>
                 <td>${(data.cptCode || []).join(', ')}</td>
-                <td class="fee-cell">${data.examinationFee || '0'}</td>
+                <td class="fee-cell">${displayFee}</td>
             </tr>
         `;
     });
@@ -488,9 +506,9 @@ function generateInvoiceHTML(records, from, to, total) {
                 .invoice-container { max-width: 800px; margin: auto; padding: 20px; }
                 h1, h2 { text-align: center; }
                 table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-                th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 12px; }
                 th { background-color: #f2f2f2; }
-                tfoot td { font-weight: bold; }
+                tfoot td { font-weight: bold; font-size: 14px; }
                 .fee-cell { text-align: right; }
                 @media print {
                     .no-print { display: none; }
@@ -522,6 +540,7 @@ function generateInvoiceHTML(records, from, to, total) {
                         </tr>
                     </tfoot>
                 </table>
+                <br>
                 <button class="no-print" onclick="window.print()">このページを印刷</button>
             </div>
         </body>
