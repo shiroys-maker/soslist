@@ -225,6 +225,8 @@ function setupRealtimeListener() {
               
               const originalServicesText = (data.services || []).join(', ');
               let displayServicesText = originalServicesText;
+              const originalCptcodeText = (data.cptCode || []).join(', ');
+              let displayCptcodeText = originalCptcodeText;
               if (originalServicesText.toLowerCase().includes("audiologist")) {
                   displayServicesText = "Audiology";
               }
@@ -241,6 +243,8 @@ function setupRealtimeListener() {
                           <button class="view-pdf-btn">PDF表示</button>
                           <button class="delete-btn">削除</button>
                       </td>
+                      <td>${data.dateOfBirth || ''}</td>
+                      <td>${displayCptcodeText}</td>
                   </tr>`;
           });
           tableBody.innerHTML = tableRowsHTML;
