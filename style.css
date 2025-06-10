@@ -12,7 +12,7 @@ th, td {
     border: 1px solid #ccc; 
     padding: 8px; 
     text-align: left; 
-    font-size: 14px; /* 基本の文字サイズを少し調整 */
+    font-size: 12px; /* 基本の文字サイズを少し調整 */
     vertical-align: middle; /* 文字の縦方向を中央揃えに */
 }
 
