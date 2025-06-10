@@ -31,7 +31,19 @@ button {
     cursor: pointer;
 }
 
-
+/* 検査費の入力欄のスタイル */
+    .fee-input {
+        width: 100%;
+        padding: 4px;
+        border: 1px solid #ccc;
+        border-radius: 3px;
+        box-sizing: border-box; /* これによりpaddingが幅に含まれる */
+    }
+    .fee-input:focus {
+        border-color: #007bff;
+        outline: none;
+    }
+    
 /* モーダルのスタイル */
 .modal {
     display: none;

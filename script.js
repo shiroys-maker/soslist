@@ -174,6 +174,25 @@ cancelEditBtn.addEventListener('click', () => {
     closeEditModal();
 });
 
+// 検査費入力欄からフォーカスが外れたときにデータを保存
+tableBody.addEventListener('blur', (e) => {
+    if (e.target.classList.contains('fee-input')) {
+        const inputElement = e.target;
+        const docId = inputElement.closest('tr').dataset.id;
+        
+        if (docId) {
+            db.collection('appointments').doc(docId).update({
+                examinationFee: inputElement.value
+            })
+            .then(() => {
+                console.log(`検査費を更新しました: ${docId}`);
+            })
+            .catch(error => {
+                console.error('検査費の更新エラー:', error);
+            });
+        }
+    }
+}, true); // `blur`イベントを子要素で捉えるためにtrueを指定
 
 // --- 関数定義 ---
 function setupRealtimeListener() {
@@ -230,7 +249,14 @@ function setupRealtimeListener() {
               if (originalServicesText.toLowerCase().includes("audiologist")) {
                   displayServicesText = "Audiology";
               }
-              
+              // ▼▼▼【ここから追加】検査費の初期値を決定するロジック ▼▼▼
+              let initialFeeValue = data.examinationFee || ''; // 保存済みの値があれば優先
+
+              // 保存済みの値がなく、CPTコードが条件と一致する場合
+              if (!initialFeeValue && displayCptcodeText.replace(/\s/g, '') === "92557,92550,VA0004") {
+                  initialFeeValue = '220,000';
+              }
+              // ▲▲▲ ここまで追加 ▲▲▲
               tableRowsHTML += `
                   <tr data-id="${docId}">
                       <td class="show-toggle-cell">${checkmark}</td>                 
@@ -245,6 +271,9 @@ function setupRealtimeListener() {
                       </td>
                       <td>${data.dateOfBirth || ''}</td>
                       <td>${displayCptcodeText}</td>
+                      <td>
+                          <input type="text" class="fee-input" value="${initialFeeValue}" placeholder="金額入力">
+                      </td>
                   </tr>`;
           });
           tableBody.innerHTML = tableRowsHTML;
