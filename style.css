@@ -132,6 +132,40 @@ button {
         max-width: 900px; /* PCなどの大画面で広がりすぎないように上限を設定 */
     }
 
+/* アップロードセクションのレイアウト調整 */
+.upload-section {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 2em;
+    flex-wrap: wrap; /* 画面が狭い場合に折り返す */
+}
+
+.upload-area, .invoice-area {
+    border: 1px solid #ddd;
+    padding: 1em;
+    border-radius: 8px;
+    background-color: #f9f9f9;
+    flex: 1; /* スペースを均等に分ける */
+    min-width: 350px; /* 最小幅を指定 */
+}
+
+.invoice-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.invoice-controls label {
+    font-weight: bold;
+}
+.invoice-controls input[type="date"] {
+    padding: 5px;
+}
+.invoice-controls button {
+    padding: 5px 15px;
+}
+
 /* --- ▼▼▼ ここからがスマホ用の追加スタイルです ▼▼▼ --- */
 
 @media (max-width: 768px) {

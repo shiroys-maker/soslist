@@ -31,11 +31,25 @@
         <h1>Appointment Uploader & Viewer</h1>
 
         <div class="upload-section">
-            <h2>201 SERVICE BILLをアップロード</h2>
-            <input type="file" id="pdfUploader" accept="application/pdf" multiple>
-            <button id="uploadButton">アップロード</button>
-            <p id="uploadStatus"></p>
+            <div class="upload-area">
+                <h2>201 SERVICE BILLをアップロード</h2>
+                <input type="file" id="pdfUploader" accept="application/pdf" multiple>
+                <button id="uploadButton">アップロード</button>
+                <p id="uploadStatus"></p>
+            </div>
+    
+            <div class="invoice-area">
+                <h2>Invoice印刷</h2>
+                <div class="invoice-controls">
+                    <label for="invoiceFromDate">From:</label>
+                    <input type="date" id="invoiceFromDate">
+                    <label for="invoiceToDate">To:</label>
+                    <input type="date" id="invoiceToDate">
+                    <button id="printInvoiceButton">印刷</button>
+                </div>
+            </div>
         </div>
+        
         <div class="filter-section">
             <label for="dateFilter">表示する予約の開始日：</label>
             <input type="date" id="dateFilter">

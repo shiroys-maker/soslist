@@ -42,6 +42,9 @@ const detailsContentContainer = document.getElementById('details-content-contain
 const notesTextarea = document.getElementById('notesTextarea');
 const saveNotesButton = document.getElementById('saveNotesButton');
 const closeDetailsModalButton = document.getElementById('closeDetailsModalButton');
+const invoiceFromDate = document.getElementById('invoiceFromDate');
+const invoiceToDate = document.getElementById('invoiceToDate');
+const printInvoiceButton = document.getElementById('printInvoiceButton');
 
 
 // --- グローバル変数 ---
@@ -179,6 +182,7 @@ confirmEditBtn.addEventListener('click', () => {
 cancelEditBtn.addEventListener('click', closeEditModal);
 saveNotesButton.addEventListener('click', saveNotes);
 closeDetailsModalButton.addEventListener('click', closeDetailsModal);
+printInvoiceButton.addEventListener('click', printInvoice);
 
 
 // --- 関数定義 ---
@@ -388,4 +392,137 @@ function calculateAge(dobString) {
     }
     
     return age;
+}
+
+// script.js
+
+function printInvoice() {
+    const fromDateStr = invoiceFromDate.value;
+    const toDateStr = invoiceToDate.value;
+
+    if (!fromDateStr || !toDateStr) {
+        alert('FromとToの両方の日付を選択してください。');
+        return;
+    }
+
+    const fromDate = new Date(`${fromDateStr}T00:00:00`);
+    const toDate = new Date(`${toDateStr}T23:59:59`);
+
+    // Firestoreから期間内でisShownがtrueのデータを取得
+    db.collection("appointments")
+      .where("isShown", "==", true)
+      .where("appointmentDateTime", ">=", fromDate)
+      .where("appointmentDateTime", "<=", toDate)
+      .orderBy("appointmentDateTime", "asc") // 日時でソート
+      .get()
+      .then(querySnapshot => {
+          let records = [];
+          let totalFee = 0;
+
+          querySnapshot.forEach(doc => {
+              const data = doc.data();
+              records.push(data);
+
+              // 検査費を集計（カンマを取り除いて数値に変換）
+              if (data.examinationFee) {
+                  const fee = parseInt(String(data.examinationFee).replace(/,/g, ''), 10);
+                  if (!isNaN(fee)) {
+                      totalFee += fee;
+                  }
+              }
+          });
+
+          if (records.length === 0) {
+              alert('選択された期間に、SHOWがチェックされたレコードはありませんでした。');
+              return;
+          }
+
+          // 新しいウィンドウに表示するHTMLを生成
+          generateInvoiceHTML(records, fromDateStr, toDateStr, totalFee);
+
+      })
+      .catch(error => {
+          console.error("Invoiceデータの取得エラー: ", error);
+          alert("データの取得中にエラーが発生しました。コンソールでエラー内容を確認してください。\n（複合インデックスの作成が必要な場合があります）");
+      });
+}
+
+function generateInvoiceHTML(records, from, to, total) {
+    let tableRows = '';
+    records.forEach(data => {
+        const dateOptions = { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'UTC' };
+        const timeOptions = { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' };
+        const displayDate = data.appointmentDateTime 
+            ? new Intl.DateTimeFormat('en-US', dateOptions).format(data.appointmentDateTime.toDate()) + ' ' + 
+              new Intl.DateTimeFormat('ja-JP', timeOptions).format(data.appointmentDateTime.toDate())
+            : '日付なし';
+
+        tableRows += `
+            <tr>
+                <td>${displayDate}</td>
+                <td>${data.contractNumber || ''}</td>
+                <td>${data.claimantName || ''}</td>
+                <td>${data.dateOfBirth || ''}</td>
+                <td>${(data.cptCode || []).join(', ')}</td>
+                <td class="fee-cell">${data.examinationFee || '0'}</td>
+            </tr>
+        `;
+    });
+
+    // 請求書のHTML全体
+    const invoiceHTML = `
+        <!DOCTYPE html>
+        <html lang="ja">
+        <head>
+            <meta charset="UTF-8">
+            <title>Invoice</title>
+            <style>
+                body { font-family: sans-serif; }
+                .invoice-container { max-width: 800px; margin: auto; padding: 20px; }
+                h1, h2 { text-align: center; }
+                table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                th { background-color: #f2f2f2; }
+                tfoot td { font-weight: bold; }
+                .fee-cell { text-align: right; }
+                @media print {
+                    .no-print { display: none; }
+                }
+            </style>
+        </head>
+        <body>
+            <div class="invoice-container">
+                <h1>INVOICE</h1>
+                <h2>Period: ${from} to ${to}</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>予約日時</th>
+                            <th>契約番号</th>
+                            <th>氏名</th>
+                            <th>生年月日</th>
+                            <th>CPTCODE</th>
+                            <th class="fee-cell">検査費</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${tableRows}
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="5" style="text-align: right;">合計:</td>
+                            <td class="fee-cell">${total.toLocaleString()}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+                <button class="no-print" onclick="window.print()">このページを印刷</button>
+            </div>
+        </body>
+        </html>
+    `;
+
+    // 新しいウィンドウを開いてHTMLを書き込む
+    const newWindow = window.open('', '_blank');
+    newWindow.document.write(invoiceHTML);
+    newWindow.document.close();
 }
