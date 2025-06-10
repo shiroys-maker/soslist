@@ -79,7 +79,7 @@ button {
 /* メモ入力欄のスタイル */
 #notesTextarea {
     width: 100%;
-    height: 360px;
+    height: 500px;
     margin-top: 5px;
     margin-bottom: 15px;
     padding: 8px;
