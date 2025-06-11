@@ -256,10 +256,10 @@ function startLogoutTimer() {
     clearTimeout(logoutTimer);
     logoutTimer = setTimeout(() => {
         if (auth.currentUser) {
-            alert('30分間操作がなかったため、自動的にログアウトします。');
+            alert('120分間操作がなかったため、自動的にログアウトします。');
             auth.signOut();
         }
-    }, 1800000); // 30分
+    }, 7200000); // 120分
 }
 
 function handleViewPdf(docId) {
