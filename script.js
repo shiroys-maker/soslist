@@ -226,12 +226,15 @@ function setupRealtimeListener() {
               if (!initialFeeValue && displayCptcodeText.replace(/\s/g, '') === "92557,92550,VA0004") {
                   initialFeeValue = '220,000';
               }
+              const age = calculateAge(data.dateOfBirth);
+              const displayAge = age ? `${age}` : '不明';
 
               tableRowsHTML += `
                   <tr data-id="${docId}">
                       <td class="show-toggle-cell">${checkmark}</td>                 
                       <td class="date-cell">${displayDate}</td>
                       <td class="name-cell">${data.claimantName || ''}</td>
+                      <td class="age-cell">${displayAge}</td>
                       <td>${data.contractNumber || ''}</td>
                       <td>${data.japanCellPhone || ''}</td>
                       <td>${displayServicesText}</td>
@@ -239,7 +242,6 @@ function setupRealtimeListener() {
                           <button class="view-pdf-btn">PDF表示</button>
                           <button class="delete-btn">削除</button>
                       </td>
-                      <td>${data.dateOfBirth || ''}</td>
                       <td>${displayCptcodeText}</td>
                       <td>
                           <input type="text" class="fee-input" value="${initialFeeValue}" placeholder="金額入力">
