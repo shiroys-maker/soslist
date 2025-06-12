@@ -206,9 +206,22 @@ function setupRealtimeListener() {
           });
 
           let tableRowsHTML = "";
+          let previousDateStr = null;
           appointments.forEach(appointment => {
               const docId = appointment.id;
               const data = appointment;
+              let rowClass = '';
+              let currentDateStr = '';
+              if (data.appointmentDateTime) {
+                  const dateObj = data.appointmentDateTime.toDate();
+                  // 比較用に日付部分のみの文字列を作成 (例: "2025-6-11")
+                  currentDateStr = `${dateObj.getUTCFullYear()}-${dateObj.getUTCMonth()}-${dateObj.getUTCDate()}`;
+
+                  // 前の行と日付が違っていたら、クラスを付与
+                  if (previousDateStr && currentDateStr !== previousDateStr) {
+                      rowClass = 'date-boundary';
+                  }
+              }
               const isShown = data.isShown === true;
               const checkmark = isShown ? '✅' : '';
               let displayDate = '日付なし';
@@ -230,7 +243,7 @@ function setupRealtimeListener() {
               const displayAge = age ? `${age}` : '不明';
 
               tableRowsHTML += `
-                  <tr data-id="${docId}">
+                  <tr data-id="${docId}" class="${rowClass}">
                       <td class="show-toggle-cell">${checkmark}</td>                 
                       <td class="date-cell">${displayDate}</td>
                       <td class="name-cell">${data.claimantName || ''}</td>
@@ -247,6 +260,7 @@ function setupRealtimeListener() {
                           <input type="text" class="fee-input" value="${initialFeeValue}" placeholder="金額入力">
                       </td>
                   </tr>`;
+                  previousDateStr = currentDateStr;
           });
           tableBody.innerHTML = tableRowsHTML;
       }, error => {

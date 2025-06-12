@@ -24,6 +24,20 @@ th {
     margin-bottom: 2em; 
 }
 
+tr.date-boundary td {
+    border-top: 2px solid #333;
+}
+
+/* テーブル全体の枠線を太くする */
+#appointmentsTable {
+    border: 2px solid #333;
+}
+
+/* 見出し行(th)の下の罫線を太くする */
+#appointmentsTable th {
+    border-bottom: 2px solid #333;
+}
+
 /* ボタンの共通スタイル */
 button {
     padding: 6px 12px;
