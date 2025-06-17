@@ -184,6 +184,16 @@ saveNotesButton.addEventListener('click', saveNotes);
 closeDetailsModalButton.addEventListener('click', closeDetailsModal);
 printInvoiceButton.addEventListener('click', printInvoice);
 
+const activityEvents = ['mousemove', 'mousedown', 'keypress', 'scroll', 'touchstart'];
+
+// 既存のタイマースタート関数を、タイマーリセット関数として再利用
+function resetLogoutTimer() {
+    startLogoutTimer();
+}
+
+activityEvents.forEach(eventName => {
+    window.addEventListener(eventName, resetLogoutTimer, true);
+});
 
 // --- 関数定義 ---
 function setupRealtimeListener() {
