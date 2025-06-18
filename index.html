@@ -10,6 +10,8 @@
         #main-app-container { display: none; }
         /* 日付セルにカーソルを合わせるとクリック可能に見せる */
         .date-cell:hover { cursor: pointer; background-color: #f0f8ff; }
+        /* 検査内容セルにカーソルを合わせるとクリック可能に見せる */
+        .services-cell:hover { cursor: pointer; text-decoration: underline; }
     </style>
 </head>
 <body>
@@ -108,6 +110,19 @@
             <button id="closeDetailsModalButton">閉じる</button>
         </div>
       </div>
+    </div>
+    
+    <div id="editServicesModal" class="modal">
+        <div class="modal-content">
+          <h3>検査内容の編集</h3>
+          <label for="servicesTextarea">検査内容 (カンマ区切りで入力):</label>
+          <textarea id="servicesTextarea" rows="5" style="width: 100%; box-sizing: border-box; margin-top: 5px;"></textarea>
+          <br><br>
+          <div class="modal-actions" style="text-align: right;">
+            <button id="confirmServicesEdit">更新</button>
+            <button id="cancelServicesEdit">キャンセル</button>
+          </div>
+        </div>
     </div>
 
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>

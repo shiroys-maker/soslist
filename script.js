@@ -45,6 +45,11 @@ const closeDetailsModalButton = document.getElementById('closeDetailsModalButton
 const invoiceFromDate = document.getElementById('invoiceFromDate');
 const invoiceToDate = document.getElementById('invoiceToDate');
 const printInvoiceButton = document.getElementById('printInvoiceButton');
+// 検査内容編集モーダル用の要素取得 
+const editServicesModal = document.getElementById('editServicesModal');
+const servicesTextarea = document.getElementById('servicesTextarea');
+const confirmServicesEditBtn = document.getElementById('confirmServicesEdit');
+const cancelServicesEditBtn = document.getElementById('cancelServicesEdit');
 
 
 // --- グローバル変数 ---
@@ -143,6 +148,10 @@ tableBody.addEventListener('click', (e) => {
         openEditModal(docId);
         return;
     }
+    if (target.classList.contains('services-cell')) {
+        openServicesEditModal(docId);
+        return;
+    }
     if (target.classList.contains('view-pdf-btn')) {
         handleViewPdf(docId);
     }
@@ -183,6 +192,8 @@ cancelEditBtn.addEventListener('click', closeEditModal);
 saveNotesButton.addEventListener('click', saveNotes);
 closeDetailsModalButton.addEventListener('click', closeDetailsModal);
 printInvoiceButton.addEventListener('click', printInvoice);
+confirmServicesEditBtn.addEventListener('click', saveServices);
+cancelServicesEditBtn.addEventListener('click', closeServicesEditModal);
 
 const activityEvents = ['mousemove', 'mousedown', 'keypress', 'scroll', 'touchstart'];
 
@@ -260,7 +271,7 @@ function setupRealtimeListener() {
                       <td class="age-cell">${displayAge}</td>
                       <td>${data.contractNumber || ''}</td>
                       <td>${data.japanCellPhone || ''}</td>
-                      <td>${displayServicesText}</td>
+                      <td class="services-cell">${displayServicesText}</td>
                       <td>
                           <button class="view-pdf-btn">PDF表示</button>
                           <button class="delete-btn">削除</button>
@@ -578,3 +589,47 @@ function generateInvoiceHTML(records, from, to, total) {
     newWindow.document.write(invoiceHTML);
     newWindow.document.close();
 }
+// ▼▼▼【ここから追加】検査内容を編集するための関数群 ▼▼▼
+function openServicesEditModal(docId) {
+    db.collection('appointments').doc(docId).get().then(doc => {
+        if (!doc.exists) {
+            alert('データが見つかりません');
+            return;
+        }
+        const data = doc.data();
+        // services配列をカンマ区切りの文字列に変換してテキストエリアに設定
+        const currentServices = (data.services || []).join(', ');
+        servicesTextarea.value = currentServices;
+        
+        editingDocId = docId; // 編集対象のIDをグローバル変数にセット
+        editServicesModal.style.display = 'flex';
+    });
+}
+
+function closeServicesEditModal() {
+    editServicesModal.style.display = 'none';
+    editingDocId = null; // IDをリセット
+}
+
+function saveServices() {
+    if (!editingDocId) return;
+
+    const newServicesString = servicesTextarea.value;
+    // テキストエリアの文字列をカンマで分割し、各項目の前後の空白を削除し、空の項目を除外して配列を作成
+    const newServicesArray = newServicesString.split(',')
+                                            .map(s => s.trim())
+                                            .filter(s => s !== '');
+
+    db.collection('appointments').doc(editingDocId).update({
+        services: newServicesArray
+    })
+    .then(() => {
+        console.log('検査内容を更新しました。');
+        closeServicesEditModal(); // モーダルを閉じる
+    })
+    .catch(error => {
+        console.error('検査内容の更新エラー:', error);
+        alert('検査内容の更新に失敗しました。');
+    });
+}
+// ▲▲▲【ここまで追加】▲▲▲

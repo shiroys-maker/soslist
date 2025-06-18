@@ -61,12 +61,12 @@ button {
 /* ======== 新しいモーダル表示用のスタイル ======== */
 
 /* クリック可能な氏名セルの見た目 */
-.name-cell {
+.name-cell, .services-cell {
     cursor: pointer;
     color: #0056b3;
     font-weight: bold;
 }
-.name-cell:hover {
+.name-cell:hover, .services-cell:hover {
     text-decoration: underline;
 }
 
