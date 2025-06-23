@@ -303,9 +303,9 @@ function setupRealtimeListener() {
                           <button class="delete-btn">削除</button>
                       </td>
                       <td>${displayCptcodeText}</td>
-                      <td>
-                          <input type="text" class="fee-input" value="${initialFeeValue}" placeholder="金額入力">
-                      </td>
+                      <td class="col-fee">
+                        　<input type="text" class="fee-input" value="${initialFeeValue}" placeholder="金額入力">
+                    　</td>
                   </tr>`;
                   previousDateStr = currentDateStr;
           });

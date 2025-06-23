@@ -220,6 +220,10 @@ button {
 .result-item:last-child {
     border-bottom: none;
 }
+.col-fee {
+    width: 60px;      /* 基本の幅を100pxに設定 */
+    min-width: 50px;  /* 画面が狭くなっても100pxよりは小さくならないようにする */
+}
 /* --- ▼▼▼ ここからがスマホ用の追加スタイルです ▼▼▼ --- */
 
 @media (max-width: 768px) {
