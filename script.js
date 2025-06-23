@@ -380,9 +380,9 @@ function searchAppointments() {
     db.collection("appointments")
       .where("contractNumber", ">=", searchTerm)
       .where("contractNumber", "<", endTerm)
-      .orderBy("contractNumber") // 念のため契約番号でもソート
-      .orderBy("appointmentDateTime", "asc") // 日時でソート
-      .limit(20) // 最大20件まで
+      .orderBy("contractNumber")
+      // .orderBy("appointmentDateTime", "asc") // ← エラーの原因となっていたこの行を削除しました
+      .limit(20)
       .get()
       .then(querySnapshot => {
           if (querySnapshot.empty) {
@@ -390,15 +390,11 @@ function searchAppointments() {
               return;
           }
 
-          // --- ▼▼▼【ここから変更】ヒット数に応じた処理分岐 ▼▼▼ ---
-
-          // ヒットが1件の場合：直接ジャンプ
           if (querySnapshot.size === 1) {
               const doc = querySnapshot.docs[0];
               jumpToDate(doc.data().appointmentDateTime);
               alert(`「${searchTerm}」で始まる契約番号の予約日にジャンプしました。`);
           } 
-          // ヒットが複数件の場合：モーダルで選択肢を表示
           else {
               let resultsHTML = '';
               querySnapshot.forEach(doc => {
@@ -409,17 +405,11 @@ function searchAppointments() {
                   const day = String(dateObj.getUTCDate()).padStart(2, '0');
                   const targetDate = `${year}-${month}-${day}`;
                   
-                  resultsHTML += `
-                      <div class="result-item" data-date="${targetDate}">
-                          <span>${data.claimantName}</span>
-                          <span>${targetDate}</span>
-                      </div>
-                  `;
+                  resultsHTML += `<div class="result-item" data-date="${targetDate}"><span>${data.claimantName}</span><span>${targetDate}</span></div>`;
               });
               searchResultsList.innerHTML = resultsHTML;
               searchResultsModal.style.display = 'flex';
           }
-          // --- ▲▲▲ ここまで変更 ▲▲▲ ---
       })
       .catch(error => {
           console.error("検索エラー: ", error);
