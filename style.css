@@ -45,6 +45,21 @@ button {
     cursor: pointer;
 }
 
+/* フィルターと検索セクションのレイアウト */
+.filter-section {
+    display: flex;
+    align-items: center;
+    gap: 2em;
+    flex-wrap: wrap; /* 画面が狭い場合に折り返す */
+    margin-bottom: 1em; /* 下の余白を少し調整 */
+}
+
+.date-filter-area, .search-area {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
 /* 検査費の入力欄のスタイル */
     .fee-input {
         width: 100%;
@@ -182,6 +197,29 @@ button {
     padding: 5px 15px;
 }
 
+/* 検索結果モーダルのリストスタイル */
+#searchResultsList {
+    margin-top: 15px;
+    max-height: 300px;
+    overflow-y: auto;
+    text-align: left;
+}
+
+.result-item {
+    padding: 12px;
+    border-bottom: 1px solid #eee;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+}
+
+.result-item:hover {
+    background-color: #f0f8ff;
+}
+
+.result-item:last-child {
+    border-bottom: none;
+}
 /* --- ▼▼▼ ここからがスマホ用の追加スタイルです ▼▼▼ --- */
 
 @media (max-width: 768px) {

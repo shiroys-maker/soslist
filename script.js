@@ -45,6 +45,11 @@ const closeDetailsModalButton = document.getElementById('closeDetailsModalButton
 const invoiceFromDate = document.getElementById('invoiceFromDate');
 const invoiceToDate = document.getElementById('invoiceToDate');
 const printInvoiceButton = document.getElementById('printInvoiceButton');
+const searchInput = document.getElementById('searchInput');
+const searchButton = document.getElementById('searchButton');
+const searchResultsModal = document.getElementById('searchResultsModal');
+const searchResultsList = document.getElementById('searchResultsList');
+const closeSearchResultsButton = document.getElementById('closeSearchResultsButton');
 // 検査内容編集モーダル用の要素取得 
 const editServicesModal = document.getElementById('editServicesModal');
 const servicesTextarea = document.getElementById('servicesTextarea');
@@ -194,6 +199,27 @@ closeDetailsModalButton.addEventListener('click', closeDetailsModal);
 printInvoiceButton.addEventListener('click', printInvoice);
 confirmServicesEditBtn.addEventListener('click', saveServices);
 cancelServicesEditBtn.addEventListener('click', closeServicesEditModal);
+searchButton.addEventListener('click', searchAppointments);
+// 検索ボックスでEnterキーを押したときも検索を実行
+searchInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+        searchAppointments();
+    }
+});
+closeSearchResultsButton.addEventListener('click', () => {
+    searchResultsModal.style.display = 'none';
+});
+
+// 検索結果リストの項目をクリックしたときの処理
+searchResultsList.addEventListener('click', (e) => {
+    const targetItem = e.target.closest('.result-item');
+    if (targetItem) {
+        const targetDate = targetItem.dataset.date;
+        dateFilter.value = targetDate;
+        dateFilter.dispatchEvent(new Event('change'));
+        searchResultsModal.style.display = 'none'; // モーダルを閉じる
+    }
+});
 
 const activityEvents = ['mousemove', 'mousedown', 'keypress', 'scroll', 'touchstart'];
 
@@ -341,7 +367,81 @@ function closeEditModal() {
     editingDocId = null;
 }
 
-// script.js
+function searchAppointments() {
+    const searchTerm = searchInput.value.trim();
+    if (!searchTerm) {
+        alert('検索する契約番号を入力してください。');
+        return;
+    }
+
+    const endTerm = searchTerm.slice(0, -1) + 
+                  String.fromCharCode(searchTerm.charCodeAt(searchTerm.length - 1) + 1);
+
+    db.collection("appointments")
+      .where("contractNumber", ">=", searchTerm)
+      .where("contractNumber", "<", endTerm)
+      .orderBy("contractNumber") // 念のため契約番号でもソート
+      .orderBy("appointmentDateTime", "asc") // 日時でソート
+      .limit(20) // 最大20件まで
+      .get()
+      .then(querySnapshot => {
+          if (querySnapshot.empty) {
+              alert('該当する契約番号の予約が見つかりませんでした。');
+              return;
+          }
+
+          // --- ▼▼▼【ここから変更】ヒット数に応じた処理分岐 ▼▼▼ ---
+
+          // ヒットが1件の場合：直接ジャンプ
+          if (querySnapshot.size === 1) {
+              const doc = querySnapshot.docs[0];
+              jumpToDate(doc.data().appointmentDateTime);
+              alert(`「${searchTerm}」で始まる契約番号の予約日にジャンプしました。`);
+          } 
+          // ヒットが複数件の場合：モーダルで選択肢を表示
+          else {
+              let resultsHTML = '';
+              querySnapshot.forEach(doc => {
+                  const data = doc.data();
+                  const dateObj = data.appointmentDateTime.toDate();
+                  const year = dateObj.getUTCFullYear();
+                  const month = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
+                  const day = String(dateObj.getUTCDate()).padStart(2, '0');
+                  const targetDate = `${year}-${month}-${day}`;
+                  
+                  resultsHTML += `
+                      <div class="result-item" data-date="${targetDate}">
+                          <span>${data.claimantName}</span>
+                          <span>${targetDate}</span>
+                      </div>
+                  `;
+              });
+              searchResultsList.innerHTML = resultsHTML;
+              searchResultsModal.style.display = 'flex';
+          }
+          // --- ▲▲▲ ここまで変更 ▲▲▲ ---
+      })
+      .catch(error => {
+          console.error("検索エラー: ", error);
+          alert("検索中にエラーが発生しました。");
+      });
+}
+
+// 日付フィルターを更新してジャンプする処理を新しい関数に分離
+function jumpToDate(timestamp) {
+    if (!timestamp) {
+        alert('該当の予約には日付が設定されていません。');
+        return;
+    }
+    const dateObj = timestamp.toDate();
+    const year = dateObj.getUTCFullYear();
+    const month = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(dateObj.getUTCDate()).padStart(2, '0');
+    const targetDate = `${year}-${month}-${day}`;
+    
+    dateFilter.value = targetDate;
+    dateFilter.dispatchEvent(new Event('change'));
+}
 
 function openDetailsModal(docId) {
   db.collection('appointments').doc(docId).get().then(doc => {
