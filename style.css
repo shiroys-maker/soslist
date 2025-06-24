@@ -1,7 +1,7 @@
 body { 
     font-family: sans-serif; 
     margin: 1em; /* スマホも考慮し、余白を少し調整 */
-    zoom: 0.94; /* ← この行を追加して全体を90%に縮小 */
+    zoom: 1; /* ← この行を追加して全体を90%に縮小 */
 }
 
 table { 
