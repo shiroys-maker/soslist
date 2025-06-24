@@ -583,6 +583,8 @@ function printInvoice() {
 }
 
 
+// script.js
+
 function generateInvoiceHTML(records, from, to, total) {
     // 請求書のHTML全体
     const invoiceHTML = `
@@ -642,9 +644,6 @@ function generateInvoiceHTML(records, from, to, total) {
     const newWindow = window.open('', '_blank');
     newWindow.document.write(invoiceHTML);
     
-    // --- ▼▼▼【ここから変更】新しいウィンドウにデータと関数を渡す ---
-
-    // 1. データ行を生成してテーブルに挿入
     let tableRows = '';
     records.forEach(data => {
         const dateOptions = { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'UTC' };
@@ -676,42 +675,40 @@ function generateInvoiceHTML(records, from, to, total) {
     });
     newWindow.document.getElementById('invoice-tbody').innerHTML = tableRows;
 
-    // 2. CSVエクスポート用の関数を新しいウィンドウに定義
     newWindow.exportToCsv = function() {
-        // ヘッダー行
+        // --- ▼▼▼【ここから変更】CSV生成ロジックを修正 ▼▼▼ ---
         const headers = ["予約日時", "契約番号", "氏名", "生年月日", "CPTCODE", "検査費"];
-        let csvContent = "\uFEFF" + headers.join(',') + "\n"; // BOMを先頭に付けて文字化け防止
+        let csvContent = "\uFEFF" + headers.join(',') + "\n"; 
 
-        // データ行
         records.forEach(data => {
             const dateOptions = { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'UTC' };
-            const timeOptions = { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' };
             const csvDate = data.appointmentDateTime ? new Intl.DateTimeFormat('en-US', dateOptions).format(data.appointmentDateTime.toDate()) : '';
 
             let csvFee = data.examinationFee || '';
             if (!csvFee) {
                 const cptCodeString = (data.cptCode || []).join(', ').replace(/\s/g, '');
                 if (cptCodeString === "92557,92550,VA0004") {
-                    csvFee = '220000'; // CSV用にはカンマなしの数値
+                    csvFee = '220000';
                 }
             }
             if (!csvFee) csvFee = '0';
-
+            
             // カンマを含む可能性のあるフィールドをダブルクオーテーションで囲む
+            const claimantNameCsv = `"${data.claimantName || ''}"`;
             const cptCodeCsv = `"${(data.cptCode || []).join(', ')}"`;
 
             const row = [
                 csvDate,
                 data.contractNumber || '',
-                data.claimantName || '',
+                claimantNameCsv, // 変更点
                 data.dateOfBirth || '',
                 cptCodeCsv,
                 String(csvFee).replace(/,/g, '')
             ];
             csvContent += row.join(',') + "\n";
         });
+        // --- ▲▲▲ ここまで変更 ▲▲▲ ---
         
-        // ダウンロード処理
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement("a");
         const url = URL.createObjectURL(blob);
@@ -722,8 +719,6 @@ function generateInvoiceHTML(records, from, to, total) {
         link.click();
         document.body.removeChild(link);
     };
-
-    // --- ▲▲▲ ここまで変更 ▲▲▲ ---
 
     newWindow.document.close();
 }
