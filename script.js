@@ -582,45 +582,8 @@ function printInvoice() {
       });
 }
 
-// script.js
 
 function generateInvoiceHTML(records, from, to, total) {
-    let tableRows = '';
-    records.forEach(data => {
-        const dateOptions = { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'UTC' };
-        const timeOptions = { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' };
-        const displayDate = data.appointmentDateTime 
-            ? new Intl.DateTimeFormat('en-US', dateOptions).format(data.appointmentDateTime.toDate()) + ' ' + 
-              new Intl.DateTimeFormat('ja-JP', timeOptions).format(data.appointmentDateTime.toDate())
-            : '日付なし';
-        
-        // --- ▼▼▼【ここから追加】各行の検査費表示ロジック ▼▼▼ ---
-        let displayFee = data.examinationFee || ''; // 保存された値を優先
-        // 保存された値がなく、CPTコードが条件と一致する場合
-        if (!displayFee) {
-            const cptCodeString = (data.cptCode || []).join(', ').replace(/\s/g, '');
-            if (cptCodeString === "92557,92550,VA0004") {
-                displayFee = '220,000';
-            }
-        }
-        // それでも値がなければ'0'を表示
-        if (!displayFee) {
-            displayFee = '0';
-        }
-        // --- ▲▲▲ ここまで追加 ▲▲▲ ---
-
-        tableRows += `
-            <tr>
-                <td>${displayDate}</td>
-                <td>${data.contractNumber || ''}</td>
-                <td>${data.claimantName || ''}</td>
-                <td>${data.dateOfBirth || ''}</td>
-                <td>${(data.cptCode || []).join(', ')}</td>
-                <td class="fee-cell">${displayFee}</td>
-            </tr>
-        `;
-    });
-
     // 請求書のHTML全体
     const invoiceHTML = `
         <!DOCTYPE html>
@@ -637,6 +600,7 @@ function generateInvoiceHTML(records, from, to, total) {
                 th { background-color: #f2f2f2; }
                 tfoot td { font-weight: bold; font-size: 14px; }
                 .fee-cell { text-align: right; }
+                .button-area { margin-top: 20px; text-align: right; }
                 @media print {
                     .no-print { display: none; }
                 }
@@ -657,9 +621,8 @@ function generateInvoiceHTML(records, from, to, total) {
                             <th class="fee-cell">検査費</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        ${tableRows}
-                    </tbody>
+                    <tbody id="invoice-tbody">
+                        </tbody>
                     <tfoot>
                         <tr>
                             <td colspan="5" style="text-align: right;">合計:</td>
@@ -667,18 +630,104 @@ function generateInvoiceHTML(records, from, to, total) {
                         </tr>
                     </tfoot>
                 </table>
-                <br>
-                <button class="no-print" onclick="window.print()">このページを印刷</button>
+                <div class="button-area no-print">
+                    <button onclick="window.print()">このページを印刷</button>
+                    <button onclick="exportToCsv()">Excelエクスポート</button>
+                </div>
             </div>
         </body>
         </html>
     `;
 
-    // 新しいウィンドウを開いてHTMLを書き込む
     const newWindow = window.open('', '_blank');
     newWindow.document.write(invoiceHTML);
+    
+    // --- ▼▼▼【ここから変更】新しいウィンドウにデータと関数を渡す ---
+
+    // 1. データ行を生成してテーブルに挿入
+    let tableRows = '';
+    records.forEach(data => {
+        const dateOptions = { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'UTC' };
+        const timeOptions = { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' };
+        const displayDate = data.appointmentDateTime 
+            ? new Intl.DateTimeFormat('en-US', dateOptions).format(data.appointmentDateTime.toDate()) + ' ' + 
+              new Intl.DateTimeFormat('ja-JP', timeOptions).format(data.appointmentDateTime.toDate())
+            : '日付なし';
+        
+        let displayFee = data.examinationFee || '';
+        if (!displayFee) {
+            const cptCodeString = (data.cptCode || []).join(', ').replace(/\s/g, '');
+            if (cptCodeString === "92557,92550,VA0004") {
+                displayFee = '220,000';
+            }
+        }
+        if (!displayFee) displayFee = '0';
+
+        tableRows += `
+            <tr>
+                <td>${displayDate}</td>
+                <td>${data.contractNumber || ''}</td>
+                <td>${data.claimantName || ''}</td>
+                <td>${data.dateOfBirth || ''}</td>
+                <td>${(data.cptCode || []).join(', ')}</td>
+                <td class="fee-cell">${displayFee}</td>
+            </tr>
+        `;
+    });
+    newWindow.document.getElementById('invoice-tbody').innerHTML = tableRows;
+
+    // 2. CSVエクスポート用の関数を新しいウィンドウに定義
+    newWindow.exportToCsv = function() {
+        // ヘッダー行
+        const headers = ["予約日時", "契約番号", "氏名", "生年月日", "CPTCODE", "検査費"];
+        let csvContent = "\uFEFF" + headers.join(',') + "\n"; // BOMを先頭に付けて文字化け防止
+
+        // データ行
+        records.forEach(data => {
+            const dateOptions = { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'UTC' };
+            const timeOptions = { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' };
+            const csvDate = data.appointmentDateTime ? new Intl.DateTimeFormat('en-US', dateOptions).format(data.appointmentDateTime.toDate()) : '';
+
+            let csvFee = data.examinationFee || '';
+            if (!csvFee) {
+                const cptCodeString = (data.cptCode || []).join(', ').replace(/\s/g, '');
+                if (cptCodeString === "92557,92550,VA0004") {
+                    csvFee = '220000'; // CSV用にはカンマなしの数値
+                }
+            }
+            if (!csvFee) csvFee = '0';
+
+            // カンマを含む可能性のあるフィールドをダブルクオーテーションで囲む
+            const cptCodeCsv = `"${(data.cptCode || []).join(', ')}"`;
+
+            const row = [
+                csvDate,
+                data.contractNumber || '',
+                data.claimantName || '',
+                data.dateOfBirth || '',
+                cptCodeCsv,
+                String(csvFee).replace(/,/g, '')
+            ];
+            csvContent += row.join(',') + "\n";
+        });
+        
+        // ダウンロード処理
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", `invoice_${from}_to_${to}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    // --- ▲▲▲ ここまで変更 ▲▲▲ ---
+
     newWindow.document.close();
 }
+
 // ▼▼▼【ここから追加】検査内容を編集するための関数群 ▼▼▼
 function openServicesEditModal(docId) {
     db.collection('appointments').doc(docId).get().then(doc => {
