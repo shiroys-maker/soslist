@@ -1,6 +1,7 @@
 body { 
     font-family: sans-serif; 
     margin: 1em; /* スマホも考慮し、余白を少し調整 */
+    zoom: 0.94; /* ← この行を追加して全体を90%に縮小 */
 }
 
 table { 
@@ -10,7 +11,7 @@ table {
 
 th, td { 
     border: 1px solid #ccc; 
-    padding: 8px; 
+    padding: 2px 6px; 
     text-align: left; 
     font-size: 12px; /* 基本の文字サイズを少し調整 */
     vertical-align: middle; /* 文字の縦方向を中央揃えに */
