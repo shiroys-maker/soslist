@@ -11,7 +11,7 @@ table {
 
 th, td { 
     border: 1px solid #ccc; 
-    padding: 2px 6px; 
+    padding: 1px 5px; 
     text-align: left; 
     font-size: 12px; /* 基本の文字サイズを少し調整 */
     vertical-align: middle; /* 文字の縦方向を中央揃えに */
