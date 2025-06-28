@@ -277,16 +277,27 @@ button {
 
 /* 印刷時にボタンなどを非表示にする */
 @media print {
-    body * {
-        visibility: hidden;
+    /* 最初に、印刷しない要素（ボタンなど）を非表示に設定 */
+    body > *:not(#feeModal), .modal-actions {
+        display: none;
     }
-    #feeModalPrintArea, #feeModalPrintArea * {
+
+    /* 印刷対象のモーダルとその中身だけを表示する設定 */
+    body, #feeModal, #feeModal .modal-content, #feeModalPrintArea {
         visibility: visible;
+        display: block;
+        position: static; /* 印刷時に位置の固定を解除 */
+        width: auto;
+        height: auto;
+        overflow: visible;
+        background: none;
+        border: none;
+        margin: 0;
+        padding: 0;
+        box-shadow: none;
     }
+    
     #feeModalPrintArea {
-        position: absolute;
-        left: 0;
-        top: 0;
         width: 100%;
     }
 }
