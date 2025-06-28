@@ -275,30 +275,38 @@ button {
     text-align: right;
 }
 
-/* 印刷時にボタンなどを非表示にする */
+/* 印刷用の設定 */
 @media print {
-    /* 最初に、印刷しない要素（ボタンなど）を非表示に設定 */
-    body > *:not(#feeModal), .modal-actions {
-        display: none;
+    /* 予約一覧など、印刷に不要な要素をすべて非表示にする */
+    #login-container,
+    #main-app-container,
+    #editModal,
+    #detailsModal,
+    #searchResultsModal,
+    #editServicesModal {
+        display: none !important;
     }
 
-    /* 印刷対象のモーダルとその中身だけを表示する設定 */
-    body, #feeModal, #feeModal .modal-content, #feeModalPrintArea {
-        visibility: visible;
-        display: block;
-        position: static; /* 印刷時に位置の固定を解除 */
-        width: auto;
-        height: auto;
-        overflow: visible;
-        background: none;
-        border: none;
-        margin: 0;
-        padding: 0;
-        box-shadow: none;
+    /* 印刷するモーダル内の、不要なボタンエリアを非表示にする */
+    #feeModal .modal-actions {
+        display: none !important;
     }
-    
-    #feeModalPrintArea {
-        width: 100%;
+
+    /* 印刷時にモーダルの位置や見た目をページに合わせて調整する */
+    #feeModal {
+        position: static !important; /* 画面固定を解除 */
+        background: none !important;
+        overflow: visible !important;
+        display: block !important;
+    }
+
+    #feeModal .modal-content {
+        box-shadow: none !important; /* 影を消す */
+        border: none !important;     /* 枠線を消す */
+        padding: 0 !important;
+        margin: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
     }
 }
 
