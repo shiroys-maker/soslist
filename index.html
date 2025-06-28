@@ -145,6 +145,38 @@
           </div>
         </div>
     </div>
+    
+    <div id="feeModal" class="modal">
+        <div class="modal-content large">
+            <div id="feeModalPrintArea">
+                <h3>検査費内訳</h3>
+                <div id="feeModalHeader" class="modal-header-info">
+                    </div>
+                <table id="feeModalTable">
+                    <thead>
+                        <tr>
+                            <th>CPTCODE</th>
+                            <th>検査費内訳</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        </tbody>
+                    <tfoot>
+                        <tr>
+                            <td><strong>合計</strong></td>
+                            <td><input type="text" id="feeModalTotalInput" style="text-align: right; font-weight: bold; font-size: 16px;"></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            <div class="modal-actions">
+                <button id="printFeeModalButton">帳票印刷</button>
+                <button id="calculateFeeButton">計算</button>
+                <button id="saveAndCloseFeeButton">保存して閉じる</button>
+                <button id="cancelFeeModalButton">キャンセル</button>
+            </div>
+        </div>
+    </div>
 
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>

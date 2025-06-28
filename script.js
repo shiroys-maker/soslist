@@ -50,16 +50,25 @@ const searchButton = document.getElementById('searchButton');
 const searchResultsModal = document.getElementById('searchResultsModal');
 const searchResultsList = document.getElementById('searchResultsList');
 const closeSearchResultsButton = document.getElementById('closeSearchResultsButton');
-// 検査内容編集モーダル用の要素取得 
+// 検査内容編集モーダル用の要素取得
 const editServicesModal = document.getElementById('editServicesModal');
 const servicesTextarea = document.getElementById('servicesTextarea');
 const confirmServicesEditBtn = document.getElementById('confirmServicesEdit');
 const cancelServicesEditBtn = document.getElementById('cancelServicesEdit');
+// 検査費モーダル用の要素取得
+const feeModal = document.getElementById('feeModal');
+const feeModalHeader = document.getElementById('feeModalHeader');
+const feeModalTableBody = document.querySelector("#feeModalTable tbody");
+const feeModalTotalInput = document.getElementById('feeModalTotalInput'); // 合計入力ボックス
+const printFeeModalButton = document.getElementById('printFeeModalButton');
+const calculateFeeButton = document.getElementById('calculateFeeButton'); // 「計算」ボタン
+const saveAndCloseFeeButton = document.getElementById('saveAndCloseFeeButton'); // 「保存して閉じる」ボタン
+const cancelFeeModalButton = document.getElementById('cancelFeeModalButton'); // 「キャンセル」ボタン
 
 
 // --- グローバル変数 ---
 let logoutTimer;
-let editingDocId = null; 
+let editingDocId = null;
 let unsubscribe;
 
 // --- ログイン状態の監視 ---
@@ -165,19 +174,11 @@ tableBody.addEventListener('click', (e) => {
             db.collection('appointments').doc(docId).delete();
         }
     }
-});
-
-tableBody.addEventListener('blur', (e) => {
-    if (e.target.classList.contains('fee-input')) {
-        const inputElement = e.target;
-        const docId = inputElement.closest('tr').dataset.id;
-        if (docId) {
-            db.collection('appointments').doc(docId).update({
-                examinationFee: inputElement.value
-            }).catch(error => console.error('検査費の更新エラー:', error));
-        }
+    if (target.classList.contains('fee-cell')) {
+        openFeeModal(docId);
+        return;
     }
-}, true);
+});
 
 confirmEditBtn.addEventListener('click', () => {
     if (!dateSelect.value || !timeSelect.value || !editingDocId) return;
@@ -200,45 +201,53 @@ printInvoiceButton.addEventListener('click', printInvoice);
 confirmServicesEditBtn.addEventListener('click', saveServices);
 cancelServicesEditBtn.addEventListener('click', closeServicesEditModal);
 searchButton.addEventListener('click', searchAppointments);
-// 検索ボックスでEnterキーを押したときも検索を実行
-searchInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-        searchAppointments();
-    }
-});
-closeSearchResultsButton.addEventListener('click', () => {
-    searchResultsModal.style.display = 'none';
-});
-
-// 検索結果リストの項目をクリックしたときの処理
+searchInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') { searchAppointments(); } });
+closeSearchResultsButton.addEventListener('click', () => { searchResultsModal.style.display = 'none'; });
 searchResultsList.addEventListener('click', (e) => {
     const targetItem = e.target.closest('.result-item');
     if (targetItem) {
-        const targetDate = targetItem.dataset.date;
-        dateFilter.value = targetDate;
-        dateFilter.dispatchEvent(new Event('change'));
-        searchResultsModal.style.display = 'none'; // モーダルを閉じる
+        jumpToDate(targetItem.dataset.timestamp);
     }
 });
-
 const activityEvents = ['mousemove', 'mousedown', 'keypress', 'scroll', 'touchstart'];
+activityEvents.forEach(eventName => { window.addEventListener(eventName, resetLogoutTimer, true); });
 
-// 既存のタイマースタート関数を、タイマーリセット関数として再利用
+// 検査費モーダルのイベントリスナー
+calculateFeeButton.addEventListener('click', calculateFeeTotal);
+saveAndCloseFeeButton.addEventListener('click', saveFeeData);
+printFeeModalButton.addEventListener('click', () => { window.print(); });
+cancelFeeModalButton.addEventListener('click', () => {
+    feeModal.style.display = 'none';
+});
+
+
+// --- 関数定義 ---
+
+/**
+ * 金額の文字列や数値から、数字のみを抽出して数値型で返す。
+ * @param {string | number} fee - 検査費データ
+ * @returns {number | null} - クリーンな数値、または無効な場合はnull
+ */
+function parseFee(fee) {
+    if (fee === null || fee === undefined) return null;
+    const feeString = String(fee);
+    const cleanedFee = feeString.replace(/[^0-9]/g, ''); // 数字以外の文字をすべて削除
+    if (cleanedFee === '') return null;
+    const feeNumber = parseInt(cleanedFee, 10);
+    return isNaN(feeNumber) ? null : feeNumber;
+}
+
 function resetLogoutTimer() {
     startLogoutTimer();
 }
 
-activityEvents.forEach(eventName => {
-    window.addEventListener(eventName, resetLogoutTimer, true);
-});
-
-// --- 関数定義 ---
 function setupRealtimeListener() {
-    if (unsubscribe) unsubscribe();
+    if (unsubscribe) {
+        unsubscribe();
+    }
     const localDateStr = dateFilter.value;
     if (!localDateStr) return;
     const filterDate = new Date(`${localDateStr}T00:00:00`);
-
     unsubscribe = db.collection("appointments")
       .where("appointmentDateTime", ">=", filterDate)
       .onSnapshot(querySnapshot => {
@@ -251,7 +260,6 @@ function setupRealtimeListener() {
               const timeB = b.appointmentDateTime ? b.appointmentDateTime.toMillis() : 0;
               return timeA - timeB;
           });
-
           let tableRowsHTML = "";
           let previousDateStr = null;
           appointments.forEach(appointment => {
@@ -261,10 +269,7 @@ function setupRealtimeListener() {
               let currentDateStr = '';
               if (data.appointmentDateTime) {
                   const dateObj = data.appointmentDateTime.toDate();
-                  // 比較用に日付部分のみの文字列を作成 (例: "2025-6-11")
                   currentDateStr = `${dateObj.getUTCFullYear()}-${dateObj.getUTCMonth()}-${dateObj.getUTCDate()}`;
-
-                  // 前の行と日付が違っていたら、クラスを付与
                   if (previousDateStr && currentDateStr !== previousDateStr) {
                       rowClass = 'date-boundary';
                   }
@@ -282,32 +287,46 @@ function setupRealtimeListener() {
               }
               const displayServicesText = (data.services || []).join(', ').toLowerCase().includes("audiologist") ? "Audiology" : (data.services || []).join(', ');
               const displayCptcodeText = (data.cptCode || []).join(', ');
-              let initialFeeValue = data.examinationFee || '';
-              if (!initialFeeValue && displayCptcodeText.replace(/\s/g, '') === "92557,92550,VA0004") {
-                  initialFeeValue = '220,000';
-              }
               const age = calculateAge(data.dateOfBirth);
               const displayAge = age ? `${age}` : '不明';
 
+              // ▼▼▼【最終修正】「みなし表示」ロジックを一覧表示に追加 ▼▼▼
+              let examinationFee = '';
+              const feeNumber = parseFee(data.examinationFee);
+
+              if (feeNumber !== null) {
+                  // 1. 保存された値があれば最優先で表示
+                  examinationFee = feeNumber.toLocaleString();
+              } else {
+                  // 2. 保存された値がなければ、条件に応じて「みなし」で表示
+                  const services = data.services || [];
+                  const isAudiologyOnly = services.length === 1 && services[0].toLowerCase() === 'audiology';
+                  const cptCodeString = (data.cptCode || []).join(',').replace(/\s/g, '');
+                  const isSpecificCpt = cptCodeString === "92557,92550,VA0004";
+
+                  if (isAudiologyOnly || isSpecificCpt) {
+                      examinationFee = (207000).toLocaleString();
+                  }
+              }
+              // ▲▲▲【最終修正完了】▲▲▲
+
               tableRowsHTML += `
                   <tr data-id="${docId}" class="${rowClass}">
-                      <td class="show-toggle-cell">${checkmark}</td>                 
-                      <td class="date-cell">${displayDate}</td>
-                      <td class="name-cell">${data.claimantName || ''}</td>
-                      <td class="age-cell">${displayAge}</td>
-                      <td>${data.contractNumber || ''}</td>
-                      <td>${data.japanCellPhone || ''}</td>
-                      <td class="services-cell">${displayServicesText}</td>
-                      <td>
-                          <button class="view-pdf-btn">PDF表示</button>
-                          <button class="delete-btn">削除</button>
+                      <td class="col-show show-toggle-cell">${checkmark}</td>
+                      <td class="col-date date-cell">${displayDate}</td>
+                      <td class="col-name name-cell">${data.claimantName || ''}</td>
+                      <td class="col-age">${displayAge}</td>
+                      <td class="col-contract">${data.contractNumber || ''}</td>
+                      <td class="col-phone">${data.japanCellPhone || ''}</td>
+                      <td class="col-services services-cell">${displayServicesText}</td>
+                      <td class="col-actions">
+                        <button class="view-pdf-btn">PDF</button>
+                        <button class="delete-btn">削除</button>
                       </td>
-                      <td>${displayCptcodeText}</td>
-                      <td class="col-fee">
-                        　<input type="text" class="fee-input" value="${initialFeeValue}" placeholder="金額入力">
-                    　</td>
+                      <td class="col-cpt">${displayCptcodeText}</td>
+                      <td class="col-fee fee-cell">${examinationFee}</td>
                   </tr>`;
-                  previousDateStr = currentDateStr;
+              previousDateStr = currentDateStr;
           });
           tableBody.innerHTML = tableRowsHTML;
       }, error => {
@@ -374,14 +393,13 @@ function searchAppointments() {
         return;
     }
 
-    const endTerm = searchTerm.slice(0, -1) + 
+    const endTerm = searchTerm.slice(0, -1) +
                   String.fromCharCode(searchTerm.charCodeAt(searchTerm.length - 1) + 1);
 
     db.collection("appointments")
       .where("contractNumber", ">=", searchTerm)
       .where("contractNumber", "<", endTerm)
       .orderBy("contractNumber")
-      // .orderBy("appointmentDateTime", "asc") // ← エラーの原因となっていたこの行を削除しました
       .limit(20)
       .get()
       .then(querySnapshot => {
@@ -394,7 +412,7 @@ function searchAppointments() {
               const doc = querySnapshot.docs[0];
               jumpToDate(doc.data().appointmentDateTime);
               alert(`「${searchTerm}」で始まる契約番号の予約日にジャンプしました。`);
-          } 
+          }
           else {
               let resultsHTML = '';
               querySnapshot.forEach(doc => {
@@ -417,7 +435,6 @@ function searchAppointments() {
       });
 }
 
-// 日付フィルターを更新してジャンプする処理を新しい関数に分離
 function jumpToDate(timestamp) {
     if (!timestamp) {
         alert('該当の予約には日付が設定されていません。');
@@ -441,35 +458,28 @@ function openDetailsModal(docId) {
     }
     const data = doc.data();
 
-    // --- ▼▼▼【ここから変更】HTML生成ロジックを2列レイアウトに変更 ▼▼▼ ---
     let detailsHTML = '';
     const dateOptions = { month: '2-digit', day: '2-digit', weekday: 'short', timeZone: 'UTC' };
     const timeOptions = { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' };
-    const displayDate = data.appointmentDateTime 
-        ? new Intl.DateTimeFormat('ja-JP', dateOptions).format(data.appointmentDateTime.toDate()) + ' ' + 
+    const displayDate = data.appointmentDateTime
+        ? new Intl.DateTimeFormat('ja-JP', dateOptions).format(data.appointmentDateTime.toDate()) + ' ' +
           new Intl.DateTimeFormat('ja-JP', timeOptions).format(data.appointmentDateTime.toDate())
         : '日付なし';
 
-    // 年齢を計算
     const age = calculateAge(data.dateOfBirth);
     const displayAge = age ? `${age}歳` : '不明';
 
-    // 2列レイアウトのHTMLを生成
     detailsHTML += `<div class="detail-row">
                       <div class="detail-item"><strong>予約日時</strong><span>${displayDate.replace('<br>',' ')}</span></div>
                       <div class="detail-item"><strong>契約番号</strong><span>${data.contractNumber || ''}</span></div>
                     </div>`;
-
     detailsHTML += `<div class="detail-row">
                       <div class="detail-item"><strong>氏名</strong><span>${data.claimantName || ''}</span></div>
                       <div class="detail-item"><strong>生年月日(年齢)</strong><span>${data.dateOfBirth || ''} (${displayAge})</span></div>
                     </div>`;
-    
     detailsHTML += `<div class="detail-row">
                       <div class="detail-item"><strong>検査内容</strong><span>${(data.services || []).join(', ')}</span></div>
                     </div>`;
-
-   // --- ▲▲▲ ここまで変更 ▲▲▲ ---
 
     detailsContentContainer.innerHTML = detailsHTML;
     notesTextarea.value = data.notes || '';
@@ -499,28 +509,114 @@ function saveNotes() {
     });
 }
 
-// script.js の「--- 関数定義 ---」セクションに追加
-
 function calculateAge(dobString) {
-    // 生年月日の文字列がない場合は空文字を返す
     if (!dobString) return '';
-    
     const dob = new Date(dobString);
-    // 日付が無効な場合は空文字を返す
     if (isNaN(dob.getTime())) return '';
-
     const today = new Date();
     let age = today.getFullYear() - dob.getFullYear();
     const monthDifference = today.getMonth() - dob.getMonth();
-    
-    // 今年の誕生日がまだ来ていない場合は1歳引く
     if (monthDifference < 0 || (monthDifference === 0 && today.getDate() < dob.getDate())) {
         age--;
     }
-    
     return age;
 }
 
+// 検査費モーダル関連の関数
+function openFeeModal(docId) {
+    const docRef = db.collection('appointments').doc(docId);
+    docRef.get().then(doc => {
+        if (!doc.exists) return;
+        const data = doc.data();
+
+        feeModalHeader.innerHTML = `
+            <span><strong>予約日:</strong> ${data.appointmentDate ? new Date(data.appointmentDate).toLocaleDateString('ja-JP') : ''}</span>
+            <span><strong>契約番号:</strong> ${data.contractNumber || ''}</span>
+            <span><strong>氏名:</strong> ${data.claimantName || ''}</span>
+        `;
+
+        const cptCodes = data.cptCode || [];
+        const feeBreakdown = Array.isArray(data.feeBreakdown) ? data.feeBreakdown : [];
+        let tableRows = '';
+        for (let i = 0; i < 10; i++) {
+            tableRows += `
+                <tr>
+                    <td><input type="text" class="cpt-code-input" value="${cptCodes[i] || ''}"></td>
+                    <td><input type="number" class="fee-breakdown-input" value="${feeBreakdown[i] || ''}"></td>
+                </tr>
+            `;
+        }
+        feeModalTableBody.innerHTML = tableRows;
+
+        let defaultTotal = '';
+        const feeNumber = parseFee(data.examinationFee);
+        if (feeNumber !== null) {
+            defaultTotal = feeNumber;
+        } else {
+            const services = data.services || [];
+            const isAudiologyOnly = services.length === 1 && services[0].toLowerCase() === 'audiology';
+            const cptCodeString = (data.cptCode || []).join(',').replace(/\s/g, '');
+            const isSpecificCpt = cptCodeString === "92557,92550,VA0004";
+
+            if (isAudiologyOnly || isSpecificCpt) {
+                defaultTotal = 207000;
+            }
+        }
+        feeModalTotalInput.value = defaultTotal;
+
+        editingDocId = docId;
+        feeModal.style.display = 'flex';
+    });
+}
+
+function calculateFeeTotal() {
+    const feeInputs = feeModalTableBody.querySelectorAll('.fee-breakdown-input');
+    let total = 0;
+    feeInputs.forEach(input => {
+        const value = parseInt(input.value, 10);
+        if (!isNaN(value)) {
+            total += value;
+        }
+    });
+    feeModalTotalInput.value = total;
+}
+
+function saveFeeData() {
+    if (!editingDocId) return;
+
+    const cptInputs = feeModalTableBody.querySelectorAll('.cpt-code-input');
+    const feeInputs = feeModalTableBody.querySelectorAll('.fee-breakdown-input');
+    
+    const newCptCodes = [];
+    const newFeeBreakdown = [];
+
+    for(let i = 0; i < cptInputs.length; i++) {
+        const cpt = cptInputs[i].value.trim();
+        const fee = feeInputs[i].value.trim();
+        if (cpt || fee) {
+            newCptCodes.push(cpt);
+            newFeeBreakdown.push(parseInt(fee, 10) || 0);
+        }
+    }
+    
+    const totalFee = parseFee(feeModalTotalInput.value) || 0;
+
+    const dataToUpdate = {
+        cptCode: newCptCodes,
+        feeBreakdown: newFeeBreakdown,
+        examinationFee: totalFee
+    };
+
+    db.collection('appointments').doc(editingDocId).update(dataToUpdate)
+      .then(() => {
+          console.log('検査費を更新しました。');
+          feeModal.style.display = 'none';
+      })
+      .catch(error => {
+          console.error('検査費の更新エラー:', error);
+          alert('更新に失敗しました。');
+      });
+}
 
 function printInvoice() {
     const fromDateStr = invoiceFromDate.value;
@@ -548,24 +644,18 @@ function printInvoice() {
               const data = doc.data();
               records.push(data);
 
-              // --- ▼▼▼【ここから変更】合計金額の計算ロジックを修正 ▼▼▼ ---
               let feeForSum = 0;
-              // 保存された検査費がある場合
-              if (data.examinationFee) {
-                  const parsedFee = parseInt(String(data.examinationFee).replace(/,/g, ''), 10);
-                  if (!isNaN(parsedFee)) {
-                      feeForSum = parsedFee;
-                  }
-              } 
-              // 保存された費用がなく、CPTコードが条件に一致する場合
-              else {
+              const feeNumber = parseFee(data.examinationFee);
+
+              if (feeNumber !== null) {
+                  feeForSum = feeNumber;
+              } else {
                   const cptCodeString = (data.cptCode || []).join(', ').replace(/\s/g, '');
                   if (cptCodeString === "92557,92550,VA0004") {
                       feeForSum = 220000;
                   }
               }
               totalFee += feeForSum;
-              // --- ▲▲▲ ここまで変更 ▲▲▲ ---
           });
 
           if (records.length === 0) {
@@ -583,10 +673,7 @@ function printInvoice() {
 }
 
 
-// script.js
-
 function generateInvoiceHTML(records, from, to, total) {
-    // 請求書のHTML全体
     const invoiceHTML = `
         <!DOCTYPE html>
         <html lang="ja">
@@ -648,19 +735,21 @@ function generateInvoiceHTML(records, from, to, total) {
     records.forEach(data => {
         const dateOptions = { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'UTC' };
         const timeOptions = { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' };
-        const displayDate = data.appointmentDateTime 
-            ? new Intl.DateTimeFormat('en-US', dateOptions).format(data.appointmentDateTime.toDate()) + ' ' + 
+        const displayDate = data.appointmentDateTime
+            ? new Intl.DateTimeFormat('en-US', dateOptions).format(data.appointmentDateTime.toDate()) + ' ' +
               new Intl.DateTimeFormat('ja-JP', timeOptions).format(data.appointmentDateTime.toDate())
             : '日付なし';
         
-        let displayFee = data.examinationFee || '';
-        if (!displayFee) {
+        let displayFee = '0';
+        const feeNumber = parseFee(data.examinationFee);
+        if (feeNumber !== null) {
+            displayFee = feeNumber.toLocaleString();
+        } else {
             const cptCodeString = (data.cptCode || []).join(', ').replace(/\s/g, '');
             if (cptCodeString === "92557,92550,VA0004") {
                 displayFee = '220,000';
             }
         }
-        if (!displayFee) displayFee = '0';
 
         tableRows += `
             <tr>
@@ -676,38 +765,37 @@ function generateInvoiceHTML(records, from, to, total) {
     newWindow.document.getElementById('invoice-tbody').innerHTML = tableRows;
 
     newWindow.exportToCsv = function() {
-        // --- ▼▼▼【ここから変更】CSV生成ロジックを修正 ▼▼▼ ---
         const headers = ["予約日時", "契約番号", "氏名", "生年月日", "CPTCODE", "検査費"];
-        let csvContent = "\uFEFF" + headers.join(',') + "\n"; 
+        let csvContent = "\uFEFF" + headers.join(',') + "\n";
 
         records.forEach(data => {
             const dateOptions = { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'UTC' };
             const csvDate = data.appointmentDateTime ? new Intl.DateTimeFormat('en-US', dateOptions).format(data.appointmentDateTime.toDate()) : '';
 
-            let csvFee = data.examinationFee || '';
-            if (!csvFee) {
+            let csvFee = '0';
+            const feeNumber = parseFee(data.examinationFee);
+            if (feeNumber !== null) {
+                csvFee = feeNumber;
+            } else {
                 const cptCodeString = (data.cptCode || []).join(', ').replace(/\s/g, '');
                 if (cptCodeString === "92557,92550,VA0004") {
                     csvFee = '220000';
                 }
             }
-            if (!csvFee) csvFee = '0';
             
-            // カンマを含む可能性のあるフィールドをダブルクオーテーションで囲む
             const claimantNameCsv = `"${data.claimantName || ''}"`;
             const cptCodeCsv = `"${(data.cptCode || []).join(', ')}"`;
 
             const row = [
                 csvDate,
                 data.contractNumber || '',
-                claimantNameCsv, // 変更点
+                claimantNameCsv,
                 data.dateOfBirth || '',
                 cptCodeCsv,
-                String(csvFee).replace(/,/g, '')
+                String(csvFee)
             ];
             csvContent += row.join(',') + "\n";
         });
-        // --- ▲▲▲ ここまで変更 ▲▲▲ ---
         
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement("a");
@@ -723,7 +811,6 @@ function generateInvoiceHTML(records, from, to, total) {
     newWindow.document.close();
 }
 
-// ▼▼▼【ここから追加】検査内容を編集するための関数群 ▼▼▼
 function openServicesEditModal(docId) {
     db.collection('appointments').doc(docId).get().then(doc => {
         if (!doc.exists) {
@@ -731,25 +818,23 @@ function openServicesEditModal(docId) {
             return;
         }
         const data = doc.data();
-        // services配列をカンマ区切りの文字列に変換してテキストエリアに設定
         const currentServices = (data.services || []).join(', ');
         servicesTextarea.value = currentServices;
         
-        editingDocId = docId; // 編集対象のIDをグローバル変数にセット
+        editingDocId = docId;
         editServicesModal.style.display = 'flex';
     });
 }
 
 function closeServicesEditModal() {
     editServicesModal.style.display = 'none';
-    editingDocId = null; // IDをリセット
+    editingDocId = null;
 }
 
 function saveServices() {
     if (!editingDocId) return;
 
     const newServicesString = servicesTextarea.value;
-    // テキストエリアの文字列をカンマで分割し、各項目の前後の空白を削除し、空の項目を除外して配列を作成
     const newServicesArray = newServicesString.split(',')
                                             .map(s => s.trim())
                                             .filter(s => s !== '');
@@ -759,11 +844,10 @@ function saveServices() {
     })
     .then(() => {
         console.log('検査内容を更新しました。');
-        closeServicesEditModal(); // モーダルを閉じる
+        closeServicesEditModal();
     })
     .catch(error => {
         console.error('検査内容の更新エラー:', error);
         alert('検査内容の更新に失敗しました。');
     });
 }
-// ▲▲▲【ここまで追加】▲▲▲

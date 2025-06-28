@@ -225,6 +225,72 @@ button {
     width: 60px;      /* 基本の幅を100pxに設定 */
     min-width: 50px;  /* 画面が狭くなっても100pxよりは小さくならないようにする */
 }
+
+.modal-content.large {
+    width: 90%;
+    max-width: 600px;
+}
+.modal-header-info {
+    text-align: left;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #eee;
+    font-size: 14px;
+    display: flex; /* 横並びにする */
+    justify-content: space-between; /* 均等に配置 */
+    flex-wrap: wrap; /* 折り返し */
+}
+.modal-header-info span {
+    margin-right: 15px;
+}
+
+#feeModalTable {
+    width: 100%;
+    margin-top: 10px;
+    margin-bottom: 20px;
+    border-collapse: collapse;
+}
+#feeModalTable th, #feeModalTable td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    font-size: 14px;
+}
+#feeModalTable input {
+    width: 100%;
+    border: 1px solid #ccc;
+    padding: 6px;
+    box-sizing: border-box; /* paddingが幅に含まれるように */
+    text-align: right;
+}
+#feeModalTable tfoot td {
+    text-align: right;
+    font-weight: bold;
+    font-size: 16px;
+}
+#feeModalTable input.cpt-code-input {
+    text-align: left;
+}
+.modal-actions {
+    margin-top: 20px;
+    text-align: right;
+}
+
+/* 印刷時にボタンなどを非表示にする */
+@media print {
+    body * {
+        visibility: hidden;
+    }
+    #feeModalPrintArea, #feeModalPrintArea * {
+        visibility: visible;
+    }
+    #feeModalPrintArea {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+    }
+}
+
 /* --- ▼▼▼ ここからがスマホ用の追加スタイルです ▼▼▼ --- */
 
 @media (max-width: 768px) {
