@@ -71,10 +71,11 @@ button:active {
     padding: 1em 1em 1em 2em;
     text-align: left;
     font-size: 1.5em;
-    position: relative;
-    width: 100vw;
-    left: -1em;
-    margin-bottom: 1em;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    z-index: 100;
     box-sizing: border-box; /* paddingをwidthに含める */
 }
 
@@ -115,6 +116,7 @@ button:active {
     gap: 2em;
     flex-wrap: wrap; /* 画面が狭い場合に折り返す */
     margin-bottom: 1em; /* 下の余白を少し調整 */
+    margin-top: 5.5em; /* 固定ヘッダー分のマージンを追加 */
 }
 
 .date-filter-area, .search-area {
@@ -419,7 +421,10 @@ button:active {
     #main-app-container h1 {
         font-size: 1.2em; /* スマホでは少し文字を小さく */
         padding: 0.8em 1em; /* パディングも調整 */
-        left: -0.5em;
+    }
+
+    .filter-section {
+        margin-top: 4.5em; /* スマホ用の固定ヘッダーマージン */
     }
 
     #auth-status {
