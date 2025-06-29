@@ -2,6 +2,7 @@ body {
     font-family: sans-serif; 
     margin: 0; /* ページの余白をリセット */
     zoom: 1; /* ← この行を追加して全体を90%に縮小 */
+    overflow-x: hidden; /* 横スクロールバーを防止 */
 }
 
 #login-container, #main-app-container {
@@ -70,8 +71,11 @@ button:active {
     padding: 1em 1em 1em 2em;
     text-align: left;
     font-size: 1.5em;
-    margin: -1em -1em 1em -1em; /* コンテナのpaddingを相殺 */
     position: relative;
+    width: 100vw;
+    left: -1em;
+    margin-bottom: 1em;
+    box-sizing: border-box; /* paddingをwidthに含める */
 }
 
 #auth-status {
@@ -413,9 +417,9 @@ button:active {
     }
 
     #main-app-container h1 {
-        margin: -0.5em -0.5em 1em -0.5em; /* スマホ用のコンテナpaddingに合わせてネガティブマージンを調整 */
         font-size: 1.2em; /* スマホでは少し文字を小さく */
         padding: 0.8em 1em; /* パディングも調整 */
+        left: -0.5em;
     }
 
     #auth-status {
