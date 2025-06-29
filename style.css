@@ -1,7 +1,11 @@
 body { 
     font-family: sans-serif; 
-    margin: 1em; /* スマホも考慮し、余白を少し調整 */
+    margin: 0; /* ページの余白をリセット */
     zoom: 1; /* ← この行を追加して全体を90%に縮小 */
+}
+
+#login-container, #main-app-container {
+    padding: 1em; /* コンテンツの余白をここで設定 */
 }
 
 table { 
@@ -66,7 +70,7 @@ button:active {
     padding: 1em 1em 1em 2em;
     text-align: left;
     font-size: 1.5em;
-    margin: 0 -1em 1em -1em;
+    margin: -1em -1em 1em -1em; /* コンテナのpaddingを相殺 */
     position: relative;
 }
 
@@ -366,8 +370,11 @@ button:active {
 /* --- ▼▼▼ ここからがスマホ用の追加スタイルです ▼▼▼ --- */
 
 @media (max-width: 768px) {
+    #login-container, #main-app-container {
+        padding: 0.5em; /* スマホでは余白をさらに小さく */
+    }
+
     body {
-        margin: 0.5em; /* スマホでは余白をさらに小さく */
         -webkit-text-size-adjust: 100%; /* iPhoneで文字が勝手に大きくなるのを防ぐ */
     }
 
@@ -406,7 +413,7 @@ button:active {
     }
 
     #main-app-container h1 {
-        margin: 0 -0.5em 1em -0.5em; /* スマホ用のbodyマージンに合わせてネガティブマージンを調整 */
+        margin: -0.5em -0.5em 1em -0.5em; /* スマホ用のコンテナpaddingに合わせてネガティブマージンを調整 */
         font-size: 1.2em; /* スマホでは少し文字を小さく */
         padding: 0.8em 1em; /* パディングも調整 */
     }
