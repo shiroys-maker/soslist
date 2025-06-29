@@ -61,6 +61,18 @@ button {
     gap: 10px;
 }
 
+.invoice-area, .date-filter-area, .search-area {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.invoice-area h2 {
+    font-size: 1em; /* labelと同じサイズに */
+    font-weight: normal; /* labelと同じ太さに */
+    margin: 0; /* 不要なマージンを削除 */
+}
+
 /* 検査費の入力欄のスタイル */
     .fee-input {
         width: 100%;
@@ -163,24 +175,6 @@ button {
         width: 80%;
         max-width: 900px; /* PCなどの大画面で広がりすぎないように上限を設定 */
     }
-
-/* アップロードセクションのレイアウト調整 */
-.upload-section {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 2em;
-    flex-wrap: wrap; /* 画面が狭い場合に折り返す */
-}
-
-.upload-area, .invoice-area {
-    border: 1px solid #ddd;
-    padding: 1em;
-    border-radius: 8px;
-    background-color: #f9f9f9;
-    flex: 1; /* スペースを均等に分ける */
-    min-width: 350px; /* 最小幅を指定 */
-}
 
 .invoice-controls {
     display: flex;

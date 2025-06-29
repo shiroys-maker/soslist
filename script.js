@@ -26,9 +26,6 @@ const loginPasswordInput = document.getElementById('loginPassword');
 const loginError = document.getElementById('loginError');
 const userEmailSpan = document.getElementById('userEmail');
 const tableBody = document.querySelector("#appointmentsTable tbody");
-const uploader = document.getElementById('pdfUploader');
-const uploadButton = document.getElementById('uploadButton');
-const uploadStatus = document.getElementById('uploadStatus');
 const dateFilter = document.getElementById('dateFilter');
 // 日時編集モーダル
 const editModal = document.getElementById('editModal');
@@ -110,26 +107,16 @@ logoutButton.addEventListener('click', () => {
     auth.signOut();
 });
 
-uploadButton.addEventListener('click', () => {
-    const files = uploader.files;
-    if (files.length === 0) {
-        uploadStatus.textContent = 'ファイルが選択されていません。';
-        return;
+loginEmailInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+        loginButton.click();
     }
-    for (const file of files) {
-        const fileName = `${new Date().getTime()}_${file.name}`;
-        const storageRef = storage.ref(`uploads/${fileName}`);
-        const task = storageRef.put(file);
-        task.on('state_changed',
-            (snapshot) => uploadStatus.textContent = `${file.name} をアップロード中...`,
-            (error) => console.error(`${file.name} のアップロード失敗:`, error),
-            () => {
-                console.log(`${file.name} のアップロード完了！`);
-                uploadStatus.textContent = 'アップロードが完了しました。';
-            }
-        );
+});
+
+loginPasswordInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+        loginButton.click();
     }
-    uploader.value = '';
 });
 
 dateFilter.addEventListener('change', () => {
