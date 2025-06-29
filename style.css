@@ -404,4 +404,17 @@ button:active {
         width: 80%;
         margin-bottom: 10px;
     }
+
+    #main-app-container h1 {
+        margin: 0 -0.5em 1em -0.5em; /* スマホ用のbodyマージンに合わせてネガティブマージンを調整 */
+        font-size: 1.2em; /* スマホでは少し文字を小さく */
+        padding: 0.8em 1em; /* パディングも調整 */
+    }
+
+    #auth-status {
+        font-size: 0.7rem; /* ログイン情報も少し小さく */
+        gap: 0.5em;
+        right: 5px;
+        bottom: 2px;
+    }
 }
