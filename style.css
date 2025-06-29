@@ -108,8 +108,13 @@ button:hover {
     color: #0056b3;
     font-weight: bold;
 }
-.name-cell:hover, .services-cell:hover {
+.name-cell:hover, .services-cell:hover, .fee-cell:hover {
     text-decoration: underline;
+    cursor: pointer;
+}
+
+.fee-cell:hover {
+    background-color: #f0f8ff;
 }
 
 /* 詳細モーダル内のコンテンツスタイル */
