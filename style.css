@@ -32,7 +32,7 @@ th {
 }
 
 tr.date-boundary td {
-    border-top: 2px solid #333;
+    border-top: 3px double #333;
 }
 
 /* テーブル全体の枠線を太くする */
@@ -284,6 +284,11 @@ button:active {
 .result-item:last-child {
     border-bottom: none;
 }
+
+td.col-show {
+    background-color: #1b0d55;
+}
+
 .col-fee {
     width: 60px;      /* 基本の幅を100pxに設定 */
     min-width: 50px;  /* 画面が狭くなっても100pxよりは小さくならないようにする */
