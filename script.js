@@ -165,6 +165,12 @@ tableBody.addEventListener('click', (e) => {
         openFeeModal(docId);
         return;
     }
+    if (target.classList.contains('age-cell')) {
+        const docRef = db.collection('appointments').doc(docId);
+        const isPink = target.classList.toggle('pink');
+        docRef.update({ isAgePink: isPink });
+        return;
+    }
 });
 
 confirmEditBtn.addEventListener('click', () => {
@@ -276,6 +282,7 @@ function setupRealtimeListener() {
               const displayCptcodeText = (data.cptCode || []).join(', ');
               const age = calculateAge(data.dateOfBirth);
               const displayAge = age ? `${age}` : '不明';
+              const ageCellClass = data.isAgePink ? 'age-cell pink' : 'age-cell';
 
               // ▼▼▼【最終修正】「みなし表示」ロジックを一覧表示に追加 ▼▼▼
               let examinationFee = '';
@@ -302,7 +309,7 @@ function setupRealtimeListener() {
                       <td class="col-show show-toggle-cell">${checkmark}</td>
                       <td class="col-date date-cell">${displayDate}</td>
                       <td class="col-name name-cell">${data.claimantName || ''}</td>
-                      <td class="col-age">${displayAge}</td>
+                      <td class="col-age ${ageCellClass}">${displayAge}</td>
                       <td class="col-contract">${data.contractNumber || ''}</td>
                       <td class="col-phone">${data.japanCellPhone || ''}</td>
                       <td class="col-services services-cell">${displayServicesText}</td>
