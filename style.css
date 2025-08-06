@@ -163,7 +163,7 @@ button:active {
     color: #D81B60;
 }
 
-.name-cell:hover, .services-cell:hover, .fee-cell:hover, .age-cell:hover {
+.name-cell:hover, .services-cell:hover, .fee-cell:hover, .age-cell:hover, .phone-cell:hover {
     text-decoration: underline;
     cursor: pointer;
 }

@@ -52,6 +52,11 @@ const editServicesModal = document.getElementById('editServicesModal');
 const servicesTextarea = document.getElementById('servicesTextarea');
 const confirmServicesEditBtn = document.getElementById('confirmServicesEdit');
 const cancelServicesEditBtn = document.getElementById('cancelServicesEdit');
+// 電話番号編集モーダル用の要素取得
+const editPhoneModal = document.getElementById('editPhoneModal');
+const phoneInput = document.getElementById('phoneInput');
+const confirmPhoneEditBtn = document.getElementById('confirmPhoneEdit');
+const cancelPhoneEditBtn = document.getElementById('cancelPhoneEdit');
 // 検査費モーダル用の要素取得
 const feeModal = document.getElementById('feeModal');
 const feeModalHeader = document.getElementById('feeModalHeader');
@@ -165,6 +170,10 @@ tableBody.addEventListener('click', (e) => {
         openFeeModal(docId);
         return;
     }
+    if (target.classList.contains('phone-cell')) {
+        openPhoneEditModal(docId);
+        return;
+    }
     if (target.classList.contains('age-cell')) {
         const docRef = db.collection('appointments').doc(docId);
         const isPink = target.classList.toggle('pink');
@@ -193,6 +202,8 @@ closeDetailsModalButton.addEventListener('click', closeDetailsModal);
 printInvoiceButton.addEventListener('click', printInvoice);
 confirmServicesEditBtn.addEventListener('click', saveServices);
 cancelServicesEditBtn.addEventListener('click', closeServicesEditModal);
+confirmPhoneEditBtn.addEventListener('click', savePhone);
+cancelPhoneEditBtn.addEventListener('click', closePhoneEditModal);
 searchButton.addEventListener('click', searchAppointments);
 searchInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') { searchAppointments(); } });
 closeSearchResultsButton.addEventListener('click', () => { searchResultsModal.style.display = 'none'; });
@@ -311,7 +322,7 @@ function setupRealtimeListener() {
                       <td class="col-name name-cell">${data.claimantName || ''}</td>
                       <td class="col-age ${ageCellClass}">${displayAge}</td>
                       <td class="col-contract">${data.contractNumber || ''}</td>
-                      <td class="col-phone">${data.japanCellPhone || ''}</td>
+                      <td class="col-phone phone-cell">${data.japanCellPhone || ''}</td>
                       <td class="col-services services-cell">${displayServicesText}</td>
                       <td class="col-actions">
                         <button class="view-pdf-btn">PDF</button>
@@ -823,6 +834,43 @@ function openServicesEditModal(docId) {
 function closeServicesEditModal() {
     editServicesModal.style.display = 'none';
     editingDocId = null;
+}
+
+function openPhoneEditModal(docId) {
+    db.collection('appointments').doc(docId).get().then(doc => {
+        if (!doc.exists) {
+            alert('データが見つかりません');
+            return;
+        }
+        const data = doc.data();
+        phoneInput.value = data.japanCellPhone || '';
+        
+        editingDocId = docId;
+        editPhoneModal.style.display = 'flex';
+    });
+}
+
+function closePhoneEditModal() {
+    editPhoneModal.style.display = 'none';
+    editingDocId = null;
+}
+
+function savePhone() {
+    if (!editingDocId) return;
+
+    const newPhone = phoneInput.value.trim();
+
+    db.collection('appointments').doc(editingDocId).update({
+        japanCellPhone: newPhone
+    })
+    .then(() => {
+        console.log('電話番号を更新しました。');
+        closePhoneEditModal();
+    })
+    .catch(error => {
+        console.error('電話番号の更新エラー:', error);
+        alert('電話番号の更新に失敗しました。');
+    });
 }
 
 function saveServices() {
