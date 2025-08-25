@@ -177,7 +177,6 @@ tableBody.addEventListener('click', (e) => {
     if (target.classList.contains('age-cell')) {
         const docRef = db.collection('appointments').doc(docId);
         const isPink = target.classList.toggle('pink');
-        console.log(`Toggling age color for doc ${docId}. New isPink state: ${isPink}`);
         docRef.update({ isAgePink: isPink });
         return;
     }
@@ -294,7 +293,6 @@ function setupRealtimeListener() {
               const displayCptcodeText = (data.cptCode || []).join(', ');
               const age = calculateAge(data.dateOfBirth);
               const displayAge = age ? `${age}` : '不明';
-              console.log(`Rendering doc ${docId}. isAgePink from DB:`, data.isAgePink);
               const ageCellClass = data.isAgePink ? 'age-cell pink' : 'age-cell';
 
               // ▼▼▼【最終修正】「みなし表示」ロジックを一覧表示に追加 ▼▼▼
