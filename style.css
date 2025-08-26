@@ -400,6 +400,10 @@ td.col-show {
     }
 }
 
+body.modal-open {
+    overflow: hidden;
+}
+
 /* --- ▼▼▼ ここからがスマホ用の追加スタイルです ▼▼▼ --- */
 
 @media (max-width: 768px) {

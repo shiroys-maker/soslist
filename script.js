@@ -217,7 +217,10 @@ confirmPhoneEditBtn.addEventListener('click', savePhone);
 cancelPhoneEditBtn.addEventListener('click', closePhoneEditModal);
 searchButton.addEventListener('click', searchAppointments);
 searchInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') { searchAppointments(); } });
-closeSearchResultsButton.addEventListener('click', () => { searchResultsModal.style.display = 'none'; });
+closeSearchResultsButton.addEventListener('click', () => { 
+    searchResultsModal.style.display = 'none'; 
+    document.body.classList.remove('modal-open');
+});
 searchResultsList.addEventListener('click', (e) => {
     const targetItem = e.target.closest('.result-item');
     if (targetItem) {
@@ -233,6 +236,7 @@ saveAndCloseFeeButton.addEventListener('click', saveFeeData);
 printFeeModalButton.addEventListener('click', () => { window.print(); });
 cancelFeeModalButton.addEventListener('click', () => {
     feeModal.style.display = 'none';
+    document.body.classList.remove('modal-open');
 });
 
 
@@ -394,12 +398,14 @@ function openEditModal(docId) {
     }
     editingDocId = docId;
     editModal.style.display = 'flex';
+    document.body.classList.add('modal-open');
   });
 }
 
 function closeEditModal() {
     editModal.style.display = 'none';
     editingDocId = null;
+    document.body.classList.remove('modal-open');
 }
 
 function searchAppointments() {
@@ -443,6 +449,7 @@ function searchAppointments() {
               });
               searchResultsList.innerHTML = resultsHTML;
               searchResultsModal.style.display = 'flex';
+              document.body.classList.add('modal-open');
           }
       })
       .catch(error => {
@@ -502,12 +509,14 @@ function openDetailsModal(docId) {
     
     detailsModal.dataset.editingId = docId;
     detailsModal.style.display = 'flex';
+    document.body.classList.add('modal-open');
   });
 }
 
 function closeDetailsModal() {
     detailsModal.style.display = 'none';
     detailsModal.dataset.editingId = '';
+    document.body.classList.remove('modal-open');
 }
 
 function saveNotes() {
@@ -582,6 +591,7 @@ function openFeeModal(docId) {
 
         editingDocId = docId;
         feeModal.style.display = 'flex';
+        document.body.classList.add('modal-open');
     });
 }
 
@@ -839,12 +849,14 @@ function openServicesEditModal(docId) {
         
         editingDocId = docId;
         editServicesModal.style.display = 'flex';
+        document.body.classList.add('modal-open');
     });
 }
 
 function closeServicesEditModal() {
     editServicesModal.style.display = 'none';
     editingDocId = null;
+    document.body.classList.remove('modal-open');
 }
 
 function openPhoneEditModal(docId) {
@@ -858,12 +870,14 @@ function openPhoneEditModal(docId) {
         
         editingDocId = docId;
         editPhoneModal.style.display = 'flex';
+        document.body.classList.add('modal-open');
     });
 }
 
 function closePhoneEditModal() {
     editPhoneModal.style.display = 'none';
     editingDocId = null;
+    document.body.classList.remove('modal-open');
 }
 
 function savePhone() {
