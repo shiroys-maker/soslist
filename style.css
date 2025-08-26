@@ -221,7 +221,7 @@ button:active {
 /* メモ入力欄のスタイル */
 #notesTextarea {
     width: 100%;
-    flex-grow: 1; /* 高さを可変にする */
+    height: 300px; /* 初期高さを設定 */
     margin-top: 5px;
     margin-bottom: 15px;
     padding: 8px;
@@ -247,8 +247,11 @@ button:active {
     height: 100%;
     background: rgba(0, 0, 0, 0.5);
     justify-content: center;
-    align-items: center;
+    align-items: flex-start; /* 上寄せに変更 */
     z-index: 1000;
+    overflow-y: auto; /* コンテンツがはみ出たらスクロール */
+    padding: 5vh 0; /* 上下に余白を追加 */
+    box-sizing: border-box; /* paddingをheightに含める */
 }
 .modal-content { /* クラス名を付けてスタイルを管理しやすくします */
     background: #fff;
@@ -262,9 +265,10 @@ button:active {
     #detailsModal .modal-content {
         width: 80%;
         max-width: 1200px; /* PCなどの大画面で広がりすぎないように上限を設定 */
-        height: 95vh; /* 画面の高さの95% */
+        /* height: 95vh; を削除して高さを可変に */
         display: flex;
         flex-direction: column;
+        min-height: 85vh; /* 内容が少なくてもある程度の高さを確保 */
     }
 
 .invoice-controls {
