@@ -1,446 +1,260 @@
-body { 
-    font-family: sans-serif; 
-    margin: 0; /* ページの余白をリセット */
-    zoom: 1; /* ← この行を追加して全体を90%に縮小 */
-    overflow-x: hidden; /* 横スクロールバーを防止 */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #f4f4f4;
+    color: #333;
+    margin: 0;
+    padding: 20px;
 }
 
 #login-container, #main-app-container {
-    padding: 1em; /* コンテンツの余白をここで設定 */
+    max-width: 1200px;
+    margin: auto;
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
-table { 
-    width: 100%; 
-    border-collapse: collapse; 
-}
-
-th, td { 
-    border: 1px solid #ccc; 
-    padding: 1px 5px; 
-    text-align: left; 
-    font-size: 12px; /* 基本の文字サイズを少し調整 */
-    vertical-align: middle; /* 文字の縦方向を中央揃えに */
-}
-
-th { 
-    background-color: #f2f2f2; 
-    color: #850e88;
-}
-
-.upload-section, .filter-section, .data-section { 
-    margin-bottom: 2em; 
-}
-
-tr.date-boundary td {
-    border-top: 3px double #333;
-}
-
-/* テーブル全体の枠線を太くする */
-#appointmentsTable {
-    border: 2px solid #333;
-}
-
-/* 見出し行(th)の下の罫線を太くする */
-#appointmentsTable th {
-    border-bottom: 2px solid #333;
-}
-
-/* ボタンの共通スタイル */
-button {
-    padding: 6px 12px;
-    font-size: 14px;
-    cursor: pointer;
-    border-radius: 4px;
-    border: 1px solid #bbb;
-    background: linear-gradient(to bottom, #f8f8f8, #e8e8e8);
-    text-shadow: 0 1px 0 white;
-}
-
-button:hover {
-    background: linear-gradient(to bottom, #f0f0f0, #e0e0e0);
-}
-
-button:active {
-    background: linear-gradient(to bottom, #e0e0e0, #f0f0f0);
-    border-color: #aaa;
-}
-
-#main-app-container h1 {
-    background: linear-gradient(to right, #3c355e, #933495);
-    color: white;
-    padding: 1em 1em 1em 2em;
-    text-align: left;
-    font-size: 1.5em;
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    z-index: 100;
-    box-sizing: border-box; /* paddingをwidthに含める */
+h1 {
+    color: #0056b3;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
 #auth-status {
-    position: absolute;
-    bottom: 5px;
-    right: 10px;
-    display: flex;
-    align-items: center;
-    gap: 1em;
-    color: white;
-    font-size: 1rem;
+    font-size: 14px;
+    text-align: right;
 }
 
 #auth-status p {
     margin: 0;
+    font-weight: normal;
 }
 
-#auth-status button {
-    background: linear-gradient(to bottom, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.1));
+input[type="text"], input[type="password"], input[type="email"], input[type="date"], select {
+    width: 200px;
+    padding: 8px;
+    margin: 5px 0;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+button {
+    padding: 10px 15px;
+    background-color: #007bff;
     color: white;
-    border: 1px solid rgba(255, 255, 255, 0.7);
-    text-shadow: 0 -1px 0 rgba(0,0,0,0.2);
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
 }
 
-#auth-status button:hover {
-    background: linear-gradient(to bottom, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.2));
+button:hover {
+    background-color: #0056b3;
 }
 
-#auth-status button:active {
-    background: linear-gradient(to bottom, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.4));
+#logoutButton {
+    background-color: #dc3545;
 }
 
-/* フィルターと検索セクションのレイアウト */
+#logoutButton:hover {
+    background-color: #c82333;
+}
+
+.filter-section, .data-section {
+    margin-top: 20px;
+}
+
 .filter-section {
     display: flex;
+    justify-content: space-between;
     align-items: center;
-    gap: 2em;
-    flex-wrap: wrap; /* 画面が狭い場合に折り返す */
-    margin-bottom: 1em; /* 下の余白を少し調整 */
-    margin-top: 5.5em; /* 固定ヘッダー分のマージンを追加 */
+    flex-wrap: wrap;
+    gap: 20px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #eee;
 }
 
-.date-filter-area, .search-area {
+.date-filter-area, .search-area, .invoice-area {
     display: flex;
     align-items: center;
     gap: 10px;
 }
 
-.invoice-area, .date-filter-area, .search-area {
-    display: flex;
-    align-items: center;
-    gap: 10px;
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
 }
 
-.invoice-area h2 {
-    font-size: 1em; /* labelと同じサイズに */
-    font-weight: normal; /* labelと同じ太さに */
-    margin: 0; /* 不要なマージンを削除 */
+th, td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: left;
+    font-size: 14px;
 }
 
-/* 検査費の入力欄のスタイル */
-    .fee-input {
-        width: 100%;
-        padding: 4px;
-        border: 1px solid #ccc;
-        border-radius: 3px;
-        box-sizing: border-box; /* これによりpaddingが幅に含まれる */
-    }
-    .fee-input:focus {
-        border-color: #007bff;
-        outline: none;
-    }
-
-/* ======== 新しいモーダル表示用のスタイル ======== */
-
-/* クリック可能な氏名セルの見た目 */
-.name-cell, .services-cell, .age-cell {
-    cursor: pointer;
-    color: #0056b3;
+th {
+    background-color: #f2f2f2;
     font-weight: bold;
+}
+
+tbody tr:nth-child(odd) {
+    background-color: #f9f9f9;
+}
+
+tbody tr:hover {
+    background-color: #f1f1f1;
+}
+
+.date-boundary {
+    border-top: 2px solid #007bff;
+}
+
+.col-show { width: 3%; }
+.col-date { width: 10%; }
+.col-name { width: 15%; }
+.col-age { width: 4%; }
+.col-contract { width: 10%; }
+.col-phone { width: 10%; }
+.col-services { width: 20%; }
+.col-actions { width: 8%; }
+.col-cpt { width: 10%; }
+.col-fee { width: 10%; text-align: right; }
+
+.name-cell, .phone-cell, .fee-cell {
+    cursor: pointer;
+}
+.name-cell:hover, .phone-cell:hover, .fee-cell:hover {
+    text-decoration: underline;
 }
 
 .age-cell.pink {
-    color: #D81B60;
+    background-color: pink;
 }
 
-.name-cell:hover, .services-cell:hover, .fee-cell:hover, .age-cell:hover, .phone-cell:hover {
-    text-decoration: underline;
-    cursor: pointer;
-}
-
-.fee-cell:hover {
-    background-color: #f0f8ff;
-}
-
-/* 詳細モーダル内のコンテンツスタイル */
-#details-content-container {
-    text-align: left;
-    font-size: 14px;
-    margin-bottom: 15px;
-    max-height: 90vh; /* コンテンツが多すぎる場合にスクロールさせる */
-    overflow-y: auto;
-}
-/* 2列レイアウト用の行スタイル */
-.detail-row {
-    display: flex;
-    justify-content: space-between;
-    padding: 12px 0;
-    border-bottom: 1px solid #eee;
-}
-.detail-row:last-child {
-    border-bottom: none;
-}
-
-/* 2列レイアウトの各アイテムのスタイル */
-.detail-item {
-    flex-basis: 48%; /* 各アイテムが約半分の幅を持つように */
-}
-
-.detail-item strong {
-    display: block;
-    font-weight: bold;
-    color: #555;
-    margin-bottom: 4px;
-    font-size: 0.8em;
-}
-
-/* メモ入力欄のスタイル */
-#notesTextarea {
-    width: 100%;
-    height: 600px;
-    margin-top: 5px;
-    margin-bottom: 15px;
-    padding: 8px;
-    box-sizing: border-box;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    font-size: 14px;
-    resize: vertical;
-}
-
-/* モーダル内のボタンの配置 */
-.modal-actions {
-    text-align: right;
-}
-
-/* モーダルのスタイル */
 .modal {
     display: none;
     position: fixed;
-    top: 0;
+    z-index: 1000;
     left: 0;
+    top: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.5);
+    overflow: auto;
+    background-color: rgba(0,0,0,0.4);
     justify-content: center;
     align-items: center;
-    z-index: 1000;
 }
-.modal-content { /* クラス名を付けてスタイルを管理しやすくします */
-    background: #fff;
+
+.modal-content {
+    background-color: #fefefe;
+    margin: auto;
     padding: 20px;
+    border: 1px solid #888;
+    width: 80%;
+    max-width: 500px;
     border-radius: 8px;
-    text-align: center;
-    width: 400px;
-}
-
- /* 詳細表示モーダル(#detailsModal)のコンテンツ部分のみサイズを調整 */
-    #detailsModal .modal-content {
-        width: 80%;
-        max-width: 900px; /* PCなどの大画面で広がりすぎないように上限を設定 */
-    }
-
-.invoice-controls {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.invoice-controls label {
-    font-weight: bold;
-}
-.invoice-controls input[type="date"] {
-    padding: 5px;
-}
-.invoice-controls button {
-    padding: 5px 15px;
-}
-
-/* 検索結果モーダルのリストスタイル */
-#searchResultsList {
-    margin-top: 15px;
-    max-height: 300px;
-    overflow-y: auto;
-    text-align: left;
-}
-
-.result-item {
-    padding: 12px;
-    border-bottom: 1px solid #eee;
-    cursor: pointer;
-    display: flex;
-    justify-content: space-between;
-}
-
-.result-item:hover {
-    background-color: #f0f8ff;
-}
-
-.result-item:last-child {
-    border-bottom: none;
-}
-
-td.col-show {
-    background-color: #1b0d55;
-}
-
-.col-fee {
-    width: 60px;      /* 基本の幅を100pxに設定 */
-    min-width: 50px;  /* 画面が狭くなっても100pxよりは小さくならないようにする */
 }
 
 .modal-content.large {
-    width: 90%;
-    max-width: 600px;
+    max-width: 800px;
 }
+
 .modal-header-info {
-    text-align: left;
+    display: flex;
+    justify-content: space-between;
     margin-bottom: 15px;
-    padding-bottom: 10px;
-    border-bottom: 1px solid #eee;
     font-size: 14px;
-    display: flex; /* 横並びにする */
-    justify-content: space-between; /* 均等に配置 */
-    flex-wrap: wrap; /* 折り返し */
-}
-.modal-header-info span {
-    margin-right: 15px;
 }
 
 #feeModalTable {
     width: 100%;
-    margin-top: 10px;
-    margin-bottom: 20px;
-    border-collapse: collapse;
+    margin-top: 0;
 }
-#feeModalTable th, #feeModalTable td {
-    border: 1px solid #ddd;
-    padding: 8px;
-    font-size: 14px;
-}
+
 #feeModalTable input {
-    width: 100%;
-    border: 1px solid #ccc;
-    padding: 6px;
-    box-sizing: border-box; /* paddingが幅に含まれるように */
-    text-align: right;
+    width: 95%;
+    padding: 5px;
 }
-#feeModalTable tfoot td {
+
+.modal-actions {
     text-align: right;
-    font-weight: bold;
+    margin-top: 20px;
+}
+
+.result-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px;
+    border-bottom: 1px solid #eee;
+    cursor: pointer;
+}
+
+.result-item:hover {
+    background-color: #f0f0f0;
+}
+
+.detail-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.detail-item {
+    width: 48%;
+}
+
+.detail-item strong {
+    display: block;
+    color: #555;
+    margin-bottom: 5px;
+}
+
+.detail-item span {
     font-size: 16px;
 }
-#feeModalTable input.cpt-code-input {
-    text-align: left;
-}
-.modal-actions {
-    margin-top: 20px;
-    text-align: right;
+
+/* 削除ボタンのスタイル */
+.delete-btn {
+    background-color: transparent;
+    border: none;
+    color: #888; /* 文字色をグレーに */
+    padding: 0;
+    font-size: 12px; /* 文字を小さく */
+    cursor: pointer;
+    text-decoration: none; /* 下線をなくす */
 }
 
-/* 印刷用の設定 */
+.delete-btn:hover {
+    background-color: transparent;
+    color: #333; /* ホバー時に少し濃く */
+    text-decoration: underline; /* ホバー時に下線を表示 */
+}
+
 @media print {
-    /* 予約一覧など、印刷に不要な要素をすべて非表示にする */
-    #login-container,
-    #main-app-container,
-    #editModal,
-    #detailsModal,
-    #searchResultsModal,
-    #editServicesModal {
-        display: none !important;
+    body {
+        background-color: #fff;
+        padding: 0;
+        font-size: 10pt;
     }
-
-    /* 印刷するモーダル内の、不要なボタンエリアを非表示にする */
-    #feeModal .modal-actions {
-        display: none !important;
+    #login-container, #main-app-container > h1, .filter-section, .modal, .col-actions, #appointmentsTable th.col-actions {
+        display: none;
     }
-
-    /* 印刷時にモーダルの位置や見た目をページに合わせて調整する */
-    #feeModal {
-        position: static !important; /* 画面固定を解除 */
-        background: none !important;
-        overflow: visible !important;
+    #main-app-container {
+        box-shadow: none;
+        padding: 0;
+    }
+    table, th, td {
+        border: 1px solid #000;
+        font-size: 9pt;
+        padding: 4px;
+    }
+    #feeModalPrintArea {
         display: block !important;
     }
-
-    #feeModal .modal-content {
-        box-shadow: none !important; /* 影を消す */
-        border: none !important;     /* 枠線を消す */
-        padding: 0 !important;
-        margin: 0 !important;
-        width: 100% !important;
-        max-width: 100% !important;
-    }
-}
-
-/* --- ▼▼▼ ここからがスマホ用の追加スタイルです ▼▼▼ --- */
-
-@media (max-width: 768px) {
-    #login-container, #main-app-container {
-        padding: 0.5em; /* スマホでは余白をさらに小さく */
-    }
-
-    body {
-        -webkit-text-size-adjust: 100%; /* iPhoneで文字が勝手に大きくなるのを防ぐ */
-    }
-
-    /* 「表示する予約の開始日」の入力欄 */
-    .filter-section label, 
-    .filter-section input[type="date"] {
-        font-size: 16px; /* 文字サイズを大きく */
-    }
-    .filter-section input[type="date"] {
-        padding: 8px; /* 入力欄自体も大きく */
-    }
-
-    /* テーブル内のボタン */
-    td button {
-        padding: 10px 15px; /* ボタンを大きくしてタップしやすく */
-        font-size: 16px;
-    }
-
-    /* 編集モーダル（ポップアップ） */
-    .modal-content {
-        width: 90%; /* 画面幅いっぱいに広げる */
-    }
-
-    .modal-content h3 {
-        font-size: 20px;
-    }
-    
-    .modal-content label,
-    .modal-content input[type="date"],
-    .modal-content select,
-    .modal-content button {
-        font-size: 18px; /* モーダル内の文字や部品を大きく */
-        padding: 12px;
-        width: 80%;
-        margin-bottom: 10px;
-    }
-
-    #main-app-container h1 {
-        font-size: 1.2em; /* スマホでは少し文字を小さく */
-        padding: 0.8em 1em; /* パディングも調整 */
-    }
-
-    .filter-section {
-        margin-top: 4.5em; /* スマホ用の固定ヘッダーマージン */
-    }
-
-    #auth-status {
-        font-size: 0.7rem; /* ログイン情報も少し小さく */
-        gap: 0.5em;
-        right: 5px;
-        bottom: 2px;
+    .modal-actions {
+        display: none;
     }
 }

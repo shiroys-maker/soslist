@@ -161,11 +161,6 @@ tableBody.addEventListener('click', (e) => {
     if (target.classList.contains('view-pdf-btn')) {
         handleViewPdf(docId);
     }
-    if (target.classList.contains('delete-btn')) {
-        if (confirm('このデータを本当に削除しますか？')) {
-            db.collection('appointments').doc(docId).delete();
-        }
-    }
     if (target.classList.contains('fee-cell')) {
         openFeeModal(docId);
         return;
@@ -179,6 +174,21 @@ tableBody.addEventListener('click', (e) => {
         const isPink = target.classList.toggle('pink');
         docRef.update({ isAgePink: isPink });
         return;
+    }
+});
+
+tableBody.addEventListener('dblclick', (e) => {
+    const target = e.target;
+    const tr = target.closest('tr');
+    if (!tr) return;
+
+    const docId = tr.dataset.id;
+    if (!docId) return;
+
+    if (target.classList.contains('delete-btn')) {
+        if (confirm('このデータを本当に削除しますか？')) {
+            db.collection('appointments').doc(docId).delete();
+        }
     }
 });
 
