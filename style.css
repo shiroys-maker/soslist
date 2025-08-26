@@ -260,8 +260,8 @@ button:active {
 
  /* 詳細表示モーダル(#detailsModal)のコンテンツ部分のみサイズを調整 */
     #detailsModal .modal-content {
-        width: 95%;
-        max-width: 1400px; /* PCなどの大画面で広がりすぎないように上限を設定 */
+        width: 80%;
+        max-width: 1200px; /* PCなどの大画面で広がりすぎないように上限を設定 */
         height: 95vh; /* 画面の高さの95% */
         display: flex;
         flex-direction: column;
@@ -463,5 +463,19 @@ body.modal-open {
         gap: 0.5em;
         right: 5px;
         bottom: 2px;
+    }
+
+    #notesTextarea {
+        column-count: 1;
+    }
+
+    .detail-row-full .detail-item {
+        flex-basis: 100%;
+    }
+
+    #detailsModal .modal-actions button {
+        padding: 8px 12px;
+        font-size: 14px;
+        width: auto;
     }
 }

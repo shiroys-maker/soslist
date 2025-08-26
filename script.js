@@ -500,7 +500,7 @@ function openDetailsModal(docId) {
                       <div class="detail-item"><strong>氏名</strong><span>${data.claimantName || ''}</span></div>
                       <div class="detail-item"><strong>生年月日(年齢)</strong><span>${data.dateOfBirth || ''} (${displayAge})</span></div>
                     </div>`;
-    detailsHTML += `<div class="detail-row">
+    detailsHTML += `<div class="detail-row detail-row-full">
                       <div class="detail-item"><strong>検査内容</strong><span>${(data.services || []).join(', ')}</span></div>
                     </div>`;
 
