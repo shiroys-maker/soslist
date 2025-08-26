@@ -216,23 +216,6 @@ tbody tr:hover {
     font-size: 16px;
 }
 
-/* 削除ボタンのスタイル */
-.delete-btn {
-    background-color: transparent;
-    border: none;
-    color: #888; /* 文字色をグレーに */
-    padding: 0;
-    font-size: 12px; /* 文字を小さく */
-    cursor: pointer;
-    text-decoration: none; /* 下線をなくす */
-}
-
-.delete-btn:hover {
-    background-color: transparent;
-    color: #333; /* ホバー時に少し濃く */
-    text-decoration: underline; /* ホバー時に下線を表示 */
-}
-
 @media print {
     body {
         background-color: #fff;
@@ -257,4 +240,21 @@ tbody tr:hover {
     .modal-actions {
         display: none;
     }
+}
+
+/* 削除ボタンのスタイル */
+.delete-btn {
+    background-color: transparent;
+    border: none;
+    color: #888; /* 文字色をグレーに */
+    padding: 0;
+    font-size: 12px; /* 文字を小さく */
+    cursor: pointer;
+    text-decoration: none; /* 下線をなくす */
+}
+
+.delete-btn:hover {
+    background-color: transparent;
+    color: #333; /* ホバー時に少し濃く */
+    text-decoration: underline; /* ホバー時に下線を表示 */
 }
