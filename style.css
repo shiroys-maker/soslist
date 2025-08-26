@@ -65,6 +65,20 @@ button:active {
     border-color: #aaa;
 }
 
+/* 削除ボタンのスタイルを上書き */
+.delete-btn {
+    background: none;
+    border: none;
+    color: #ccc;
+    text-shadow: none;
+    padding: 6px; /* 少し小さく */
+}
+
+.delete-btn:hover {
+    background: #f0f0f0;
+    color: #333;
+}
+
 #main-app-container h1 {
     background: linear-gradient(to right, #3c355e, #933495);
     color: white;
