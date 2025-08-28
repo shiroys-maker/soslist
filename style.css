@@ -7,6 +7,7 @@ body {
 
 #login-container, #main-app-container {
     padding: 1em; /* コンテンツの余白をここで設定 */
+    padding-top: 5.5em; /* 固定ヘッダー分の余白 */
 }
 
 table { 
@@ -130,7 +131,6 @@ button:active {
     gap: 2em;
     flex-wrap: wrap; /* 画面が狭い場合に折り返す */
     margin-bottom: 1em; /* 下の余白を少し調整 */
-    margin-top: 5.5em; /* 固定ヘッダー分のマージンを追加 */
 }
 
 .date-filter-area, .search-area {
@@ -413,6 +413,7 @@ body.modal-open {
 @media (max-width: 768px) {
     #login-container, #main-app-container {
         padding: 0.5em; /* スマホでは余白をさらに小さく */
+        padding-top: 4.5em; /* 固定ヘッダー分の余白 */
     }
 
     body {
@@ -459,7 +460,6 @@ body.modal-open {
     }
 
     .filter-section {
-        margin-top: 4.5em; /* スマホ用の固定ヘッダーマージン */
         flex-direction: column; /* 要素を縦並びにする */
         align-items: flex-start; /* 要素を左揃えにする */
         gap: 1em; /* 縦に並んだ要素の間の余白 */
