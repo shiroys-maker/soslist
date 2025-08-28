@@ -460,6 +460,9 @@ body.modal-open {
 
     .filter-section {
         margin-top: 4.5em; /* スマホ用の固定ヘッダーマージン */
+        flex-direction: column; /* 要素を縦並びにする */
+        align-items: flex-start; /* 要素を左揃えにする */
+        gap: 1em; /* 縦に並んだ要素の間の余白 */
     }
 
     #auth-status {
