@@ -1,13 +1,12 @@
 body { 
     font-family: sans-serif; 
     margin: 0; /* ページの余白をリセット */
-    zoom: 1; /* ← この行を追加して全体を90%に縮小 */
     overflow-x: hidden; /* 横スクロールバーを防止 */
 }
 
 #login-container, #main-app-container {
     padding: 1em; /* コンテンツの余白をここで設定 */
-    padding-top: 5.5em; /* 固定ヘッダー分の余白 */
+    padding-top: 6em; /* 固定ヘッダーがコンテンツに重ならないようにするための余白 */
 }
 
 table { 
@@ -413,7 +412,7 @@ body.modal-open {
 @media (max-width: 768px) {
     #login-container, #main-app-container {
         padding: 0.5em; /* スマホでは余白をさらに小さく */
-        padding-top: 4.5em; /* 固定ヘッダー分の余白 */
+        padding-top: 5em; /* 固定ヘッダーがコンテンツに重ならないようにするための余白 */
     }
 
     body {
