@@ -6,7 +6,6 @@ body {
 
 #login-container, #main-app-container {
     padding: 1em; /* コンテンツの余白をここで設定 */
-    padding-top: 6em; /* 固定ヘッダーがコンテンツに重ならないようにするための余白 */
 }
 
 table { 
@@ -121,6 +120,10 @@ button:active {
 
 #auth-status button:active {
     background: linear-gradient(to bottom, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.4));
+}
+
+.header-spacer {
+    height: 5.5em; /* PC表示用のスペーサーの高さ */
 }
 
 /* フィルターと検索セクションのレイアウト */
@@ -412,7 +415,6 @@ body.modal-open {
 @media (max-width: 768px) {
     #login-container, #main-app-container {
         padding: 0.5em; /* スマホでは余白をさらに小さく */
-        padding-top: 5em; /* 固定ヘッダーがコンテンツに重ならないようにするための余白 */
     }
 
     body {
@@ -456,6 +458,10 @@ body.modal-open {
     #main-app-container h1 {
         font-size: 1.2em; /* スマホでは少し文字を小さく */
         padding: 0.8em 1em; /* パディングも調整 */
+    }
+
+    .header-spacer {
+        height: 4.5em; /* スマホ表示用のスペーサーの高さ */
     }
 
     .filter-section {
