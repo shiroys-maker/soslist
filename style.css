@@ -436,23 +436,15 @@ body.modal-open {
 
 /* --- ▼▼▼ ここからがスマホ用の追加スタイルです ▼▼▼ --- */
 
-#toggleFilterButton {
-    display: none; /* PCでは非表示 */
-}
-
 @media (max-width: 768px) {
     #toggleFilterButton {
         display: block; /* スマホで表示 */
-        width: 100%;
-        margin-bottom: 1em;
-        padding: 10px;
-        font-size: 16px;
     }
     .filter-section {
         display: none; /* スマホでは初期状態で非表示 */
         position: static; /* スマホでは固定を解除 */
         padding: 1em 0.5em;
-        margin-top: 0;
+        margin-top: 5.5em; /* ヘッダー分の余白 */
         flex-direction: column;
         align-items: flex-start;
         gap: 1em;
@@ -465,7 +457,6 @@ body.modal-open {
     }
     #login-container, #main-app-container {
         padding: 0.5em; /* スマホでは余白をさらに小さく */
-        padding-top: 5.5em; /* 固定ヘッダー分の余白 */
     }
 
     body {
