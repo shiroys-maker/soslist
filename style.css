@@ -444,6 +444,7 @@ body.modal-open {
     #toggleFilterButton {
         display: block; /* スマホで表示 */
         width: 100%;
+        margin-top: 5.5em; /* ヘッダー分の余白 */
         margin-bottom: 1em;
         padding: 10px;
         font-size: 16px;
@@ -452,6 +453,10 @@ body.modal-open {
         display: none; /* スマホでは初期状態で非表示 */
         position: static; /* スマホでは固定を解除 */
         padding: 1em 0.5em;
+        margin-top: 0;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1em;
     }
     .filter-section.active {
         display: flex; /* 表示状態 */
@@ -504,14 +509,6 @@ body.modal-open {
     #main-app-container h1 {
         font-size: 1.2em; /* スマホでは少し文字を小さく */
         padding: 0.8em 1em; /* パディングも調整 */
-    }
-
-
-    .filter-section {
-        margin-top: 4.5em; /* スマホ用の固定ヘッダーマージン */
-        flex-direction: column; /* 要素を縦並びにする */
-        align-items: flex-start; /* 要素を左揃えにする */
-        gap: 1em; /* 縦に並んだ要素の間の余白 */
     }
 
     #auth-status {
