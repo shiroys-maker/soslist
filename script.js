@@ -138,16 +138,21 @@ toggleFilterButton.addEventListener('click', () => {
 });
 
 // ▼▼▼ 無限スクロールのイベントリスナー（過去方向のみ）▼▼▼
+let scrollTimeout;
 window.addEventListener('scroll', () => {
     if (isLoading) return;
 
-    const { scrollTop } = document.documentElement;
+    // スクロールイベントが多発するのを防ぐ（デバウンス）
+    clearTimeout(scrollTimeout);
+    scrollTimeout = setTimeout(() => {
+        const { scrollTop } = document.documentElement;
 
-    // 上端に達した場合、過去のデータを読み込む
-    if (scrollTop === 0) {
-        console.log("Fetching older data...");
-        fetchAndRenderAppointments('older');
-    }
+        // 上端に達した場合、過去のデータを読み込む
+        if (scrollTop === 0) {
+            console.log("Fetching older data...");
+            fetchAndRenderAppointments('older');
+        }
+    }, 200); // 200ミリ秒待ってから実行
 });
 // ▲▲▲ ここまで ▲▲▲
 
