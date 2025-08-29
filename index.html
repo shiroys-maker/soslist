@@ -33,12 +33,12 @@
             </div>
         </h1>
 
-        <div class="header-spacer"></div>
-
+        <button id="toggleFilterButton">検索・フィルター</button>
         <div class="filter-section">
             <div class="date-filter-area">
                 <label for="dateFilter">表示する予約の開始日：</label>
                 <input type="date" id="dateFilter">
+                <button id="dateGoButton">ジャンプ</button>
             </div>
             <div class="search-area">
                 <label for="searchInput">契約番号で検索：</label>
@@ -129,9 +129,9 @@
         <div class="modal-content">
           <h3>検査内容の編集</h3>
           <label for="servicesTextarea">検査内容 (カンマ区切りで入力):</label>
-          <textarea id="servicesTextarea" rows="5" style="width: 100%; box-sizing: border-box; margin-top: 5px;"></textarea>
+          <textarea id="servicesTextarea" rows="5"></textarea>
           <br><br>
-          <div class="modal-actions" style="text-align: right;">
+          <div class="modal-actions">
             <button id="confirmServicesEdit">更新</button>
             <button id="cancelServicesEdit">キャンセル</button>
           </div>
@@ -142,9 +142,9 @@
         <div class="modal-content">
           <h3>電話番号の編集</h3>
           <label for="phoneInput">電話番号:</label>
-          <input type="tel" id="phoneInput" style="width: 100%; box-sizing: border-box; margin-top: 5px;">
+          <input type="tel" id="phoneInput">
           <br><br>
-          <div class="modal-actions" style="text-align: right;">
+          <div class="modal-actions">
             <button id="confirmPhoneEdit">更新</button>
             <button id="cancelPhoneEdit">キャンセル</button>
           </div>
@@ -169,7 +169,7 @@
                     <tfoot>
                         <tr>
                             <td><strong>合計</strong></td>
-                            <td><input type="text" id="feeModalTotalInput" style="text-align: right; font-weight: bold; font-size: 16px;"></td>
+                            <td><input type="text" id="feeModalTotalInput"></td>
                         </tr>
                     </tfoot>
                 </table>
@@ -188,7 +188,8 @@
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-storage-compat.js"></script>
     
-    <script src="script.js"></script>
+    <script src="script.js" defer></script>
 
+    <div id="loading-indicator">読み込み中...</div>
 </body>
 </html>

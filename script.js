@@ -27,6 +27,9 @@ const loginError = document.getElementById('loginError');
 const userEmailSpan = document.getElementById('userEmail');
 const tableBody = document.querySelector("#appointmentsTable tbody");
 const dateFilter = document.getElementById('dateFilter');
+const dateGoButton = document.getElementById('dateGoButton');
+const toggleFilterButton = document.getElementById('toggleFilterButton');
+const filterSection = document.querySelector('.filter-section');
 // 日時編集モーダル
 const editModal = document.getElementById('editModal');
 const dateSelect = document.getElementById('dateSelect');
@@ -66,12 +69,19 @@ const printFeeModalButton = document.getElementById('printFeeModalButton');
 const calculateFeeButton = document.getElementById('calculateFeeButton'); // 「計算」ボタン
 const saveAndCloseFeeButton = document.getElementById('saveAndCloseFeeButton'); // 「保存して閉じる」ボタン
 const cancelFeeModalButton = document.getElementById('cancelFeeModalButton'); // 「キャンセル」ボタン
+const loadingIndicator = document.getElementById('loading-indicator'); // ローディングインジケーター
 
 
 // --- グローバル変数 ---
 let logoutTimer;
 let editingDocId = null;
-let unsubscribe;
+
+// ▼▼▼ 無限スクロール用のグローバル変数 ▼▼▼
+let isLoading = false;
+let firstVisibleDoc = null;
+let lastVisibleDoc = null;
+const PAGE_SIZE = 10; // 一度に読み込む件数
+// ▲▲▲ ここまで ▲▲▲
 
 // --- ログイン状態の監視 ---
 auth.onAuthStateChanged(user => {
@@ -86,15 +96,12 @@ auth.onAuthStateChanged(user => {
         const day = String(today.getDate()).padStart(2, '0');
         dateFilter.value = `${year}-${month}-${day}`;
 
-        setupRealtimeListener();
+        fetchAndRenderAppointments('initial'); // ★変更点: 初期データ読み込み
         startLogoutTimer();
     } else {
         loginContainer.style.display = 'block';
         mainAppContainer.style.display = 'none';
         clearTimeout(logoutTimer);
-        if (unsubscribe) {
-            unsubscribe();
-        }
     }
 });
 
@@ -124,9 +131,28 @@ loginPasswordInput.addEventListener('keypress', (e) => {
     }
 });
 
-dateFilter.addEventListener('change', () => {
-    setupRealtimeListener();
+dateGoButton.addEventListener('click', () => {
+    fetchAndRenderAppointments('initial');
 });
+
+toggleFilterButton.addEventListener('click', () => {
+    filterSection.classList.toggle('active');
+});
+
+// ▼▼▼ 無限スクロールのイベントリスナー（過去方向のみ）▼▼▼
+window.addEventListener('scroll', () => {
+    if (isLoading) return;
+
+    const { scrollTop } = document.documentElement;
+
+    // 上端に達した場合、過去のデータを読み込む
+    if (scrollTop === 0) {
+        console.log("Fetching older data...");
+        fetchAndRenderAppointments('older');
+    }
+});
+// ▲▲▲ ここまで ▲▲▲
+
 
 tableBody.addEventListener('click', (e) => {
     const target = e.target;
@@ -145,7 +171,10 @@ tableBody.addEventListener('click', (e) => {
         docRef.get().then(doc => {
             if (doc.exists) {
                 const currentIsShown = doc.data().isShown === true;
-                docRef.update({ isShown: !currentIsShown });
+                docRef.update({ isShown: !currentIsShown }).then(() => {
+                    // 表示を即時反映
+                    target.textContent = !currentIsShown ? '✅' : '';
+                });
             }
         });
         return;
@@ -188,7 +217,9 @@ tableBody.addEventListener('dblclick', (e) => {
 
     if (target.classList.contains('delete-btn')) {
         if (confirm('このデータを本当に削除しますか？')) {
-            db.collection('appointments').doc(docId).delete();
+            db.collection('appointments').doc(docId).delete().then(() => {
+                tr.remove(); // 画面から即時削除
+            });
         }
     }
 });
@@ -203,7 +234,10 @@ confirmEditBtn.addEventListener('click', () => {
         appointmentDateTime: newTimestamp
     };
     db.collection('appointments').doc(editingDocId).update(dataToUpdate)
-      .then(() => closeEditModal())
+      .then(() => {
+          closeEditModal();
+          fetchAndRenderAppointments('initial'); // データ再読み込み
+      })
       .catch(error => alert('更新に失敗しました。'));
 });
 
@@ -224,7 +258,7 @@ closeSearchResultsButton.addEventListener('click', () => {
 searchResultsList.addEventListener('click', (e) => {
     const targetItem = e.target.closest('.result-item');
     if (targetItem) {
-        jumpToDate(targetItem.dataset.timestamp);
+        jumpToDate(targetItem.dataset.date);
     }
 });
 const activityEvents = ['mousemove', 'mousedown', 'keypress', 'scroll', 'touchstart'];
@@ -242,15 +276,149 @@ cancelFeeModalButton.addEventListener('click', () => {
 
 // --- 関数定義 ---
 
-/**
- * 金額の文字列や数値から、数字のみを抽出して数値型で返す。
- * @param {string | number} fee - 検査費データ
- * @returns {number | null} - クリーンな数値、または無効な場合はnull
- */
+// ▼▼▼【新規】データ取得＆描画のメイン関数 ▼▼▼
+function fetchAndRenderAppointments(direction) {
+    if (isLoading) return;
+    isLoading = true;
+    loadingIndicator.style.display = 'block'; // ローディング表示
+
+    let query;
+    const baseQuery = db.collection("appointments").orderBy("appointmentDateTime");
+
+    if (direction === 'initial') {
+        tableBody.innerHTML = ''; // テーブルをクリア
+        firstVisibleDoc = null;
+        lastVisibleDoc = null;
+        const localDateStr = dateFilter.value;
+        if (!localDateStr) {
+            isLoading = false;
+            return;
+        }
+        const filterDate = new Date(`${localDateStr}T00:00:00`);
+        query = baseQuery.where("appointmentDateTime", ">=", filterDate); // .limit(PAGE_SIZE) を削除
+    } else if (direction === 'older' && firstVisibleDoc) {
+        query = baseQuery.endBefore(firstVisibleDoc).limitToLast(PAGE_SIZE);
+    } else if (direction === 'newer' && lastVisibleDoc) {
+        query = baseQuery.startAfter(lastVisibleDoc).limit(PAGE_SIZE);
+    } else {
+        isLoading = false;
+        return; // 読み込む方向が不明、または起点がない場合は何もしない
+    }
+
+    query.get().then(querySnapshot => {
+        if (!querySnapshot.empty) {
+            // 新しいドキュメントの最初と最後を記憶
+            if (direction === 'older') {
+                firstVisibleDoc = querySnapshot.docs[0];
+            } else {
+                // initial または newer の場合
+                if (!firstVisibleDoc || direction === 'initial') {
+                    firstVisibleDoc = querySnapshot.docs[0];
+                }
+                lastVisibleDoc = querySnapshot.docs[querySnapshot.docs.length - 1];
+            }
+            
+            const appointments = [];
+            querySnapshot.forEach(doc => {
+                appointments.push({ id: doc.id, ...doc.data() });
+            });
+
+            renderAppointments(appointments, direction);
+        }
+        isLoading = false;
+        loadingIndicator.style.display = 'none'; // ローディング非表示
+    }).catch(error => {
+        console.error("Error getting documents: ", error);
+        isLoading = false;
+        loadingIndicator.style.display = 'none'; // ローディング非表示
+    });
+}
+
+// ▼▼▼【新規】テーブル描画関数 ▼▼▼
+function renderAppointments(appointments, direction) {
+    let tableRowsHTML = "";
+    let previousDateStr = (direction === 'newer' && tableBody.lastElementChild) 
+        ? tableBody.lastElementChild.dataset.dateStr : null;
+
+    appointments.forEach(appointment => {
+        const docId = appointment.id;
+        const data = appointment;
+        let rowClass = '';
+        let currentDateStr = '';
+        if (data.appointmentDateTime) {
+            const dateObj = data.appointmentDateTime.toDate();
+            currentDateStr = `${dateObj.getUTCFullYear()}-${dateObj.getUTCMonth()}-${dateObj.getUTCDate()}`;
+            if (previousDateStr && currentDateStr !== previousDateStr) {
+                rowClass = 'date-boundary';
+            }
+        }
+        const isShown = data.isShown === true;
+        const checkmark = isShown ? '✅' : '';
+        let displayDate = '日付なし';
+        if (data.appointmentDateTime) {
+            const dateObj = data.appointmentDateTime.toDate();
+            const dateOptions = { month: '2-digit', day: '2-digit', weekday: 'short', timeZone: 'UTC' };
+            const timeOptions = { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' };
+            const datePart = new Intl.DateTimeFormat('ja-JP', dateOptions).format(dateObj);
+            const timePart = new Intl.DateTimeFormat('ja-JP', timeOptions).format(dateObj);
+            displayDate = `${datePart}<br>${timePart}`;
+        }
+        const displayServicesText = (data.services || []).join(', ').toLowerCase().includes("audiologist") ? "Audiology" : (data.services || []).join(', ');
+        const displayCptcodeText = (data.cptCode || []).join(', ');
+        const age = calculateAge(data.dateOfBirth);
+        const displayAge = age ? `${age}` : '不明';
+        const ageCellClass = data.isAgePink ? 'age-cell pink' : 'age-cell';
+
+        let examinationFee = '';
+        const feeNumber = parseFee(data.examinationFee);
+
+        if (feeNumber !== null) {
+            examinationFee = feeNumber.toLocaleString();
+        } else {
+            const services = data.services || [];
+            const isAudiologyOnly = services.length === 1 && services[0].toLowerCase() === 'audiology';
+            const cptCodeString = (data.cptCode || []).join(',').replace(/\s/g, '');
+            const isSpecificCpt = cptCodeString === "92557,92550,VA0004";
+
+            if (isAudiologyOnly || isSpecificCpt) {
+                examinationFee = (207000).toLocaleString();
+            }
+        }
+
+        tableRowsHTML += `
+            <tr data-id="${docId}" data-date-str="${currentDateStr}" class="${rowClass}">
+                <td class="col-show show-toggle-cell">${checkmark}</td>
+                <td class="col-date date-cell">${displayDate}</td>
+                <td class="col-name name-cell">${data.claimantName || ''}</td>
+                <td class="col-age ${ageCellClass}">${displayAge}</td>
+                <td class="col-contract">${data.contractNumber || ''}</td>
+                <td class="col-phone phone-cell">${data.japanCellPhone || ''}</td>
+                <td class="col-services services-cell">${displayServicesText}</td>
+                <td class="col-actions">
+                  <button class="view-pdf-btn">PDF</button>
+                  <button class="delete-btn">削除</button>
+                </td>
+                <td class="col-cpt">${displayCptcodeText}</td>
+                <td class="col-fee fee-cell">${examinationFee}</td>
+            </tr>`;
+        previousDateStr = currentDateStr;
+    });
+
+    if (direction === 'older') {
+        const oldScrollHeight = document.documentElement.scrollHeight;
+        tableBody.insertAdjacentHTML('afterbegin', tableRowsHTML);
+        const newScrollHeight = document.documentElement.scrollHeight;
+        window.scrollTo(0, newScrollHeight - oldScrollHeight);
+    } else {
+        tableBody.insertAdjacentHTML('beforeend', tableRowsHTML);
+    }
+}
+
+
 function parseFee(fee) {
     if (fee === null || fee === undefined) return null;
     const feeString = String(fee);
-    const cleanedFee = feeString.replace(/[^0-9]/g, ''); // 数字以外の文字をすべて削除
+    const cleanedFee = feeString.replace(/[^0-9]/g, '');
     if (cleanedFee === '') return null;
     const feeNumber = parseInt(cleanedFee, 10);
     return isNaN(feeNumber) ? null : feeNumber;
@@ -258,100 +426,6 @@ function parseFee(fee) {
 
 function resetLogoutTimer() {
     startLogoutTimer();
-}
-
-function setupRealtimeListener() {
-    if (unsubscribe) {
-        unsubscribe();
-    }
-    const localDateStr = dateFilter.value;
-    if (!localDateStr) return;
-    const filterDate = new Date(`${localDateStr}T00:00:00`);
-    unsubscribe = db.collection("appointments")
-      .where("appointmentDateTime", ">=", filterDate)
-      .onSnapshot(querySnapshot => {
-          const appointments = [];
-          querySnapshot.forEach(doc => {
-              appointments.push({ id: doc.id, ...doc.data() });
-          });
-          appointments.sort((a, b) => {
-              const timeA = a.appointmentDateTime ? a.appointmentDateTime.toMillis() : 0;
-              const timeB = b.appointmentDateTime ? b.appointmentDateTime.toMillis() : 0;
-              return timeA - timeB;
-          });
-          let tableRowsHTML = "";
-          let previousDateStr = null;
-          appointments.forEach(appointment => {
-              const docId = appointment.id;
-              const data = appointment;
-              let rowClass = '';
-              let currentDateStr = '';
-              if (data.appointmentDateTime) {
-                  const dateObj = data.appointmentDateTime.toDate();
-                  currentDateStr = `${dateObj.getUTCFullYear()}-${dateObj.getUTCMonth()}-${dateObj.getUTCDate()}`;
-                  if (previousDateStr && currentDateStr !== previousDateStr) {
-                      rowClass = 'date-boundary';
-                  }
-              }
-              const isShown = data.isShown === true;
-              const checkmark = isShown ? '✅' : '';
-              let displayDate = '日付なし';
-              if (data.appointmentDateTime) {
-                  const dateObj = data.appointmentDateTime.toDate();
-                  const dateOptions = { month: '2-digit', day: '2-digit', weekday: 'short', timeZone: 'UTC' };
-                  const timeOptions = { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' };
-                  const datePart = new Intl.DateTimeFormat('ja-JP', dateOptions).format(dateObj);
-                  const timePart = new Intl.DateTimeFormat('ja-JP', timeOptions).format(dateObj);
-                  displayDate = `${datePart}<br>${timePart}`;
-              }
-              const displayServicesText = (data.services || []).join(', ').toLowerCase().includes("audiologist") ? "Audiology" : (data.services || []).join(', ');
-              const displayCptcodeText = (data.cptCode || []).join(', ');
-              const age = calculateAge(data.dateOfBirth);
-              const displayAge = age ? `${age}` : '不明';
-              const ageCellClass = data.isAgePink ? 'age-cell pink' : 'age-cell';
-
-              // ▼▼▼【最終修正】「みなし表示」ロジックを一覧表示に追加 ▼▼▼
-              let examinationFee = '';
-              const feeNumber = parseFee(data.examinationFee);
-
-              if (feeNumber !== null) {
-                  // 1. 保存された値があれば最優先で表示
-                  examinationFee = feeNumber.toLocaleString();
-              } else {
-                  // 2. 保存された値がなければ、条件に応じて「みなし」で表示
-                  const services = data.services || [];
-                  const isAudiologyOnly = services.length === 1 && services[0].toLowerCase() === 'audiology';
-                  const cptCodeString = (data.cptCode || []).join(',').replace(/\s/g, '');
-                  const isSpecificCpt = cptCodeString === "92557,92550,VA0004";
-
-                  if (isAudiologyOnly || isSpecificCpt) {
-                      examinationFee = (207000).toLocaleString();
-                  }
-              }
-              // ▲▲▲【最終修正完了】▲▲▲
-
-              tableRowsHTML += `
-                  <tr data-id="${docId}" class="${rowClass}">
-                      <td class="col-show show-toggle-cell">${checkmark}</td>
-                      <td class="col-date date-cell">${displayDate}</td>
-                      <td class="col-name name-cell">${data.claimantName || ''}</td>
-                      <td class="col-age ${ageCellClass}">${displayAge}</td>
-                      <td class="col-contract">${data.contractNumber || ''}</td>
-                      <td class="col-phone phone-cell">${data.japanCellPhone || ''}</td>
-                      <td class="col-services services-cell">${displayServicesText}</td>
-                      <td class="col-actions">
-                        <button class="view-pdf-btn">PDF</button>
-                        <button class="delete-btn">削除</button>
-                      </td>
-                      <td class="col-cpt">${displayCptcodeText}</td>
-                      <td class="col-fee fee-cell">${examinationFee}</td>
-                  </tr>`;
-              previousDateStr = currentDateStr;
-          });
-          tableBody.innerHTML = tableRowsHTML;
-      }, error => {
-          console.error("Firestoreのリアルタイム監視でエラー:", error);
-      });
 }
 
 function startLogoutTimer() {
@@ -432,7 +506,7 @@ function searchAppointments() {
 
           if (querySnapshot.size === 1) {
               const doc = querySnapshot.docs[0];
-              jumpToDate(doc.data().appointmentDateTime);
+              jumpToDate(doc.data().appointmentDateTime.toDate());
               alert(`「${searchTerm}」で始まる契約番号の予約日にジャンプしました。`);
           }
           else {
@@ -458,19 +532,20 @@ function searchAppointments() {
       });
 }
 
-function jumpToDate(timestamp) {
-    if (!timestamp) {
+function jumpToDate(date) {
+    if (!date) {
         alert('該当の予約には日付が設定されていません。');
         return;
     }
-    const dateObj = timestamp.toDate();
+    const dateObj = new Date(date);
     const year = dateObj.getUTCFullYear();
     const month = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
     const day = String(dateObj.getUTCDate()).padStart(2, '0');
     const targetDate = `${year}-${month}-${day}`;
     
     dateFilter.value = targetDate;
-    dateFilter.dispatchEvent(new Event('change'));
+    fetchAndRenderAppointments('initial'); // ★変更点
+    closeSearchResultsButton.click();
 }
 
 function openDetailsModal(docId) {
@@ -637,6 +712,7 @@ function saveFeeData() {
       .then(() => {
           console.log('検査費を更新しました。');
           feeModal.style.display = 'none';
+          fetchAndRenderAppointments('initial'); // データ再読み込み
       })
       .catch(error => {
           console.error('検査費の更新エラー:', error);
@@ -891,6 +967,7 @@ function savePhone() {
     .then(() => {
         console.log('電話番号を更新しました。');
         closePhoneEditModal();
+        fetchAndRenderAppointments('initial'); // データ再読み込み
     })
     .catch(error => {
         console.error('電話番号の更新エラー:', error);
@@ -912,6 +989,7 @@ function saveServices() {
     .then(() => {
         console.log('検査内容を更新しました。');
         closeServicesEditModal();
+        fetchAndRenderAppointments('initial'); // データ再読み込み
     })
     .catch(error => {
         console.error('検査内容の更新エラー:', error);
