@@ -444,7 +444,6 @@ body.modal-open {
     #toggleFilterButton {
         display: block; /* スマホで表示 */
         width: 100%;
-        margin-top: 5.5em; /* ヘッダー分の余白 */
         margin-bottom: 1em;
         padding: 10px;
         font-size: 16px;
@@ -466,6 +465,7 @@ body.modal-open {
     }
     #login-container, #main-app-container {
         padding: 0.5em; /* スマホでは余白をさらに小さく */
+        padding-top: 5.5em; /* 固定ヘッダー分の余白 */
     }
 
     body {
