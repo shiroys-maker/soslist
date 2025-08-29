@@ -24,7 +24,6 @@ const logoutButton = document.getElementById('logoutButton');
 const loginEmailInput = document.getElementById('loginEmail');
 const loginPasswordInput = document.getElementById('loginPassword');
 const loginError = document.getElementById('loginError');
-const userEmailSpan = document.getElementById('userEmail');
 const tableBody = document.querySelector("#appointmentsTable tbody");
 const dateFilter = document.getElementById('dateFilter');
 const dateGoButton = document.getElementById('dateGoButton');
@@ -88,7 +87,6 @@ auth.onAuthStateChanged(user => {
     if (user) {
         loginContainer.style.display = 'none';
         mainAppContainer.style.display = 'block';
-        userEmailSpan.textContent = user.email;
 
         const today = new Date();
         const year = today.getFullYear();
