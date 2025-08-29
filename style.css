@@ -31,7 +31,7 @@ th {
 }
 
 .data-section {
-    margin-top: 10em; /* header + filter height */
+    margin-top: 10.5em; /* header + filter height */
 }
 
 tr.date-boundary td {
@@ -436,7 +436,14 @@ body.modal-open {
 
 /* --- ▼▼▼ ここからがスマホ用の追加スタイルです ▼▼▼ --- */
 
+#toggleFilterButton {
+    display: none; /* PCでは非表示 */
+}
+
 @media (max-width: 768px) {
+    #main-app-container {
+        padding-top: 5.5em;
+    }
     #toggleFilterButton {
         display: block; /* スマホで表示 */
     }
@@ -444,7 +451,7 @@ body.modal-open {
         display: none; /* スマホでは初期状態で非表示 */
         position: static; /* スマホでは固定を解除 */
         padding: 1em 0.5em;
-        margin-top: 5.5em; /* ヘッダー分の余白 */
+        margin-top: 1em;
         flex-direction: column;
         align-items: flex-start;
         gap: 1em;
@@ -455,7 +462,7 @@ body.modal-open {
     .data-section {
         margin-top: 1em;
     }
-    #login-container, #main-app-container {
+    #login-container {
         padding: 0.5em; /* スマホでは余白をさらに小さく */
     }
 
