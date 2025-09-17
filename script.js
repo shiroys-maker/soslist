@@ -81,12 +81,40 @@ auth.onAuthStateChanged(user => {
         userEmailSpan.textContent = user.email;
 
         const today = new Date();
-        const year = today.getFullYear();
-        const month = String(today.getMonth() + 1).padStart(2, '0');
-        const day = String(today.getDate()).padStart(2, '0');
-        dateFilter.value = `${year}-${month}-${day}`;
+        const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
-        setupRealtimeListener();
+        db.collection("appointments")
+            .where("appointmentDateTime", "<", startOfToday)
+            .orderBy("appointmentDateTime", "desc")
+            .limit(1)
+            .get()
+            .then(querySnapshot => {
+                if (!querySnapshot.empty) {
+                    const lastAppointment = querySnapshot.docs[0].data();
+                    const dateObj = lastAppointment.appointmentDateTime.toDate();
+                    const year = dateObj.getUTCFullYear();
+                    const month = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
+                    const day = String(dateObj.getUTCDate()).padStart(2, '0');
+                    dateFilter.value = `${year}-${month}-${day}`;
+                } else {
+                    // No past appointments, use today's date
+                    const year = today.getFullYear();
+                    const month = String(today.getMonth() + 1).padStart(2, '0');
+                    const day = String(today.getDate()).padStart(2, '0');
+                    dateFilter.value = `${year}-${month}-${day}`;
+                }
+                setupRealtimeListener();
+            })
+            .catch(error => {
+                console.error("Error getting last appointment: ", error);
+                // On error, fallback to today's date
+                const year = today.getFullYear();
+                const month = String(today.getMonth() + 1).padStart(2, '0');
+                const day = String(today.getDate()).padStart(2, '0');
+                dateFilter.value = `${year}-${month}-${day}`;
+                setupRealtimeListener();
+            });
+
         startLogoutTimer();
     } else {
         loginContainer.style.display = 'block';
