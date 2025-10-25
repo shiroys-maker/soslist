@@ -682,8 +682,9 @@ function printInvoice() {
         return;
     }
 
-    const fromDate = new Date(`${fromDateStr}T00:00:00`);
-    const toDate = new Date(`${toDateStr}T23:59:59`);
+    // JST（日本時間）を明示的に指定してDateオブジェクトを作成
+    const fromDate = new Date(`${fromDateStr}T00:00:00+09:00`);
+    const toDate = new Date(`${toDateStr}T23:59:59+09:00`);
 
     db.collection("appointments")
       .where("isShown", "==", true)
@@ -705,8 +706,8 @@ function printInvoice() {
               const data = doc.data();
               const services = data.services || [];
               
-              // 1. Audiologyのみの予約を抽出
-              const isAudiologyOnly = services.length === 1 && services[0].toLowerCase() === 'audiology';
+              // 1. Audiologyのみの予約を抽出（trim()を追加して空白を除去）
+              const isAudiologyOnly = services.length === 1 && services[0].trim().toLowerCase() === 'audiology';
               if (isAudiologyOnly) {
                   audiologyRecords.push({
                       contractNumber: data.contractNumber || '',
@@ -730,7 +731,7 @@ function printInvoice() {
                       };
                   }
                   dailyRecords[jstDateString].appointments.push(data);
-                  if (services.some(s => s.toLowerCase() !== 'audiology')) {
+                  if (services.some(s => s.trim().toLowerCase() !== 'audiology')) {
                       dailyRecords[jstDateString].hasNonAudiology = true;
                   }
               }
