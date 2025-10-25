@@ -57,15 +57,6 @@ const editPhoneModal = document.getElementById('editPhoneModal');
 const phoneInput = document.getElementById('phoneInput');
 const confirmPhoneEditBtn = document.getElementById('confirmPhoneEdit');
 const cancelPhoneEditBtn = document.getElementById('cancelPhoneEdit');
-// 検査費モーダル用の要素取得
-const feeModal = document.getElementById('feeModal');
-const feeModalHeader = document.getElementById('feeModalHeader');
-const feeModalTableBody = document.querySelector("#feeModalTable tbody");
-const feeModalTotalInput = document.getElementById('feeModalTotalInput'); // 合計入力ボックス
-const printFeeModalButton = document.getElementById('printFeeModalButton');
-const calculateFeeButton = document.getElementById('calculateFeeButton'); // 「計算」ボタン
-const saveAndCloseFeeButton = document.getElementById('saveAndCloseFeeButton'); // 「保存して閉じる」ボタン
-const cancelFeeModalButton = document.getElementById('cancelFeeModalButton'); // 「キャンセル」ボタン
 
 
 // --- グローバル変数 ---
@@ -189,10 +180,6 @@ tableBody.addEventListener('click', (e) => {
     if (target.classList.contains('view-pdf-btn')) {
         handleViewPdf(docId);
     }
-    if (target.classList.contains('fee-cell')) {
-        openFeeModal(docId);
-        return;
-    }
     if (target.classList.contains('phone-cell')) {
         openPhoneEditModal(docId);
         return;
@@ -258,14 +245,6 @@ searchResultsList.addEventListener('click', (e) => {
 const activityEvents = ['mousemove', 'mousedown', 'keypress', 'scroll', 'touchstart'];
 activityEvents.forEach(eventName => { window.addEventListener(eventName, resetLogoutTimer, true); });
 
-// 検査費モーダルのイベントリスナー
-calculateFeeButton.addEventListener('click', calculateFeeTotal);
-saveAndCloseFeeButton.addEventListener('click', saveFeeData);
-printFeeModalButton.addEventListener('click', () => { window.print(); });
-cancelFeeModalButton.addEventListener('click', () => {
-    feeModal.style.display = 'none';
-    document.body.classList.remove('modal-open');
-});
 
 
 // --- 関数定義 ---
@@ -342,30 +321,9 @@ function setupRealtimeListener() {
                   displayDate = `${datePart}<br>${timePart}`;
               }
               const displayServicesText = (data.services || []).join(', ').toLowerCase().includes("audiologist") ? "Audiology" : (data.services || []).join(', ');
-              const displayCptcodeText = (data.cptCode || []).join(', ');
               const age = calculateAge(data.dateOfBirth);
               const displayAge = age ? `${age}` : '不明';
               const ageCellClass = data.isAgePink ? 'age-cell pink' : 'age-cell';
-
-              // ▼▼▼【最終修正】「みなし表示」ロジックを一覧表示に追加 ▼▼▼
-              let examinationFee = '';
-              const feeNumber = parseFee(data.examinationFee);
-
-              if (feeNumber !== null) {
-                  // 1. 保存された値があれば最優先で表示
-                  examinationFee = feeNumber.toLocaleString();
-              } else {
-                  // 2. 保存された値がなければ、条件に応じて「みなし」で表示
-                  const services = data.services || [];
-                  const isAudiologyOnly = services.length === 1 && services[0].toLowerCase() === 'audiology';
-                  const cptCodeString = (data.cptCode || []).join(',').replace(/\s/g, '');
-                  const isSpecificCpt = cptCodeString === "92557,92550,VA0004";
-
-                  if (isAudiologyOnly || isSpecificCpt) {
-                      examinationFee = (207000).toLocaleString();
-                  }
-              }
-              // ▲▲▲【最終修正完了】▲▲▲
 
               tableRowsHTML += `
                   <tr data-id="${docId}" class="${rowClass}">
@@ -380,8 +338,6 @@ function setupRealtimeListener() {
                         <button class="view-pdf-btn">PDF</button>
                         <button class="delete-btn">削除</button>
                       </td>
-                      <td class="col-cpt">${displayCptcodeText}</td>
-                      <td class="col-fee fee-cell">${examinationFee}</td>
                   </tr>`;
               previousDateStr = currentDateStr;
           });
@@ -585,102 +541,6 @@ function calculateAge(dobString) {
     return age;
 }
 
-// 検査費モーダル関連の関数
-function openFeeModal(docId) {
-    const docRef = db.collection('appointments').doc(docId);
-    docRef.get().then(doc => {
-        if (!doc.exists) return;
-        const data = doc.data();
-
-        feeModalHeader.innerHTML = `
-            <span><strong>予約日:</strong> ${data.appointmentDate ? new Date(data.appointmentDate).toLocaleDateString('ja-JP') : ''}</span>
-            <span><strong>契約番号:</strong> ${data.contractNumber || ''}</span>
-            <span><strong>氏名:</strong> ${data.claimantName || ''}</span>
-        `;
-
-        const cptCodes = data.cptCode || [];
-        const feeBreakdown = Array.isArray(data.feeBreakdown) ? data.feeBreakdown : [];
-        let tableRows = '';
-        for (let i = 0; i < 10; i++) {
-            tableRows += `
-                <tr>
-                    <td><input type="text" class="cpt-code-input" value="${cptCodes[i] || ''}"></td>
-                    <td><input type="number" class="fee-breakdown-input" value="${feeBreakdown[i] || ''}"></td>
-                </tr>
-            `;
-        }
-        feeModalTableBody.innerHTML = tableRows;
-
-        let defaultTotal = '';
-        const feeNumber = parseFee(data.examinationFee);
-        if (feeNumber !== null) {
-            defaultTotal = feeNumber;
-        } else {
-            const services = data.services || [];
-            const isAudiologyOnly = services.length === 1 && services[0].toLowerCase() === 'audiology';
-            const cptCodeString = (data.cptCode || []).join(',').replace(/\s/g, '');
-            const isSpecificCpt = cptCodeString === "92557,92550,VA0004";
-
-            if (isAudiologyOnly || isSpecificCpt) {
-                defaultTotal = 207000;
-            }
-        }
-        feeModalTotalInput.value = defaultTotal;
-
-        editingDocId = docId;
-        feeModal.style.display = 'flex';
-        document.body.classList.add('modal-open');
-    });
-}
-
-function calculateFeeTotal() {
-    const feeInputs = feeModalTableBody.querySelectorAll('.fee-breakdown-input');
-    let total = 0;
-    feeInputs.forEach(input => {
-        const value = parseInt(input.value, 10);
-        if (!isNaN(value)) {
-            total += value;
-        }
-    });
-    feeModalTotalInput.value = total;
-}
-
-function saveFeeData() {
-    if (!editingDocId) return;
-
-    const cptInputs = feeModalTableBody.querySelectorAll('.cpt-code-input');
-    const feeInputs = feeModalTableBody.querySelectorAll('.fee-breakdown-input');
-    
-    const newCptCodes = [];
-    const newFeeBreakdown = [];
-
-    for(let i = 0; i < cptInputs.length; i++) {
-        const cpt = cptInputs[i].value.trim();
-        const fee = feeInputs[i].value.trim();
-        if (cpt || fee) {
-            newCptCodes.push(cpt);
-            newFeeBreakdown.push(parseInt(fee, 10) || 0);
-        }
-    }
-    
-    const totalFee = parseFee(feeModalTotalInput.value) || 0;
-
-    const dataToUpdate = {
-        cptCode: newCptCodes,
-        feeBreakdown: newFeeBreakdown,
-        examinationFee: totalFee
-    };
-
-    db.collection('appointments').doc(editingDocId).update(dataToUpdate)
-      .then(() => {
-          console.log('検査費を更新しました。');
-          feeModal.style.display = 'none';
-      })
-      .catch(error => {
-          console.error('検査費の更新エラー:', error);
-          alert('更新に失敗しました。');
-      });
-}
 
 function printInvoice() {
     const fromDateStr = invoiceFromDate.value;
