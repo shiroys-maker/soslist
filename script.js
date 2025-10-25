@@ -326,8 +326,8 @@ function setupRealtimeListener() {
               let displayDate = '日付なし';
               if (data.appointmentDateTime) {
                   const dateObj = data.appointmentDateTime.toDate();
-                  const dateOptions = { month: '2-digit', day: '2-digit', weekday: 'short', timeZone: 'UTC' };
-                  const timeOptions = { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' };
+                  const dateOptions = { month: '2-digit', day: '2-digit', weekday: 'short', timeZone: 'Asia/Tokyo' };
+                  const timeOptions = { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Tokyo' };
                   const datePart = new Intl.DateTimeFormat('ja-JP', dateOptions).format(dateObj);
                   const timePart = new Intl.DateTimeFormat('ja-JP', timeOptions).format(dateObj);
                   displayDate = `${datePart}<br>${timePart}`;
@@ -416,11 +416,12 @@ function openEditModal(docId) {
     const data = doc.data();
     if (data.appointmentDateTime) {
       const dateObj = data.appointmentDateTime.toDate();
-      const year = dateObj.getUTCFullYear();
-      const month = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
-      const day = String(dateObj.getUTCDate()).padStart(2, '0');
-      const hours = String(dateObj.getUTCHours()).padStart(2, '0');
-      const minutes = String(dateObj.getUTCMinutes()).padStart(2, '0');
+      // JSTで年月日時分を取得するためのフォーマッタ
+      const year = new Intl.DateTimeFormat('en', { year: 'numeric', timeZone: 'Asia/Tokyo' }).format(dateObj);
+      const month = new Intl.DateTimeFormat('en', { month: '2-digit', timeZone: 'Asia/Tokyo' }).format(dateObj);
+      const day = new Intl.DateTimeFormat('en', { day: '2-digit', timeZone: 'Asia/Tokyo' }).format(dateObj);
+      const hours = new Intl.DateTimeFormat('en', { hour: '2-digit', hour12: false, timeZone: 'Asia/Tokyo' }).format(dateObj);
+      const minutes = new Intl.DateTimeFormat('en', { minute: '2-digit', timeZone: 'Asia/Tokyo' }).format(dateObj);
       dateSelect.value = `${year}-${month}-${day}`;
       timeSelect.value = `${hours}:${minutes}`;
     }
@@ -510,8 +511,8 @@ function openDetailsModal(docId) {
     const data = doc.data();
 
     let detailsHTML = '';
-    const dateOptions = { month: '2-digit', day: '2-digit', weekday: 'short', timeZone: 'UTC' };
-    const timeOptions = { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' };
+    const dateOptions = { month: '2-digit', day: '2-digit', weekday: 'short', timeZone: 'Asia/Tokyo' };
+    const timeOptions = { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Tokyo' };
     const displayDate = data.appointmentDateTime
         ? new Intl.DateTimeFormat('ja-JP', dateOptions).format(data.appointmentDateTime.toDate()) + ' ' +
           new Intl.DateTimeFormat('ja-JP', timeOptions).format(data.appointmentDateTime.toDate())
@@ -691,34 +692,85 @@ function printInvoice() {
       .orderBy("appointmentDateTime", "asc")
       .get()
       .then(querySnapshot => {
-          let records = [];
-          let totalFee = 0;
-
-          querySnapshot.forEach(doc => {
-              const data = doc.data();
-              records.push(data);
-
-              let feeForSum = 0;
-              const feeNumber = parseFee(data.examinationFee);
-
-              if (feeNumber !== null) {
-                  feeForSum = feeNumber;
-              } else {
-                  const cptCodeString = (data.cptCode || []).join(', ').replace(/\s/g, '');
-                  if (cptCodeString === "92557,92550,VA0004") {
-                      feeForSum = 220000;
-                  }
-              }
-              totalFee += feeForSum;
-          });
-
-          if (records.length === 0) {
+          if (querySnapshot.empty) {
               alert('選択された期間に、SHOWがチェックされたレコードはありませんでした。');
               return;
           }
-          
-          generateInvoiceHTML(records, fromDateStr, toDateStr, totalFee);
 
+          // --- データの処理と仕分け ---
+          const audiologyRecords = [];
+          const dailyRecords = {}; // 日付ごとの予約をまとめるオブジェクト
+
+          querySnapshot.forEach(doc => {
+              const data = doc.data();
+              const services = data.services || [];
+              
+              // 1. Audiologyのみの予約を抽出
+              const isAudiologyOnly = services.length === 1 && services[0].toLowerCase() === 'audiology';
+              if (isAudiologyOnly) {
+                  audiologyRecords.push({
+                      contractNumber: data.contractNumber || '',
+                      fee: 209000
+                  });
+              }
+
+              // 2. Day Rate計算のために日付ごとにデータをグループ化
+              if (data.appointmentDateTime) {
+                  const dateObj = data.appointmentDateTime.toDate();
+                  // JSTの日付文字列 'YYYY-MM-DD' をキーにする
+                  const jstDateFormatter = new Intl.DateTimeFormat('ja-JP', {
+                      year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'Asia/Tokyo'
+                  });
+                  const jstDateString = jstDateFormatter.format(dateObj).replace(/\//g, '-');
+
+                  if (!dailyRecords[jstDateString]) {
+                      dailyRecords[jstDateString] = {
+                          hasNonAudiology: false,
+                          appointments: []
+                      };
+                  }
+                  dailyRecords[jstDateString].appointments.push(data);
+                  if (services.some(s => s.toLowerCase() !== 'audiology')) {
+                      dailyRecords[jstDateString].hasNonAudiology = true;
+                  }
+              }
+          });
+
+          // --- Day Rateリストの作成 ---
+          const dayRateList = Object.keys(dailyRecords).map(date => {
+              const dayData = dailyRecords[date];
+              if (!dayData.hasNonAudiology) {
+                  return null; // Audiology以外の予約がなければ対象外
+              }
+
+              let hasMorning = false;
+              let hasAfternoon = false;
+              
+              dayData.appointments.forEach(appt => {
+                  const dateObj = appt.appointmentDateTime.toDate();
+                  const jstHour = parseInt(new Intl.DateTimeFormat('en-US', {
+                      hour: '2-digit', hour12: false, timeZone: 'Asia/Tokyo'
+                  }).format(dateObj), 10);
+
+                  if (jstHour < 12) {
+                      hasMorning = true;
+                  } else {
+                      hasAfternoon = true;
+                  }
+              });
+
+              const dayRate = (hasMorning && hasAfternoon) ? 'Full Day Rate' : 'Half Day Rate';
+              
+              return {
+                  date: date,
+                  dayRate: dayRate,
+                  amount: ''
+              };
+          }).filter(item => item !== null); // 対象外の日付を除外
+          
+          dayRateList.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+          generateNewInvoiceHTML(audiologyRecords, dayRateList, fromDateStr, toDateStr);
       })
       .catch(error => {
           console.error("Invoiceデータの取得エラー: ", error);
@@ -726,57 +778,75 @@ function printInvoice() {
       });
 }
 
+function generateNewInvoiceHTML(audiologyRecords, dayRateList, from, to) {
+    const audiologyTotal = audiologyRecords.reduce((sum, record) => sum + record.fee, 0);
 
-function generateInvoiceHTML(records, from, to, total) {
     const invoiceHTML = `
         <!DOCTYPE html>
         <html lang="ja">
         <head>
             <meta charset="UTF-8">
-            <title>Invoice</title>
+            <title>Invoice and Day Rate Sheet</title>
             <style>
-                body { font-family: sans-serif; }
-                .invoice-container { max-width: 800px; margin: auto; padding: 20px; }
-                h1, h2 { text-align: center; }
+                body { font-family: 'Helvetica Neue', Arial, sans-serif; }
+                .page-container { max-width: 800px; margin: auto; padding: 20px; }
+                h1, h2 { text-align: center; color: #333; }
+                h1 { font-size: 24px; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 10px;}
+                h2 { font-size: 18px; margin-bottom: 20px; }
                 table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-                th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 12px; }
-                th { background-color: #f2f2f2; }
-                tfoot td { font-weight: bold; font-size: 14px; }
+                th, td { border: 1px solid #ccc; padding: 10px; text-align: left; font-size: 14px; }
+                th { background-color: #f2f2f2; font-weight: bold; }
+                tfoot td { font-weight: bold; font-size: 16px; background-color: #f9f9f9; }
                 .fee-cell { text-align: right; }
-                .button-area { margin-top: 20px; text-align: right; }
+                .button-area { margin-top: 30px; text-align: center; }
+                .day-rate-sheet { page-break-before: always; } /* 2ページ目の開始 */
                 @media print {
                     .no-print { display: none; }
                 }
             </style>
         </head>
         <body>
-            <div class="invoice-container">
-                <h1>INVOICE</h1>
+            <!-- 1ページ目: Audiology Invoice -->
+            <div class="page-container">
+                <h1>Audiology Invoice</h1>
                 <h2>Period: ${from} to ${to}</h2>
                 <table>
                     <thead>
                         <tr>
-                            <th>予約日時</th>
                             <th>契約番号</th>
-                            <th>氏名</th>
-                            <th>生年月日</th>
-                            <th>CPTCODE</th>
                             <th class="fee-cell">検査費</th>
                         </tr>
                     </thead>
-                    <tbody id="invoice-tbody">
+                    <tbody id="audiology-tbody">
                         </tbody>
                     <tfoot>
                         <tr>
-                            <td colspan="5" style="text-align: right;">合計:</td>
-                            <td class="fee-cell">${total.toLocaleString()}</td>
+                            <td style="text-align: right;"><strong>合計:</strong></td>
+                            <td class="fee-cell">${audiologyTotal.toLocaleString()}</td>
                         </tr>
                     </tfoot>
                 </table>
-                <div class="button-area no-print">
-                    <button onclick="window.print()">このページを印刷</button>
-                    <button onclick="exportToCsv()">Excelエクスポート</button>
-                </div>
+            </div>
+
+            <!-- 2ページ目: Day Rate Sheet -->
+            <div class="page-container day-rate-sheet">
+                <h1>Day Rate Sheet</h1>
+                <h2>Period: ${from} to ${to}</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>日付</th>
+                            <th>Day Rate</th>
+                            <th>Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dayrate-tbody">
+                        </tbody>
+                </table>
+            </div>
+            
+            <div class="button-area no-print">
+                <button onclick="window.print()">このページを印刷</button>
             </div>
         </body>
         </html>
@@ -785,82 +855,30 @@ function generateInvoiceHTML(records, from, to, total) {
     const newWindow = window.open('', '_blank');
     newWindow.document.write(invoiceHTML);
     
-    let tableRows = '';
-    records.forEach(data => {
-        const dateOptions = { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'UTC' };
-        const timeOptions = { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' };
-        const displayDate = data.appointmentDateTime
-            ? new Intl.DateTimeFormat('en-US', dateOptions).format(data.appointmentDateTime.toDate()) + ' ' +
-              new Intl.DateTimeFormat('ja-JP', timeOptions).format(data.appointmentDateTime.toDate())
-            : '日付なし';
-        
-        let displayFee = '0';
-        const feeNumber = parseFee(data.examinationFee);
-        if (feeNumber !== null) {
-            displayFee = feeNumber.toLocaleString();
-        } else {
-            const cptCodeString = (data.cptCode || []).join(', ').replace(/\s/g, '');
-            if (cptCodeString === "92557,92550,VA0004") {
-                displayFee = '220,000';
-            }
-        }
-
-        tableRows += `
+    // Audiologyテーブルの内容を書き込み
+    let audiologyRows = '';
+    audiologyRecords.forEach(data => {
+        audiologyRows += `
             <tr>
-                <td>${displayDate}</td>
-                <td>${data.contractNumber || ''}</td>
-                <td>${data.claimantName || ''}</td>
-                <td>${data.dateOfBirth || ''}</td>
-                <td>${(data.cptCode || []).join(', ')}</td>
-                <td class="fee-cell">${displayFee}</td>
+                <td>${data.contractNumber}</td>
+                <td class="fee-cell">${data.fee.toLocaleString()}</td>
             </tr>
         `;
     });
-    newWindow.document.getElementById('invoice-tbody').innerHTML = tableRows;
+    newWindow.document.getElementById('audiology-tbody').innerHTML = audiologyRows;
 
-    newWindow.exportToCsv = function() {
-        const headers = ["予約日時", "契約番号", "氏名", "生年月日", "CPTCODE", "検査費"];
-        let csvContent = "\uFEFF" + headers.join(',') + "\n";
-
-        records.forEach(data => {
-            const dateOptions = { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'UTC' };
-            const csvDate = data.appointmentDateTime ? new Intl.DateTimeFormat('en-US', dateOptions).format(data.appointmentDateTime.toDate()) : '';
-
-            let csvFee = '0';
-            const feeNumber = parseFee(data.examinationFee);
-            if (feeNumber !== null) {
-                csvFee = feeNumber;
-            } else {
-                const cptCodeString = (data.cptCode || []).join(', ').replace(/\s/g, '');
-                if (cptCodeString === "92557,92550,VA0004") {
-                    csvFee = '220000';
-                }
-            }
-            
-            const claimantNameCsv = `"${data.claimantName || ''}"`;
-            const cptCodeCsv = `"${(data.cptCode || []).join(', ')}"`;
-
-            const row = [
-                csvDate,
-                data.contractNumber || '',
-                claimantNameCsv,
-                data.dateOfBirth || '',
-                cptCodeCsv,
-                String(csvFee)
-            ];
-            csvContent += row.join(',') + "\n";
-        });
-        
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement("a");
-        const url = URL.createObjectURL(blob);
-        link.setAttribute("href", url);
-        link.setAttribute("download", `invoice_${from}_to_${to}.csv`);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    };
+    // Day Rateテーブルの内容を書き込み
+    let dayRateRows = '';
+    dayRateList.forEach(data => {
+        dayRateRows += `
+            <tr>
+                <td>${data.date}</td>
+                <td>${data.dayRate}</td>
+                <td>${data.amount}</td>
+            </tr>
+        `;
+    });
+    newWindow.document.getElementById('dayrate-tbody').innerHTML = dayRateRows;
 
     newWindow.document.close();
 }
