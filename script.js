@@ -325,7 +325,16 @@ function setupRealtimeListener() {
               const checkmark = isShown ? '✅' : '';
               let displayDate = '日付なし';
               if (data.appointmentDateTime) {
-                  const dateObj = data.appointmentDateTime.toDate();
+                  let dateObj = data.appointmentDateTime.toDate();
+
+                  // 移行期間の暫定対応：特定の時間以前のデータは9時間引く
+                  const transitionTimestamp = new Date('2025-10-26T02:00:00+09:00').getTime();
+                  const processedAtTimestamp = data.processedAt ? data.processedAt.toDate().getTime() : 0;
+
+                  if (processedAtTimestamp > 0 && processedAtTimestamp < transitionTimestamp) {
+                      dateObj.setHours(dateObj.getHours() - 9);
+                  }
+
                   const dateOptions = { month: '2-digit', day: '2-digit', weekday: 'short', timeZone: 'Asia/Tokyo' };
                   const timeOptions = { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Tokyo' };
                   const datePart = new Intl.DateTimeFormat('ja-JP', dateOptions).format(dateObj);
