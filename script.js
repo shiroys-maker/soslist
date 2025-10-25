@@ -682,7 +682,6 @@ function printInvoice() {
         return;
     }
 
-    // JST（日本時間）を明示的に指定してDateオブジェクトを作成
     const fromDate = new Date(`${fromDateStr}T00:00:00+09:00`);
     const toDate = new Date(`${toDateStr}T23:59:59+09:00`);
 
@@ -698,76 +697,69 @@ function printInvoice() {
               return;
           }
 
-          // --- データの処理と仕分け ---
-          const audiologyRecords = [];
-          const dailyRecords = {}; // 日付ごとの予約をまとめるオブジェクト
-
+          const allRecords = [];
           querySnapshot.forEach(doc => {
-              const data = doc.data();
-              const services = data.services || [];
-              
-              // 1. Audiologyのみの予約を抽出（trim()を追加して空白を除去）
-              const isAudiologyOnly = services.length === 1 && services[0].trim().toLowerCase() === 'audiology';
-              if (isAudiologyOnly) {
-                  audiologyRecords.push({
-                      contractNumber: data.contractNumber || '',
-                      fee: 209000
-                  });
-              }
+              allRecords.push(doc.data());
+          });
 
-              // 2. Day Rate計算のために日付ごとにデータをグループ化
-              if (data.appointmentDateTime) {
-                  const dateObj = data.appointmentDateTime.toDate();
-                  // JSTの日付文字列 'YYYY-MM-DD' をキーにする
+          // --- 1. Audiologyリストの作成 (全データから抽出) ---
+          const audiologyRecords = allRecords
+              .filter(record => {
+                  const services = record.services || [];
+                  return services.length === 1 && services[0].trim().toLowerCase() === 'audiology';
+              })
+              .map(record => ({
+                  contractNumber: record.contractNumber || '',
+                  fee: 209000
+              }));
+
+          // --- 2. Day Rateリストの作成 ---
+          // まず、データを日付ごとにグループ化
+          const recordsByDate = {};
+          allRecords.forEach(record => {
+              if (record.appointmentDateTime) {
+                  const dateObj = record.appointmentDateTime.toDate();
                   const jstDateFormatter = new Intl.DateTimeFormat('ja-JP', {
                       year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'Asia/Tokyo'
                   });
                   const jstDateString = jstDateFormatter.format(dateObj).replace(/\//g, '-');
-
-                  if (!dailyRecords[jstDateString]) {
-                      dailyRecords[jstDateString] = {
-                          hasNonAudiology: false,
-                          appointments: []
-                      };
+                  
+                  if (!recordsByDate[jstDateString]) {
+                      recordsByDate[jstDateString] = [];
                   }
-                  dailyRecords[jstDateString].appointments.push(data);
-                  if (services.some(s => s.trim().toLowerCase() !== 'audiology')) {
-                      dailyRecords[jstDateString].hasNonAudiology = true;
-                  }
+                  recordsByDate[jstDateString].push(record);
               }
           });
 
-          // --- Day Rateリストの作成 ---
-          const dayRateList = Object.keys(dailyRecords).map(date => {
-              const dayData = dailyRecords[date];
-              if (!dayData.hasNonAudiology) {
-                  return null; // Audiology以外の予約がなければ対象外
+          const dayRateList = [];
+          Object.keys(recordsByDate).forEach(date => {
+              const dailyAppointments = recordsByDate[date];
+              const hasNonAudiology = dailyAppointments.some(appt => 
+                  (appt.services || []).some(s => s.trim().toLowerCase() !== 'audiology')
+              );
+
+              if (hasNonAudiology) {
+                  let hasMorning = false;
+                  let hasAfternoon = false;
+
+                  // その日のすべての予約（Audiology含む）で時間帯を判定
+                  dailyAppointments.forEach(appt => {
+                      const dateObj = appt.appointmentDateTime.toDate();
+                      const jstHour = parseInt(new Intl.DateTimeFormat('en-US', {
+                          hour: '2-digit', hour12: false, timeZone: 'Asia/Tokyo'
+                      }).format(dateObj), 10);
+
+                      if (jstHour < 12) {
+                          hasMorning = true;
+                      } else {
+                          hasAfternoon = true;
+                      }
+                  });
+                  
+                  const dayRate = (hasMorning && hasAfternoon) ? 'Full Day Rate' : 'Half Day Rate';
+                  dayRateList.push({ date: date, dayRate: dayRate, amount: '' });
               }
-
-              let hasMorning = false;
-              let hasAfternoon = false;
-              
-              dayData.appointments.forEach(appt => {
-                  const dateObj = appt.appointmentDateTime.toDate();
-                  const jstHour = parseInt(new Intl.DateTimeFormat('en-US', {
-                      hour: '2-digit', hour12: false, timeZone: 'Asia/Tokyo'
-                  }).format(dateObj), 10);
-
-                  if (jstHour < 12) {
-                      hasMorning = true;
-                  } else {
-                      hasAfternoon = true;
-                  }
-              });
-
-              const dayRate = (hasMorning && hasAfternoon) ? 'Full Day Rate' : 'Half Day Rate';
-              
-              return {
-                  date: date,
-                  dayRate: dayRate,
-                  amount: ''
-              };
-          }).filter(item => item !== null); // 対象外の日付を除外
+          });
           
           dayRateList.sort((a, b) => new Date(a.date) - new Date(b.date));
 
