@@ -526,7 +526,6 @@ function calculateAge(dobString) {
 }
 
 function printInvoice() {
-    console.log("--- 印刷処理開始 ---");
     const fromDateStr = invoiceFromDate.value;
     const toDateStr = invoiceToDate.value;
 
@@ -545,7 +544,6 @@ function printInvoice() {
       .orderBy("appointmentDateTime", "asc")
       .get()
       .then(querySnapshot => {
-          console.log(`[1] Firestoreから ${querySnapshot.size} 件のデータを取得しました。`);
           if (querySnapshot.empty) {
               alert('選択された期間に、SHOWがチェックされたレコードはありませんでした。');
               return;
@@ -566,23 +564,19 @@ function printInvoice() {
               }
               allRecords.push({ ...data, correctedDateObj: correctedDateObj });
           });
-          console.log("[2] 日付補正後の全データ:", JSON.parse(JSON.stringify(allRecords)));
 
           const isAudiologistExamination = (service) => service.trim().toLowerCase() === 'audiologist examination';
+          
+          const audiologistRecordsAll = allRecords.filter(record => {
+              const services = record.services || [];
+              return services.some(isAudiologistExamination);
+          });
 
           // --- 1. Audiologyリストの作成 ---
-          const audiologyRecords = allRecords
-              .filter(record => {
-                  const services = record.services || [];
-                  const hasAudioExam = services.some(isAudiologistExamination);
-                  const nonAudioServices = services.filter(s => !isAudiologistExamination(s));
-                  return hasAudioExam && nonAudioServices.length === 0;
-              })
-              .map(record => ({
-                  contractNumber: record.contractNumber || '',
-                  fee: 209000
-              }));
-          console.log("[3] Audiologyリスト:", JSON.parse(JSON.stringify(audiologyRecords)));
+          const audiologyRecords = audiologistRecordsAll.map(record => ({
+              contractNumber: record.contractNumber || '',
+              fee: 209000
+          }));
 
           // --- 2. Day Rateリストの作成 ---
           const recordsByDate = {};
@@ -596,17 +590,18 @@ function printInvoice() {
                   recordsByDate[jstDateString].push(record);
               }
           });
-          console.log("[4] 日付ごとのグループ化データ:", JSON.parse(JSON.stringify(recordsByDate)));
 
           const dayRateList = [];
           Object.keys(recordsByDate).forEach(date => {
               const dailyAppointments = recordsByDate[date];
-              const isDayRateTarget = dailyAppointments.some(appt => {
+              
+              const hasNonAudiologyExam = dailyAppointments.some(appt => {
                   const services = appt.services || [];
-                  return !services.some(isAudiologistExamination);
+                  const hasAudio = services.some(isAudiologistExamination);
+                  return !hasAudio;
               });
 
-              if (isDayRateTarget) {
+              if (hasNonAudiologyExam) {
                   let hasMorning = false;
                   let hasAfternoon = false;
                   dailyAppointments.forEach(appt => {
@@ -622,7 +617,6 @@ function printInvoice() {
           });
           
           dayRateList.sort((a, b) => new Date(a.date) - new Date(b.date));
-          console.log("[5] Day Rateリスト:", JSON.parse(JSON.stringify(dayRateList)));
 
           generateNewInvoiceHTML(audiologyRecords, dayRateList, fromDateStr, toDateStr);
       })
