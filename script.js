@@ -568,7 +568,7 @@ function printInvoice() {
           });
           console.log("[2] 日付補正後の全データ:", JSON.parse(JSON.stringify(allRecords)));
 
-          const isAudiologistExamination = (service) => service.trim().toLowerCase() === 'audiologist examination';
+          const isAudiologistExamination = (service) => service.trim().toLowerCase().includes('audiologist examination');
 
           // --- 1. Audiologyリストの作成 ---
           const audiologyRecords = allRecords
