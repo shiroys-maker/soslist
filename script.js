@@ -534,35 +534,45 @@ function printInvoice() {
         return;
     }
 
+    // 日付範囲のUTCタイムスタンプを作成（クエリに使用）
+    // JSTの日付から大まかな日付範囲でクエリを行う
     const fromDate = firebase.firestore.Timestamp.fromDate(new Date(`${fromDateStr}T00:00:00+09:00`));
-    const toDate = firebase.firestore.Timestamp.fromDate(new Date(`${toDateStr}T23:59:59+09:00`));
+    // 翌日の00:00(JST)より1分前まで = 当日の23:59まで
+    const nextDayStr = new Date(`${toDateStr}T00:00:00+09:00`);
+    nextDayStr.setDate(nextDayStr.getDate() + 1);
+    const toDate = firebase.firestore.Timestamp.fromDate(nextDayStr);
 
     db.collection("appointments")
       .where("isShown", "==", true)
-      .where("appointmentDateTime", ">=", fromDate)
-      .where("appointmentDateTime", "<=", toDate)
-      .orderBy("appointmentDateTime", "asc")
       .get()
       .then(querySnapshot => {
           if (querySnapshot.empty) {
-              alert('選択された期間に、SHOWがチェックされたレコードはありませんでした。');
+              alert('SHOWがチェックされたレコードはありませんでした。');
               return;
           }
 
           const allRecords = [];
           querySnapshot.forEach(doc => {
               const data = doc.data();
-              let correctedDateObj = null;
-              if (data.appointmentDateTime) {
-                  let dateObj = data.appointmentDateTime.toDate();
-                  const transitionTimestamp = new Date('2025-10-26T02:00:00+09:00').getTime();
-                  const processedAtTimestamp = data.processedAt ? data.processedAt.toDate().getTime() : 0;
-                  if (processedAtTimestamp > 0 && processedAtTimestamp < transitionTimestamp) {
-                      dateObj.setHours(dateObj.getHours() - 9);
-                  }
-                  correctedDateObj = dateObj;
+              if (!data.appointmentDateTime) return;
+              
+              let dateObj = data.appointmentDateTime.toDate();
+              
+              // 移行期間の暫定対応を適用（既存のコードと同様）
+              const transitionTimestamp = new Date('2025-10-26T02:00:00+09:00').getTime();
+              const processedAtTimestamp = data.processedAt ? data.processedAt.toDate().getTime() : 0;
+              if (processedAtTimestamp > 0 && processedAtTimestamp < transitionTimestamp) {
+                  dateObj.setHours(dateObj.getHours() - 9);
               }
-              allRecords.push({ ...data, correctedDateObj: correctedDateObj });
+              
+              // 日本時間での日付を取得（YYYY-MM-DD形式）
+              const jstOptions = { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' };
+              const jstDateStr = new Intl.DateTimeFormat('en-CA', jstOptions).format(dateObj);
+              
+              // fromDateStr以上、toDateStr以下の日付のみを対象にする（時刻は考慮しない）
+              if (jstDateStr >= fromDateStr && jstDateStr <= toDateStr) {
+                  allRecords.push({ ...data, correctedDateObj: dateObj, jstDateStr: jstDateStr });
+              }
           });
 
           const isAudiologistExamination = (service) => service.trim().toLowerCase() === 'audiologist examination';
