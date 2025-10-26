@@ -1,0 +1,11 @@
+{
+	"folders": [
+		{
+			"path": "../../../soslist/openai-processor"
+		},
+		{
+			"path": "."
+		}
+	],
+	"settings": {}
+}

@@ -534,8 +534,8 @@ function printInvoice() {
         return;
     }
 
-    const fromDate = new Date(`${fromDateStr}T00:00:00+09:00`);
-    const toDate = new Date(`${toDateStr}T23:59:59+09:00`);
+    const fromDate = firebase.firestore.Timestamp.fromDate(new Date(`${fromDateStr}T00:00:00+09:00`));
+    const toDate = firebase.firestore.Timestamp.fromDate(new Date(`${toDateStr}T23:59:59+09:00`));
 
     db.collection("appointments")
       .where("isShown", "==", true)
