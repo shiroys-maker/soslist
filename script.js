@@ -239,7 +239,9 @@ closeSearchResultsButton.addEventListener('click', () => {
 searchResultsList.addEventListener('click', (e) => {
     const targetItem = e.target.closest('.result-item');
     if (targetItem) {
-        jumpToDate(targetItem.dataset.timestamp);
+        // 変更: dataset.timestampからdataset.dateを使用する
+        dateFilter.value = targetItem.dataset.date;
+        dateFilter.dispatchEvent(new Event('change'));
     }
 });
 const activityEvents = ['mousemove', 'mousedown', 'keypress', 'scroll', 'touchstart'];
@@ -257,7 +259,8 @@ function setupRealtimeListener() {
     }
     const localDateStr = dateFilter.value;
     if (!localDateStr) return;
-    const filterDate = new Date(`${localDateStr}T00:00:00`);
+    // JSTの日付を明示的に指定
+    const filterDate = new Date(`${localDateStr}T00:00:00+09:00`);
     unsubscribe = db.collection("appointments")
       .where("appointmentDateTime", ">=", filterDate)
       .onSnapshot(querySnapshot => {
@@ -418,10 +421,19 @@ function searchAppointments() {
               querySnapshot.forEach(doc => {
                   const data = doc.data();
                   const dateObj = data.appointmentDateTime.toDate();
-                  const year = dateObj.getUTCFullYear();
-                  const month = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
-                  const day = String(dateObj.getUTCDate()).padStart(2, '0');
-                  const targetDate = `${year}-${month}-${day}`;
+                  
+                  // 移行期間の暫定対応適用
+                  let correctedDateObj = dateObj;
+                  const transitionTimestamp = new Date('2025-10-26T02:00:00+09:00').getTime();
+                  const processedAtTimestamp = data.processedAt ? data.processedAt.toDate().getTime() : 0;
+                  if (processedAtTimestamp > 0 && processedAtTimestamp < transitionTimestamp) {
+                      correctedDateObj = new Date(dateObj.getTime());
+                      correctedDateObj.setHours(correctedDateObj.getHours() - 9);
+                  }
+                  
+                  // 日本時間での日付を取得
+                  const jstOptions = { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' };
+                  const targetDate = new Intl.DateTimeFormat('en-CA', jstOptions).format(correctedDateObj);
                   
                   resultsHTML += `<div class="result-item" data-date="${targetDate}"><span>${data.claimantName}</span><span>${targetDate}</span></div>`;
               });
@@ -442,10 +454,17 @@ function jumpToDate(timestamp) {
         return;
     }
     const dateObj = timestamp.toDate();
-    const year = dateObj.getUTCFullYear();
-    const month = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
-    const day = String(dateObj.getUTCDate()).padStart(2, '0');
-    const targetDate = `${year}-${month}-${day}`;
+    
+    // 移行期間の暫定対応：特定の時間以前のデータは9時間引く
+    const transitionTimestamp = new Date('2025-10-26T02:00:00+09:00').getTime();
+    const processedAtTimestamp = timestamp.seconds * 1000; // タイムスタンプを秒からミリ秒に変換
+    if (processedAtTimestamp > 0 && processedAtTimestamp < transitionTimestamp) {
+        dateObj.setHours(dateObj.getHours() - 9);
+    }
+    
+    // 日本時間での日付を取得（YYYY-MM-DD形式）
+    const jstOptions = { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' };
+    const targetDate = new Intl.DateTimeFormat('en-CA', jstOptions).format(dateObj);
     
     dateFilter.value = targetDate;
     dateFilter.dispatchEvent(new Event('change'));
