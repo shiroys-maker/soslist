@@ -574,6 +574,15 @@ function printInvoice() {
           const audiologyRecords = allRecords
               .filter(record => {
                   const services = record.services || [];
+                  if (record.contractNumber === '7146766.1.1') {
+                      console.log("--- DEBUG RUNNELS RECORD ---");
+                      console.log("Services:", services);
+                      services.forEach(s => {
+                          console.log(`Service: '${s}'`);
+                          console.log(`Trimmed & Lowered: '${s.trim().toLowerCase()}'`);
+                          console.log(`Includes check: ${s.trim().toLowerCase().includes('audiologist examination')}`);
+                      });
+                  }
                   return services.some(isAudiologistExamination);
               })
               .map(record => ({
@@ -602,6 +611,7 @@ function printInvoice() {
               
               const isDayRateTarget = dailyAppointments.some(appt => {
                   const services = appt.services || [];
+                  if (services.length === 0) return false;
                   return !services.some(isAudiologistExamination);
               });
 
