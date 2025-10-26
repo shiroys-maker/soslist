@@ -534,8 +534,8 @@ function printInvoice() {
         return;
     }
 
-    const fromDate = new Date(`${fromDateStr}T00:00:00`);
-    const toDate = new Date(`${toDateStr}T23:59:59`);
+    const fromDate = new Date(`${fromDateStr}T00:00:00+09:00`);
+    const toDate = new Date(`${toDateStr}T23:59:59+09:00`);
 
     db.collection("appointments")
       .where("isShown", "==", true)
@@ -565,7 +565,7 @@ function printInvoice() {
               allRecords.push({ ...data, correctedDateObj: correctedDateObj });
           });
 
-          const isAudiologistExamination = (service) => service.replace(/\s/g, '').toLowerCase().includes('audiologistexamination');
+          const isAudiologistExamination = (service) => service.trim().toLowerCase() === 'audiologist examination';
           
           // --- 1. Audiologyリストの作成 ---
           const audiologyRecords = allRecords
