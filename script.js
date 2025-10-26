@@ -526,6 +526,7 @@ function calculateAge(dobString) {
 }
 
 function printInvoice() {
+    console.log("--- 印刷処理開始 ---");
     const fromDateStr = invoiceFromDate.value;
     const toDateStr = invoiceToDate.value;
 
@@ -534,7 +535,6 @@ function printInvoice() {
         return;
     }
 
-    // タイムゾーンの問題を避けるため、ローカルタイムとして解釈させる
     const fromDate = new Date(`${fromDateStr}T00:00:00`);
     const toDate = new Date(`${toDateStr}T23:59:59`);
 
@@ -545,6 +545,7 @@ function printInvoice() {
       .orderBy("appointmentDateTime", "asc")
       .get()
       .then(querySnapshot => {
+          console.log(`[1] Firestoreから ${querySnapshot.size} 件のデータを取得しました。`);
           if (querySnapshot.empty) {
               alert('選択された期間に、SHOWがチェックされたレコードはありませんでした。');
               return;
@@ -554,8 +555,9 @@ function printInvoice() {
           querySnapshot.forEach(doc => {
               allRecords.push(doc.data());
           });
+          console.log("[2] 取得した生データ:", JSON.parse(JSON.stringify(allRecords)));
 
-          // --- 1. Audiologyリストの作成 (全データから抽出) ---
+          // --- 1. Audiologyリストの作成 ---
           const audiologyRecords = allRecords
               .filter(record => {
                   const services = record.services || [];
@@ -565,31 +567,30 @@ function printInvoice() {
                   contractNumber: record.contractNumber || '',
                   fee: 209000
               }));
+          console.log("[3] Audiologyリスト:", JSON.parse(JSON.stringify(audiologyRecords)));
 
           // --- 2. Day Rateリストの作成 ---
-          // まず、データを日付ごとにグループ化
           const recordsByDate = {};
           allRecords.forEach(record => {
               if (record.appointmentDateTime) {
                   let dateObj = record.appointmentDateTime.toDate();
-                  // 暫定対応をここでも適用
                   const transitionTimestamp = new Date('2025-10-26T02:00:00+09:00').getTime();
                   const processedAtTimestamp = record.processedAt ? record.processedAt.toDate().getTime() : 0;
                   if (processedAtTimestamp > 0 && processedAtTimestamp < transitionTimestamp) {
                       dateObj.setHours(dateObj.getHours() - 9);
                   }
 
-                  const jstDateFormatter = new Intl.DateTimeFormat('ja-JP', {
-                      year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'Asia/Tokyo'
-                  });
+                  const jstDateFormatter = new Intl.DateTimeFormat('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'Asia/Tokyo' });
                   const jstDateString = jstDateFormatter.format(dateObj).replace(/\//g, '-');
                   
                   if (!recordsByDate[jstDateString]) {
                       recordsByDate[jstDateString] = [];
                   }
-                  recordsByDate[jstDateString].push(record);
+                  // 元のレコード情報も保持
+                  recordsByDate[jstDateString].push({ ...record, correctedDateObj: dateObj });
               }
           });
+          console.log("[4] 日付ごとのグループ化データ:", JSON.parse(JSON.stringify(recordsByDate)));
 
           const dayRateList = [];
           Object.keys(recordsByDate).forEach(date => {
@@ -603,23 +604,9 @@ function printInvoice() {
                   let hasAfternoon = false;
 
                   dailyAppointments.forEach(appt => {
-                      let dateObj = appt.appointmentDateTime.toDate();
-                      // 暫定対応をここでも適用
-                      const transitionTimestamp = new Date('2025-10-26T02:00:00+09:00').getTime();
-                      const processedAtTimestamp = appt.processedAt ? appt.processedAt.toDate().getTime() : 0;
-                      if (processedAtTimestamp > 0 && processedAtTimestamp < transitionTimestamp) {
-                          dateObj.setHours(dateObj.getHours() - 9);
-                      }
-
-                      const jstHour = parseInt(new Intl.DateTimeFormat('en-US', {
-                          hour: '2-digit', hour12: false, timeZone: 'Asia/Tokyo'
-                      }).format(dateObj), 10);
-
-                      if (jstHour < 12) {
-                          hasMorning = true;
-                      } else {
-                          hasAfternoon = true;
-                      }
+                      const jstHour = parseInt(new Intl.DateTimeFormat('en-US', { hour: '2-digit', hour12: false, timeZone: 'Asia/Tokyo' }).format(appt.correctedDateObj), 10);
+                      if (jstHour < 12) hasMorning = true;
+                      else hasAfternoon = true;
                   });
                   
                   const dayRate = (hasMorning && hasAfternoon) ? 'Full Day Rate' : 'Half Day Rate';
@@ -628,8 +615,10 @@ function printInvoice() {
           });
           
           dayRateList.sort((a, b) => new Date(a.date) - new Date(b.date));
+          console.log("[5] Day Rateリスト:", JSON.parse(JSON.stringify(dayRateList)));
 
-          generateNewInvoiceHTML(audiologyRecords, dayRateList, fromDateStr, toDateStr);
+          alert("診断データの出力をコンソールで行いました。印刷画面は表示されません。");
+          // generateNewInvoiceHTML(audiologyRecords, dayRateList, fromDateStr, toDateStr);
       })
       .catch(error => {
           console.error("Invoiceデータの取得エラー: ", error);
