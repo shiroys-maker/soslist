@@ -598,7 +598,7 @@ function printInvoice() {
               const isDayRateTarget = dailyAppointments.some(appt => {
                   const services = appt.services || [];
                   if (services.length === 0) return false;
-                  return !services.some(isAudiologistExamination);
+                  return services.some(s => !isAudiologistExamination(s));
               });
 
               if (isDayRateTarget) {
@@ -763,7 +763,7 @@ function openPhoneEditModal(docId) {
         phoneInput.value = data.japanCellPhone || '';
         
         editingDocId = docId;
-        editPhoneModal.style.display = 'flex';
+        editServicesModal.style.display = 'flex';
         document.body.classList.add('modal-open');
     });
 }
