@@ -526,6 +526,7 @@ function calculateAge(dobString) {
 }
 
 function printInvoice() {
+    console.log("--- 印刷処理開始 ---");
     const fromDateStr = invoiceFromDate.value;
     const toDateStr = invoiceToDate.value;
 
@@ -544,6 +545,7 @@ function printInvoice() {
       .orderBy("appointmentDateTime", "asc")
       .get()
       .then(querySnapshot => {
+          console.log(`[1] Firestoreから ${querySnapshot.size} 件のデータを取得しました。`);
           if (querySnapshot.empty) {
               alert('選択された期間に、SHOWがチェックされたレコードはありませんでした。');
               return;
@@ -564,6 +566,7 @@ function printInvoice() {
               }
               allRecords.push({ ...data, correctedDateObj: correctedDateObj });
           });
+          console.log("[2] 日付補正後の全データ:", JSON.parse(JSON.stringify(allRecords)));
 
           const isAudiologistExamination = (service) => service.trim().toLowerCase() === 'audiologist examination';
 
@@ -579,6 +582,7 @@ function printInvoice() {
                   contractNumber: record.contractNumber || '',
                   fee: 209000
               }));
+          console.log("[3] Audiologyリスト:", JSON.parse(JSON.stringify(audiologyRecords)));
 
           // --- 2. Day Rateリストの作成 ---
           const recordsByDate = {};
@@ -592,11 +596,11 @@ function printInvoice() {
                   recordsByDate[jstDateString].push(record);
               }
           });
+          console.log("[4] 日付ごとのグループ化データ:", JSON.parse(JSON.stringify(recordsByDate)));
 
           const dayRateList = [];
           Object.keys(recordsByDate).forEach(date => {
               const dailyAppointments = recordsByDate[date];
-              // ご指摘のロジックに変更: 'Audiologist Examination'を含まない予約が1件でもあればDay Rate対象
               const isDayRateTarget = dailyAppointments.some(appt => {
                   const services = appt.services || [];
                   return !services.some(isAudiologistExamination);
@@ -618,6 +622,7 @@ function printInvoice() {
           });
           
           dayRateList.sort((a, b) => new Date(a.date) - new Date(b.date));
+          console.log("[5] Day Rateリスト:", JSON.parse(JSON.stringify(dayRateList)));
 
           generateNewInvoiceHTML(audiologyRecords, dayRateList, fromDateStr, toDateStr);
       })
