@@ -526,7 +526,6 @@ function calculateAge(dobString) {
 }
 
 function printInvoice() {
-    console.log("--- 印刷処理開始 ---");
     const fromDateStr = invoiceFromDate.value;
     const toDateStr = invoiceToDate.value;
 
@@ -545,7 +544,6 @@ function printInvoice() {
       .orderBy("appointmentDateTime", "asc")
       .get()
       .then(querySnapshot => {
-          console.log(`[1] Firestoreから ${querySnapshot.size} 件のデータを取得しました。`);
           if (querySnapshot.empty) {
               alert('選択された期間に、SHOWがチェックされたレコードはありませんでした。');
               return;
@@ -553,72 +551,75 @@ function printInvoice() {
 
           const allRecords = [];
           querySnapshot.forEach(doc => {
-              allRecords.push(doc.data());
+              const data = doc.data();
+              let correctedDateObj = null;
+              if (data.appointmentDateTime) {
+                  let dateObj = data.appointmentDateTime.toDate();
+                  const transitionTimestamp = new Date('2025-10-26T02:00:00+09:00').getTime();
+                  const processedAtTimestamp = data.processedAt ? data.processedAt.toDate().getTime() : 0;
+                  if (processedAtTimestamp > 0 && processedAtTimestamp < transitionTimestamp) {
+                      dateObj.setHours(dateObj.getHours() - 9);
+                  }
+                  correctedDateObj = dateObj;
+              }
+              allRecords.push({ ...data, correctedDateObj: correctedDateObj });
           });
-          console.log("[2] 取得した生データ:", JSON.parse(JSON.stringify(allRecords)));
+
+          const isAudiologistExamination = (service) => service.trim().toLowerCase() === 'audiologist examination';
 
           // --- 1. Audiologyリストの作成 ---
           const audiologyRecords = allRecords
               .filter(record => {
                   const services = record.services || [];
-                  return services.length === 1 && services[0].trim().toLowerCase() === 'audiology';
+                  const hasAudioExam = services.some(isAudiologistExamination);
+                  const nonAudioServices = services.filter(s => !isAudiologistExamination(s));
+                  return hasAudioExam && nonAudioServices.length === 0;
               })
               .map(record => ({
                   contractNumber: record.contractNumber || '',
                   fee: 209000
               }));
-          console.log("[3] Audiologyリスト:", JSON.parse(JSON.stringify(audiologyRecords)));
 
           // --- 2. Day Rateリストの作成 ---
           const recordsByDate = {};
           allRecords.forEach(record => {
-              if (record.appointmentDateTime) {
-                  let dateObj = record.appointmentDateTime.toDate();
-                  const transitionTimestamp = new Date('2025-10-26T02:00:00+09:00').getTime();
-                  const processedAtTimestamp = record.processedAt ? record.processedAt.toDate().getTime() : 0;
-                  if (processedAtTimestamp > 0 && processedAtTimestamp < transitionTimestamp) {
-                      dateObj.setHours(dateObj.getHours() - 9);
-                  }
-
+              if (record.correctedDateObj) {
                   const jstDateFormatter = new Intl.DateTimeFormat('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'Asia/Tokyo' });
-                  const jstDateString = jstDateFormatter.format(dateObj).replace(/\//g, '-');
-                  
+                  const jstDateString = jstDateFormatter.format(record.correctedDateObj).replace(/\//g, '-');
                   if (!recordsByDate[jstDateString]) {
                       recordsByDate[jstDateString] = [];
                   }
-                  // 元のレコード情報も保持
-                  recordsByDate[jstDateString].push({ ...record, correctedDateObj: dateObj });
+                  recordsByDate[jstDateString].push(record);
               }
           });
-          console.log("[4] 日付ごとのグループ化データ:", JSON.parse(JSON.stringify(recordsByDate)));
 
           const dayRateList = [];
           Object.keys(recordsByDate).forEach(date => {
               const dailyAppointments = recordsByDate[date];
-              const hasNonAudiology = dailyAppointments.some(appt => 
-                  (appt.services || []).some(s => s.trim().toLowerCase() !== 'audiology')
-              );
+              // ご指摘のロジックに変更: 'Audiologist Examination'を含まない予約が1件でもあればDay Rate対象
+              const isDayRateTarget = dailyAppointments.some(appt => {
+                  const services = appt.services || [];
+                  return !services.some(isAudiologistExamination);
+              });
 
-              if (hasNonAudiology) {
+              if (isDayRateTarget) {
                   let hasMorning = false;
                   let hasAfternoon = false;
-
                   dailyAppointments.forEach(appt => {
-                      const jstHour = parseInt(new Intl.DateTimeFormat('en-US', { hour: '2-digit', hour12: false, timeZone: 'Asia/Tokyo' }).format(appt.correctedDateObj), 10);
-                      if (jstHour < 12) hasMorning = true;
-                      else hasAfternoon = true;
+                      if (appt.correctedDateObj) {
+                          const jstHour = parseInt(new Intl.DateTimeFormat('en-US', { hour: '2-digit', hour12: false, timeZone: 'Asia/Tokyo' }).format(appt.correctedDateObj), 10);
+                          if (jstHour < 12) hasMorning = true;
+                          else hasAfternoon = true;
+                      }
                   });
-                  
                   const dayRate = (hasMorning && hasAfternoon) ? 'Full Day Rate' : 'Half Day Rate';
                   dayRateList.push({ date: date, dayRate: dayRate, amount: '' });
               }
           });
           
           dayRateList.sort((a, b) => new Date(a.date) - new Date(b.date));
-          console.log("[5] Day Rateリスト:", JSON.parse(JSON.stringify(dayRateList)));
 
-          alert("診断データの出力をコンソールで行いました。印刷画面は表示されません。");
-          // generateNewInvoiceHTML(audiologyRecords, dayRateList, fromDateStr, toDateStr);
+          generateNewInvoiceHTML(audiologyRecords, dayRateList, fromDateStr, toDateStr);
       })
       .catch(error => {
           console.error("Invoiceデータの取得エラー: ", error);
