@@ -567,16 +567,16 @@ function printInvoice() {
 
           const isAudiologistExamination = (service) => service.trim().toLowerCase() === 'audiologist examination';
           
-          const audiologistRecordsAll = allRecords.filter(record => {
-              const services = record.services || [];
-              return services.some(isAudiologistExamination);
-          });
-
           // --- 1. Audiologyリストの作成 ---
-          const audiologyRecords = audiologistRecordsAll.map(record => ({
-              contractNumber: record.contractNumber || '',
-              fee: 209000
-          }));
+          const audiologyRecords = allRecords
+              .filter(record => {
+                  const services = record.services || [];
+                  return services.some(isAudiologistExamination);
+              })
+              .map(record => ({
+                  contractNumber: record.contractNumber || '',
+                  fee: 209000
+              }));
 
           // --- 2. Day Rateリストの作成 ---
           const recordsByDate = {};
@@ -595,13 +595,12 @@ function printInvoice() {
           Object.keys(recordsByDate).forEach(date => {
               const dailyAppointments = recordsByDate[date];
               
-              const hasNonAudiologyExam = dailyAppointments.some(appt => {
+              const isDayRateTarget = dailyAppointments.some(appt => {
                   const services = appt.services || [];
-                  const hasAudio = services.some(isAudiologistExamination);
-                  return !hasAudio;
+                  return !services.some(isAudiologistExamination);
               });
 
-              if (hasNonAudiologyExam) {
+              if (isDayRateTarget) {
                   let hasMorning = false;
                   let hasAfternoon = false;
                   dailyAppointments.forEach(appt => {
