@@ -350,16 +350,53 @@ function handleViewPdf(docId) {
         const fileName = doc.data().originalFileName;
         if (!fileName) return alert('このレコードにPDFファイルは関連付けられていません。');
         
-        storage.ref(fileName).getDownloadURL()
-            .then(url => window.open(url, '_blank'))
-            .catch(error => {
-                if (error.code === 'storage/object-not-found') {
-                    alert('PDFファイルがストレージに見つかりません。');
-                } else {
-                    alert('PDFの表示中にエラーが発生しました。');
-                }
-            });
+        console.log("PDF表示試行:", fileName);
+        
+        // 複数のパスパターンを試す
+        tryMultiplePaths(fileName);
     });
+}
+
+function tryMultiplePaths(fileName) {
+    // パスのバリエーションを試す
+    const pathVariations = [
+        fileName,                    // そのままのファイル名
+        `pdfs/${fileName}`,          // pdfsフォルダ内
+        fileName.toLowerCase(),      // 小文字化
+        fileName.replace(/\s+/g, '_'), // スペースを_に置換
+        encodeURIComponent(fileName) // URLエンコード
+    ];
+    
+    // 最初のパスから順に試す
+    tryNextPath(pathVariations, 0, fileName);
+}
+
+function tryNextPath(paths, index, originalFileName) {
+    if (index >= paths.length) {
+        // すべてのパスを試しても見つからなかった
+        console.error("すべてのパスバリエーションで見つかりませんでした:", originalFileName);
+        alert(`PDFファイル「${originalFileName}」がストレージ内に見つかりませんでした。`);
+        return;
+    }
+    
+    const currentPath = paths[index];
+    console.log(`パスパターン試行 (${index+1}/${paths.length}): ${currentPath}`);
+    
+    storage.ref(currentPath).getDownloadURL()
+        .then(url => {
+            console.log("PDF見つかりました:", currentPath);
+            window.open(url, '_blank');
+        })
+        .catch(error => {
+            if (error.code === 'storage/object-not-found') {
+                console.log(`パスパターン ${index+1} では見つかりませんでした、次を試します`);
+                // 次のパスパターンを試す
+                tryNextPath(paths, index + 1, originalFileName);
+            } else {
+                console.error("PDF取得エラー:", error.code, error.message, currentPath);
+                alert(`PDFの表示中にエラーが発生しました: ${error.message}`);
+            }
+        });
 }
 
 function openEditModal(docId) {
