@@ -39,8 +39,9 @@ const detailsContentContainer = document.getElementById('details-content-contain
 const notesTextarea = document.getElementById('notesTextarea');
 const saveNotesButton = document.getElementById('saveNotesButton');
 const closeDetailsModalButton = document.getElementById('closeDetailsModalButton');
-const invoiceFromDate = document.getElementById('invoiceFromDate');
-const invoiceToDate = document.getElementById('invoiceToDate');
+// Invoice印刷用
+const invoiceYearSelect = document.getElementById('invoiceYearSelect');
+const invoiceMonthSelect = document.getElementById('invoiceMonthSelect');
 const printInvoiceButton = document.getElementById('printInvoiceButton');
 const searchInput = document.getElementById('searchInput');
 const searchButton = document.getElementById('searchButton');
@@ -64,12 +65,39 @@ let logoutTimer;
 let editingDocId = null;
 let unsubscribe;
 
+// 年選択のプルダウンを動的に生成
+function generateYearOptions() {
+    const currentYear = new Date().getFullYear();
+    
+    // 過去3年分＋現在年を生成
+    for (let year = currentYear - 3; year <= currentYear; year++) {
+        const option = document.createElement('option');
+        option.value = year;
+        option.textContent = year + '年';
+        invoiceYearSelect.appendChild(option);
+    }
+    
+    // デフォルトで現在の年と月を選択
+    invoiceYearSelect.value = currentYear;
+    const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0');
+    invoiceMonthSelect.value = currentMonth;
+}
+
+// 選択された年月から月の最終日を取得
+function getLastDayOfMonth(year, month) {
+    // 翌月の0日目 = 当月の最終日
+    return new Date(year, parseInt(month), 0).getDate();
+}
+
 // --- ログイン状態の監視 ---
 auth.onAuthStateChanged(user => {
     if (user) {
         loginContainer.style.display = 'none';
         mainAppContainer.style.display = 'block';
         userEmailSpan.textContent = user.email;
+        
+        // 年選択オプションを生成
+        generateYearOptions();
 
         const today = new Date();
         const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -582,13 +610,15 @@ function calculateAge(dobString) {
 }
 
 function printInvoice() {
-    const fromDateStr = invoiceFromDate.value;
-    const toDateStr = invoiceToDate.value;
+    const selectedYear = invoiceYearSelect.value;
+    const selectedMonth = invoiceMonthSelect.value;
+    
+    // 選択された年月の最初の日と最後の日を計算
+    const lastDay = getLastDayOfMonth(selectedYear, selectedMonth);
+    const fromDateStr = `${selectedYear}-${selectedMonth}-01`;
+    const toDateStr = `${selectedYear}-${selectedMonth}-${lastDay}`;
 
-    if (!fromDateStr || !toDateStr) {
-        alert('FromとToの両方の日付を選択してください。');
-        return;
-    }
+    console.log(`印刷期間: ${fromDateStr} から ${toDateStr}`);
 
     // 日付範囲のUTCタイムスタンプを作成（クエリに使用）
     // JSTの日付から大まかな日付範囲でクエリを行う
