@@ -311,10 +311,31 @@ function setupRealtimeListener() {
           querySnapshot.forEach(doc => {
               appointments.push({ id: doc.id, ...doc.data() });
           });
+          // ソート前に各アポイントメントの表示用時間を計算・付与する
+          appointments.forEach(appointment => {
+              if (appointment.appointmentDateTime) {
+                  let dateObj = appointment.appointmentDateTime.toDate();
+                  const transitionTimestamp = new Date('2025-10-26T00:00:00+09:00').getTime();
+                  const processedAtTimestamp = appointment.processedAt ? appointment.processedAt.toDate().getTime() : 0;
+                  
+                  // 古いデータと新しいデータで比較可能な「補正済み時間」を作成
+                  let normalizedDateObj = new Date(dateObj);
+                  if (processedAtTimestamp > 0 && processedAtTimestamp < transitionTimestamp) {
+                      // 古いデータ: UTCから9時間引いてJST表示用に調整
+                      normalizedDateObj.setHours(normalizedDateObj.getHours() - 9);
+                  }
+                  // 新しいデータはそのまま（既にJSTで保存されている）
+                  
+                  // ソート用のミリ秒値を付与
+                  appointment._sortTimeMillis = normalizedDateObj.getTime();
+              } else {
+                  appointment._sortTimeMillis = 0;
+              }
+          });
+          
+          // 補正済みの時間でソート
           appointments.sort((a, b) => {
-              const timeA = a.appointmentDateTime ? a.appointmentDateTime.toMillis() : 0;
-              const timeB = b.appointmentDateTime ? b.appointmentDateTime.toMillis() : 0;
-              return timeA - timeB;
+              return a._sortTimeMillis - b._sortTimeMillis;
           });
           let tableRowsHTML = "";
           let previousDateStr = null;
