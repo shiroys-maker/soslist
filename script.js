@@ -238,16 +238,31 @@ tableBody.addEventListener('dblclick', (e) => {
 
 confirmEditBtn.addEventListener('click', () => {
     if (!dateSelect.value || !timeSelect.value || !editingDocId) return;
-    const utcDateTimeStr = `${dateSelect.value}T${timeSelect.value}:00Z`;
-    const dateInUTC = new Date(utcDateTimeStr);
-    const newTimestamp = firebase.firestore.Timestamp.fromDate(dateInUTC);
+    
+    // 2025/10/26以降のデータはJST（UTC+9）として保存する
+    // JSTの日時文字列からJST日時オブジェクトを作成
+    const jstDateTimeStr = `${dateSelect.value}T${timeSelect.value}:00+09:00`;
+    const dateInJST = new Date(jstDateTimeStr);
+    
+    // 現在の日時とprocessedAtを取得/更新して日時保存処理を決定
+    const now = new Date();
+    const processedAt = firebase.firestore.Timestamp.fromDate(now);
+    
+    // 日時をFirestoreのTimestampに変換
+    const newTimestamp = firebase.firestore.Timestamp.fromDate(dateInJST);
+    
     const dataToUpdate = {
         appointmentDate: `${dateSelect.value}T${timeSelect.value}:00`,
-        appointmentDateTime: newTimestamp
+        appointmentDateTime: newTimestamp,
+        processedAt: processedAt // 処理日時を記録（タイムスタンプ判定用）
     };
+    
     db.collection('appointments').doc(editingDocId).update(dataToUpdate)
       .then(() => closeEditModal())
-      .catch(error => alert('更新に失敗しました。'));
+      .catch(error => {
+          console.error('更新エラー:', error);
+          alert('更新に失敗しました。');
+      });
 });
 
 cancelEditBtn.addEventListener('click', closeEditModal);
@@ -321,13 +336,17 @@ function setupRealtimeListener() {
               if (data.appointmentDateTime) {
                   let dateObj = data.appointmentDateTime.toDate();
 
-                  // 移行期間の暫定対応：特定の時間以前のデータは9時間引く
-                  const transitionTimestamp = new Date('2025-10-26T02:00:00+09:00').getTime();
-                  const processedAtTimestamp = data.processedAt ? data.processedAt.toDate().getTime() : 0;
+          // 日時調整のロジック
+          // - 10/26より前のデータ: 元々UTC保存のため9時間引いてJST表示
+          // - 10/26以降のデータ: 既にJST保存になっているため調整不要
+          const transitionTimestamp = new Date('2025-10-26T00:00:00+09:00').getTime();
+          const processedAtTimestamp = data.processedAt ? data.processedAt.toDate().getTime() : 0;
 
-                  if (processedAtTimestamp > 0 && processedAtTimestamp < transitionTimestamp) {
-                      dateObj.setHours(dateObj.getHours() - 9);
-                  }
+          if (processedAtTimestamp > 0 && processedAtTimestamp < transitionTimestamp) {
+              // 古いデータ(10/26より前): UTCから9時間引いてJST表示
+              dateObj.setHours(dateObj.getHours() - 9);
+          }
+          // 新しいデータ(10/26以降): そのまま表示(既にJSTで保存されている)
 
                   const dateOptions = { month: '2-digit', day: '2-digit', weekday: 'short', timeZone: 'Asia/Tokyo' };
                   const timeOptions = { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Tokyo' };
@@ -487,14 +506,16 @@ function searchAppointments() {
                   const data = doc.data();
                   const dateObj = data.appointmentDateTime.toDate();
                   
-                  // 移行期間の暫定対応適用
+                  // 日時調整のロジック - 表示関数と同じロジックを適用
                   let correctedDateObj = dateObj;
-                  const transitionTimestamp = new Date('2025-10-26T02:00:00+09:00').getTime();
+                  const transitionTimestamp = new Date('2025-10-26T00:00:00+09:00').getTime();
                   const processedAtTimestamp = data.processedAt ? data.processedAt.toDate().getTime() : 0;
                   if (processedAtTimestamp > 0 && processedAtTimestamp < transitionTimestamp) {
+                      // 古いデータ(10/26より前): UTCから9時間引いてJST表示
                       correctedDateObj = new Date(dateObj.getTime());
                       correctedDateObj.setHours(correctedDateObj.getHours() - 9);
                   }
+                  // 新しいデータ(10/26以降): そのまま表示(既にJSTで保存されている)
                   
                   // 日本時間での日付を取得
                   const jstOptions = { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' };
@@ -520,12 +541,15 @@ function jumpToDate(timestamp) {
     }
     const dateObj = timestamp.toDate();
     
-    // 移行期間の暫定対応：特定の時間以前のデータは9時間引く
-    const transitionTimestamp = new Date('2025-10-26T02:00:00+09:00').getTime();
+    // 日時調整のロジック - 表示関数と同じロジックを適用
+    // - 10/26より前のデータ: 元々UTC保存のため9時間引いてJST表示
+    // - 10/26以降のデータ: 既にJST保存になっているため調整不要
+    const transitionTimestamp = new Date('2025-10-26T00:00:00+09:00').getTime();
     const processedAtTimestamp = timestamp.seconds * 1000; // タイムスタンプを秒からミリ秒に変換
     if (processedAtTimestamp > 0 && processedAtTimestamp < transitionTimestamp) {
         dateObj.setHours(dateObj.getHours() - 9);
     }
+    // 10/26以降のデータはそのまま使用（すでにJSTで保存されている）
     
     // 日本時間での日付を取得（YYYY-MM-DD形式）
     const jstOptions = { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' };
@@ -644,12 +668,14 @@ function printInvoice() {
               
               let dateObj = data.appointmentDateTime.toDate();
               
-              // 移行期間の暫定対応を適用（既存のコードと同様）
-              const transitionTimestamp = new Date('2025-10-26T02:00:00+09:00').getTime();
+              // 日時調整のロジック - 表示関数と同じロジックを適用
+              const transitionTimestamp = new Date('2025-10-26T00:00:00+09:00').getTime();
               const processedAtTimestamp = data.processedAt ? data.processedAt.toDate().getTime() : 0;
               if (processedAtTimestamp > 0 && processedAtTimestamp < transitionTimestamp) {
+                  // 古いデータ(10/26より前): UTCから9時間引いてJST表示
                   dateObj.setHours(dateObj.getHours() - 9);
               }
+              // 新しいデータ(10/26以降): そのまま表示(既にJSTで保存されている)
               
               // 日本時間での日付を取得（YYYY-MM-DD形式）
               const jstOptions = { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' };
