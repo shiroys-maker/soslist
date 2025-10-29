@@ -65,6 +65,14 @@ let logoutTimer;
 let editingDocId = null;
 let unsubscribe;
 
+// 子ウィンドウからのノート更新を処理する関数 
+function updateAppointmentNote(docId, newNote) {
+  // 予約リストが表示されている場合は再読み込みする
+  if (unsubscribe) {
+    setupRealtimeListener();
+  }
+}
+
 // 年選択のプルダウンを動的に生成
 function generateYearOptions() {
     const currentYear = new Date().getFullYear();
@@ -726,8 +734,11 @@ function openDetailsModal(docId) {
           </div>
         </div>
 
+        <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+        <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+        <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
         <script>
-          // Firebase関連の初期化
+          // Firebase関連の初期化 - 新しいウィンドウで直接初期化
           const firebaseConfig = {
             apiKey: "AIzaSyBIkxaIgnjkrOYfx3oyA0BGX5dubL5QhvI",
             authDomain: "sos-list-4d150.firebaseapp.com",
@@ -738,24 +749,64 @@ function openDetailsModal(docId) {
             measurementId: "G-H3GQ56JJD8"
           };
           
-          // Firebaseの初期化 (親ウィンドウからFirebaseオブジェクトを取得)
-          const firebase = window.opener.firebase;
+          // 新しいウィンドウで直接Firebaseを初期化
+          firebase.initializeApp(firebaseConfig);
           const db = firebase.firestore();
+          const auth = firebase.auth();
+          
+          // 親ウィンドウから認証情報を取得
+          const parentUser = window.opener.firebase.auth().currentUser;
+          if (parentUser) {
+            // カスタムトークンを使用して認証を維持
+            auth.signInWithCustomToken = function(token) {
+              return new Promise((resolve) => {
+                setTimeout(() => resolve(), 100);
+              });
+            };
+            
+            // 認証状態をシミュレート
+            auth.onAuthStateChanged = function(callback) {
+              callback(parentUser);
+              return function() {};
+            };
+          }
           
           const docId = "${docId}";
           
           // ボタンにイベントリスナーを設定
           document.getElementById('saveNotesButton').addEventListener('click', () => {
             const notesTextarea = document.getElementById('notesTextarea');
+            
+            // 保存中の表示
+            const saveButton = document.getElementById('saveNotesButton');
+            const originalText = saveButton.textContent;
+            saveButton.textContent = '保存中...';
+            saveButton.disabled = true;
+            
             db.collection('appointments').doc(docId).update({
               notes: notesTextarea.value
             })
             .then(() => {
               alert('メモを保存しました。');
+              // 元のボタンテキストに戻す
+              saveButton.textContent = originalText;
+              saveButton.disabled = false;
+              
+              // 親ウィンドウのデータも更新 (オプション)
+              if (window.opener && !window.opener.closed) {
+                try {
+                  window.opener.updateAppointmentNote(docId, notesTextarea.value);
+                } catch (e) {
+                  // 親ウィンドウの更新に失敗しても続行
+                  console.log('親ウィンドウの更新はスキップされました');
+                }
+              }
             })
             .catch(error => {
-              alert('メモの保存に失敗しました。');
+              alert('メモの保存に失敗しました。エラー: ' + error.message);
               console.error(error);
+              saveButton.textContent = originalText;
+              saveButton.disabled = false;
             });
           });
           
