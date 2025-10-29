@@ -588,7 +588,7 @@ function openDetailsModal(docId) {
     }
     const data = doc.data();
 
-    let detailsHTML = '';
+    // 日付と時刻のフォーマット設定
     const dateOptions = { month: '2-digit', day: '2-digit', weekday: 'short', timeZone: 'Asia/Tokyo' };
     const timeOptions = { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Tokyo' };
     const displayDate = data.appointmentDateTime
@@ -599,24 +599,161 @@ function openDetailsModal(docId) {
     const age = calculateAge(data.dateOfBirth);
     const displayAge = age ? `${age}歳` : '不明';
 
-    detailsHTML += `<div class="detail-row">
-                      <div class="detail-item"><strong>予約日時</strong><span>${displayDate.replace('<br>',' ')}</span></div>
-                      <div class="detail-item"><strong>契約番号</strong><span>${data.contractNumber || ''}</span></div>
-                    </div>`;
-    detailsHTML += `<div class="detail-row">
-                      <div class="detail-item"><strong>氏名</strong><span>${data.claimantName || ''}</span></div>
-                      <div class="detail-item"><strong>生年月日(年齢)</strong><span>${data.dateOfBirth || ''} (${displayAge})</span></div>
-                    </div>`;
-    detailsHTML += `<div class="detail-row detail-row-full">
-                      <div class="detail-item"><strong>検査内容</strong><span>${(data.services || []).join(', ')}</span></div>
-                    </div>`;
+    // 新しいウィンドウで表示するための完全なHTMLを生成
+    const detailsPageHTML = `
+      <!DOCTYPE html>
+      <html lang="ja">
+      <head>
+        <meta charset="UTF-8">
+        <title>予約詳細</title>
+        <style>
+          body { 
+            font-family: 'Helvetica Neue', sans-serif;
+            background: #eef5f9;
+            padding: 24px;
+            color: #333;
+            margin: 0;
+          }
+          .page-container {
+            max-width: 800px;
+            margin: auto;
+            background: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+          }
+          h1 {
+            font-size: 24px;
+            margin-top: 0;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 10px;
+          }
+          .detail-row {
+            display: flex;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+          }
+          .detail-row-full {
+            flex-direction: column;
+          }
+          .detail-item {
+            flex: 1;
+            min-width: 250px;
+            margin-bottom: 8px;
+          }
+          .detail-item strong {
+            display: inline-block;
+            width: 120px;
+            font-weight: bold;
+          }
+          textarea {
+            width: 100%;
+            min-height: 150px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 8px;
+            margin-top: 5px;
+            font-family: inherit;
+          }
+          .button-area {
+            margin-top: 20px;
+            text-align: right;
+          }
+          button {
+            background: #007acc;
+            color: white;
+            padding: 8px 16px;
+            font-size: 15px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-left: 10px;
+          }
+          button:hover {
+            background: #005fa3;
+          }
+          label {
+            display: block;
+            font-weight: bold;
+            margin-top: 15px;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="page-container">
+          <h1>予約詳細</h1>
+          
+          <div class="detail-row">
+            <div class="detail-item"><strong>予約日時</strong><span>${displayDate.replace('<br>',' ')}</span></div>
+            <div class="detail-item"><strong>契約番号</strong><span>${data.contractNumber || ''}</span></div>
+          </div>
+          <div class="detail-row">
+            <div class="detail-item"><strong>氏名</strong><span>${data.claimantName || ''}</span></div>
+            <div class="detail-item"><strong>生年月日(年齢)</strong><span>${data.dateOfBirth || ''} (${displayAge})</span></div>
+          </div>
+          <div class="detail-row detail-row-full">
+            <div class="detail-item"><strong>検査内容</strong><span>${(data.services || []).join(', ')}</span></div>
+          </div>
+          
+          <label for="notesTextarea">メモ (所見など):</label>
+          <textarea id="notesTextarea" placeholder="1500文字程度まで入力可能...">${data.notes || ''}</textarea>
+          
+          <div class="button-area">
+            <button id="saveNotesButton">メモを保存</button>
+            <button id="closeButton">閉じる</button>
+            <button id="printButton">印刷</button>
+          </div>
+        </div>
 
-    detailsContentContainer.innerHTML = detailsHTML;
-    notesTextarea.value = data.notes || '';
-    
-    detailsModal.dataset.editingId = docId;
-    detailsModal.style.display = 'flex';
-    document.body.classList.add('modal-open');
+        <script>
+          // Firebase関連の初期化
+          const firebaseConfig = {
+            apiKey: "AIzaSyBIkxaIgnjkrOYfx3oyA0BGX5dubL5QhvI",
+            authDomain: "sos-list-4d150.firebaseapp.com",
+            projectId: "sos-list-4d150",
+            storageBucket: "sos-list-4d150.firebasestorage.app",
+            messagingSenderId: "455081821929",
+            appId: "1:455081821929:web:da87d8dd1f16bbe99e9278",
+            measurementId: "G-H3GQ56JJD8"
+          };
+          
+          // Firebaseの初期化 (親ウィンドウからFirebaseオブジェクトを取得)
+          const firebase = window.opener.firebase;
+          const db = firebase.firestore();
+          
+          const docId = "${docId}";
+          
+          // ボタンにイベントリスナーを設定
+          document.getElementById('saveNotesButton').addEventListener('click', () => {
+            const notesTextarea = document.getElementById('notesTextarea');
+            db.collection('appointments').doc(docId).update({
+              notes: notesTextarea.value
+            })
+            .then(() => {
+              alert('メモを保存しました。');
+            })
+            .catch(error => {
+              alert('メモの保存に失敗しました。');
+              console.error(error);
+            });
+          });
+          
+          document.getElementById('closeButton').addEventListener('click', () => {
+            window.close();
+          });
+          
+          document.getElementById('printButton').addEventListener('click', () => {
+            window.print();
+          });
+        </script>
+      </body>
+      </html>
+    `;
+
+    // 新しいウィンドウを開き、HTML内容を書き込む
+    const newWindow = window.open('', '_blank');
+    newWindow.document.write(detailsPageHTML);
+    newWindow.document.close();
   });
 }
 
