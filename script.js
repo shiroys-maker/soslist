@@ -607,30 +607,37 @@ function openDetailsModal(docId) {
         <meta charset="UTF-8">
         <title>予約詳細</title>
         <style>
-          body { 
+          html, body { 
             font-family: 'Helvetica Neue', sans-serif;
             background: #eef5f9;
-            padding: 24px;
             color: #333;
             margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
           }
           .page-container {
-            max-width: 800px;
-            margin: auto;
+            width: 95%;
+            max-width: 1200px;
+            min-height: 95vh;
+            margin: 16px auto;
             background: #fff;
-            padding: 20px;
+            padding: 24px;
             border-radius: 10px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
           }
           h1 {
-            font-size: 24px;
+            font-size: 28px;
             margin-top: 0;
             border-bottom: 1px solid #ddd;
-            padding-bottom: 10px;
+            padding-bottom: 16px;
           }
           .detail-row {
             display: flex;
-            margin-bottom: 15px;
+            margin-bottom: 20px;
             flex-wrap: wrap;
           }
           .detail-row-full {
@@ -638,32 +645,44 @@ function openDetailsModal(docId) {
           }
           .detail-item {
             flex: 1;
-            min-width: 250px;
-            margin-bottom: 8px;
+            min-width: 300px;
+            margin-bottom: 12px;
+            font-size: 16px;
           }
           .detail-item strong {
             display: inline-block;
-            width: 120px;
+            width: 140px;
             font-weight: bold;
+          }
+          .detail-item span {
+            font-size: 16px;
+          }
+          .content-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
           }
           textarea {
             width: 100%;
-            min-height: 150px;
+            flex: 1;
+            min-height: 300px;
             border: 1px solid #ddd;
             border-radius: 4px;
-            padding: 8px;
-            margin-top: 5px;
+            padding: 12px;
+            margin-top: 10px;
             font-family: inherit;
+            font-size: 15px;
+            box-sizing: border-box;
           }
           .button-area {
-            margin-top: 20px;
+            margin-top: 24px;
             text-align: right;
           }
           button {
             background: #007acc;
             color: white;
-            padding: 8px 16px;
-            font-size: 15px;
+            padding: 10px 20px;
+            font-size: 16px;
             border: none;
             border-radius: 6px;
             cursor: pointer;
@@ -675,7 +694,8 @@ function openDetailsModal(docId) {
           label {
             display: block;
             font-weight: bold;
-            margin-top: 15px;
+            margin-top: 20px;
+            font-size: 16px;
           }
         </style>
       </head>
@@ -695,13 +715,14 @@ function openDetailsModal(docId) {
             <div class="detail-item"><strong>検査内容</strong><span>${(data.services || []).join(', ')}</span></div>
           </div>
           
-          <label for="notesTextarea">メモ (所見など):</label>
-          <textarea id="notesTextarea" placeholder="1500文字程度まで入力可能...">${data.notes || ''}</textarea>
+          <div class="content-area">
+            <label for="notesTextarea">メモ (所見など):</label>
+            <textarea id="notesTextarea" placeholder="1500文字程度まで入力可能...">${data.notes || ''}</textarea>
+          </div>
           
           <div class="button-area">
             <button id="saveNotesButton">メモを保存</button>
             <button id="closeButton">閉じる</button>
-            <button id="printButton">印刷</button>
           </div>
         </div>
 
@@ -742,9 +763,6 @@ function openDetailsModal(docId) {
             window.close();
           });
           
-          document.getElementById('printButton').addEventListener('click', () => {
-            window.print();
-          });
         </script>
       </body>
       </html>
