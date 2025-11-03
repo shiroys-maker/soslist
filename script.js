@@ -680,6 +680,7 @@ function openDetailsModal(docId) {
             margin-top: 10px;
             font-family: inherit;
             font-size: 15px;
+            line-height: 1.5; /* メモ欄の行間を広げて読みやすく */
             box-sizing: border-box;
           }
           .button-area {

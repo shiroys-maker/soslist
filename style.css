@@ -231,6 +231,7 @@ button:active {
     border: 1px solid #ccc;
     border-radius: 4px;
     font-size: 14px;
+    line-height: 1.5; /* メモ欄の行間を広げて読みやすく */
     resize: vertical;
 }
 
