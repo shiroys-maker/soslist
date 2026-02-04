@@ -411,13 +411,7 @@ function setupRealtimeListener() {
 }
 
 function startLogoutTimer() {
-    clearTimeout(logoutTimer);
-    logoutTimer = setTimeout(() => {
-        if (auth.currentUser) {
-            alert('120分間操作がなかったため、自動的にログアウトします。');
-            auth.signOut();
-        }
-    }, 7200000); // 120分
+    // 自動ログアウト機能は無効化されています（時間制限なし）
 }
 
 function handleViewPdf(docId) {
