@@ -499,62 +499,83 @@ function closeEditModal() {
 function searchAppointments() {
     const searchTerm = searchInput.value.trim();
     if (!searchTerm) {
-        alert('検索する契約番号を入力してください。');
+        alert('検索する契約番号または氏名を入力してください。');
         return;
     }
 
-    const endTerm = searchTerm.slice(0, -1) +
-                  String.fromCharCode(searchTerm.charCodeAt(searchTerm.length - 1) + 1);
+    // 数字のみ → 契約番号検索（既存ロジック）
+    if (/^\d+$/.test(searchTerm)) {
+        const endTerm = searchTerm.slice(0, -1) +
+                        String.fromCharCode(searchTerm.charCodeAt(searchTerm.length - 1) + 1);
+        db.collection("appointments")
+          .where("contractNumber", ">=", searchTerm)
+          .where("contractNumber", "<", endTerm)
+          .orderBy("contractNumber")
+          .limit(20)
+          .get()
+          .then(querySnapshot => {
+              if (querySnapshot.empty) {
+                  alert('該当する契約番号の予約が見つかりませんでした。');
+                  return;
+              }
+              handleSearchResults(querySnapshot.docs, searchTerm);
+          })
+          .catch(error => {
+              console.error("検索エラー: ", error);
+              alert("検索中にエラーが発生しました。");
+          });
+        return;
+    }
 
+    // それ以外 → 氏名検索（全件取得＋クライアント側部分一致）
     db.collection("appointments")
-      .where("contractNumber", ">=", searchTerm)
-      .where("contractNumber", "<", endTerm)
-      .orderBy("contractNumber")
-      .limit(20)
       .get()
       .then(querySnapshot => {
-          if (querySnapshot.empty) {
-              alert('該当する契約番号の予約が見つかりませんでした。');
+          const matched = querySnapshot.docs.filter(doc => {
+              const name = doc.data().claimantName || '';
+              return name.includes(searchTerm);
+          });
+          if (matched.length === 0) {
+              alert('該当する氏名の予約が見つかりませんでした。');
               return;
           }
-
-          if (querySnapshot.size === 1) {
-              const doc = querySnapshot.docs[0];
-              jumpToDate(doc.data().appointmentDateTime);
-              alert(`「${searchTerm}」で始まる契約番号の予約日にジャンプしました。`);
-          }
-          else {
-              let resultsHTML = '';
-              querySnapshot.forEach(doc => {
-                  const data = doc.data();
-                  const dateObj = data.appointmentDateTime.toDate();
-                  
-                  // 日時調整のロジック - 表示関数と同じロジックを適用
-                  let correctedDateObj = dateObj;
-                  const transitionTimestamp = new Date('2025-10-26T00:00:00+09:00').getTime();
-                  const processedAtTimestamp = data.processedAt ? data.processedAt.toDate().getTime() : 0;
-                  if (processedAtTimestamp > 0 && processedAtTimestamp < transitionTimestamp) {
-                      // 古いデータ(10/26より前): UTCから9時間引いてJST表示
-                      correctedDateObj = new Date(dateObj.getTime());
-                      correctedDateObj.setHours(correctedDateObj.getHours() - 9);
-                  }
-                  // 新しいデータ(10/26以降): そのまま表示(既にJSTで保存されている)
-                  
-                  // 日本時間での日付を取得
-                  const jstOptions = { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' };
-                  const targetDate = new Intl.DateTimeFormat('en-CA', jstOptions).format(correctedDateObj);
-                  
-                  resultsHTML += `<div class="result-item" data-date="${targetDate}"><span>${data.claimantName}</span><span>${targetDate}</span></div>`;
-              });
-              searchResultsList.innerHTML = resultsHTML;
-              searchResultsModal.style.display = 'flex';
-              document.body.classList.add('modal-open');
-          }
+          handleSearchResults(matched, searchTerm);
       })
       .catch(error => {
           console.error("検索エラー: ", error);
           alert("検索中にエラーが発生しました。");
       });
+}
+
+function handleSearchResults(docs, searchTerm) {
+    if (docs.length === 1) {
+        const doc = docs[0];
+        jumpToDate(doc.data().appointmentDateTime);
+        alert(`「${searchTerm}」の予約日にジャンプしました。`);
+        return;
+    }
+
+    let resultsHTML = '';
+    docs.forEach(doc => {
+        const data = doc.data();
+        const dateObj = data.appointmentDateTime.toDate();
+
+        let correctedDateObj = dateObj;
+        const transitionTimestamp = new Date('2025-10-26T00:00:00+09:00').getTime();
+        const processedAtTimestamp = data.processedAt ? data.processedAt.toDate().getTime() : 0;
+        if (processedAtTimestamp > 0 && processedAtTimestamp < transitionTimestamp) {
+            correctedDateObj = new Date(dateObj.getTime());
+            correctedDateObj.setHours(correctedDateObj.getHours() - 9);
+        }
+
+        const jstOptions = { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' };
+        const targetDate = new Intl.DateTimeFormat('en-CA', jstOptions).format(correctedDateObj);
+
+        resultsHTML += `<div class="result-item" data-date="${targetDate}"><span>${data.claimantName}</span><span>${targetDate}</span></div>`;
+    });
+    searchResultsList.innerHTML = resultsHTML;
+    searchResultsModal.style.display = 'flex';
+    document.body.classList.add('modal-open');
 }
 
 function jumpToDate(timestamp) {
