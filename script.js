@@ -533,7 +533,7 @@ function searchAppointments() {
       .then(querySnapshot => {
           const matched = querySnapshot.docs.filter(doc => {
               const name = doc.data().claimantName || '';
-              return name.includes(searchTerm);
+              return nameMatches(name, searchTerm);
           });
           if (matched.length === 0) {
               alert('該当する氏名の予約が見つかりませんでした。');
@@ -545,6 +545,16 @@ function searchAppointments() {
           console.error("検索エラー: ", error);
           alert("検索中にエラーが発生しました。");
       });
+}
+
+// 氏名の部分一致マッチング
+// 保存形式: "JONES, JONATHAN"（姓, 名、大文字）
+// 対応: 姓のみ / 名のみ / 姓名 / 名姓 / カンマあり / 大文字小文字不問
+function nameMatches(storedName, searchTerm) {
+    if (!storedName) return false;
+    const nameTokens = storedName.toLowerCase().split(/[,\s]+/).filter(Boolean);
+    const searchTokens = searchTerm.toLowerCase().split(/[,\s]+/).filter(Boolean);
+    return searchTokens.every(st => nameTokens.some(nt => nt === st));
 }
 
 function handleSearchResults(docs, searchTerm) {
