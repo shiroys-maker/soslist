@@ -30,7 +30,8 @@ const dateFilter = document.getElementById('dateFilter');
 // 日時編集モーダル
 const editModal = document.getElementById('editModal');
 const dateSelect = document.getElementById('dateSelect');
-const timeSelect = document.getElementById('timeSelect');
+const hourSelect = document.getElementById('hourSelect');
+const minuteSelect = document.getElementById('minuteSelect');
 const confirmEditBtn = document.getElementById('confirmEdit');
 const cancelEditBtn = document.getElementById('cancelEdit');
 // 詳細表示モーダル
@@ -245,11 +246,12 @@ tableBody.addEventListener('dblclick', (e) => {
 });
 
 confirmEditBtn.addEventListener('click', () => {
-    if (!dateSelect.value || !timeSelect.value || !editingDocId) return;
-    
+    if (!dateSelect.value || !hourSelect.value || !minuteSelect.value || !editingDocId) return;
+    const timeValue = `${hourSelect.value}:${minuteSelect.value}`;
+
     // 2025/10/26以降のデータはJST（UTC+9）として保存する
     // JSTの日時文字列からJST日時オブジェクトを作成
-    const jstDateTimeStr = `${dateSelect.value}T${timeSelect.value}:00+09:00`;
+    const jstDateTimeStr = `${dateSelect.value}T${timeValue}:00+09:00`;
     const dateInJST = new Date(jstDateTimeStr);
     
     // 現在の日時とprocessedAtを取得/更新して日時保存処理を決定
@@ -260,7 +262,7 @@ confirmEditBtn.addEventListener('click', () => {
     const newTimestamp = firebase.firestore.Timestamp.fromDate(dateInJST);
     
     const dataToUpdate = {
-        appointmentDate: `${dateSelect.value}T${timeSelect.value}:00`,
+        appointmentDate: `${dateSelect.value}T${timeValue}:00`,
         appointmentDateTime: newTimestamp,
         processedAt: processedAt // 処理日時を記録（タイムスタンプ判定用）
     };
@@ -482,7 +484,8 @@ function openEditModal(docId) {
       const hours = new Intl.DateTimeFormat('en', { hour: '2-digit', hour12: false, timeZone: 'Asia/Tokyo' }).format(dateObj);
       const minutes = new Intl.DateTimeFormat('en', { minute: '2-digit', timeZone: 'Asia/Tokyo' }).format(dateObj);
       dateSelect.value = `${year}-${month}-${day}`;
-      timeSelect.value = `${hours}:${minutes}`;
+      hourSelect.value = hours.padStart(2, '0');
+      minuteSelect.value = minutes.padStart(2, '0');
     }
     editingDocId = docId;
     editModal.style.display = 'flex';

@@ -94,15 +94,22 @@
         <h3>予約日時の変更</h3>
         <label for="dateSelect">日付：</label>
         <input type="date" id="dateSelect"><br><br>
-        <label for="timeSelect">時間：</label>
-        <select id="timeSelect">
-          <option value="09:00">09:00</option>
-          <option value="10:00">10:00</option>
-          <option value="11:00">11:00</option>
-          <option value="13:30">13:30</option>
-          <option value="14:30">14:30</option>
-          <option value="15:30">15:30</option>
-          <option value="16:30">16:30</option>
+        <label>時間：</label>
+        <select id="hourSelect">
+          <option value="09">09</option>
+          <option value="10">10</option>
+          <option value="11">11</option>
+          <option value="13">13</option>
+          <option value="14">14</option>
+          <option value="15">15</option>
+          <option value="16">16</option>
+        </select>
+        <span style="margin: 0 4px;">:</span>
+        <select id="minuteSelect">
+          <option value="00">00</option>
+          <option value="15">15</option>
+          <option value="30">30</option>
+          <option value="45">45</option>
         </select><br><br>
         <button id="confirmEdit">更新</button>
         <button id="cancelEdit">キャンセル</button>
