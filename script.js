@@ -1384,7 +1384,6 @@ async function convertToKatakana(nameEn) {
             })
         });
         const data = await res.json();
-        console.log('[kana API raw]:', JSON.stringify(data).substring(0, 300));
         if (data.error) {
             console.error('カタカナ変換APIエラー:', data.error);
             return '';
@@ -1553,24 +1552,14 @@ function openShokaijyoModal(docId, destKey) {
         if (needsKana && nameEn) {
             const kanaInput = shokaijyoSheetContainer.querySelector('[name="name_kana"]');
             if (kanaInput) kanaInput.value = '変換中...';
-            console.log('[kana] 変換開始:', nameEn);
             convertToKatakana(nameEn).then(kana => {
-                console.log('[kana] 変換結果:', JSON.stringify(kana), '/ docId一致:', shokaijyoEditingDocId === docId);
-                if (shokaijyoEditingDocId !== docId) { console.log('[kana] docId不一致 → スキップ'); return; }
-                const inp = shokaijyoSheetContainer.querySelector('[name="name_kana"]');
-                if (!inp) { console.log('[kana] input要素が見つからない'); return; }
-                if (kana) {
-                    inp.value = kana;
-                    console.log('[kana] セット完了:', kana);
-                } else {
-                    console.warn('[kana] APIから空文字が返されました。変換中のまま維持します。');
-                    inp.value = '(変換失敗)';
-                }
-            }).catch(err => {
-                console.error('[kana] 変換エラー:', err);
                 if (shokaijyoEditingDocId !== docId) return;
                 const inp = shokaijyoSheetContainer.querySelector('[name="name_kana"]');
-                if (inp) inp.value = '(エラー)';
+                if (inp) inp.value = kana || '';
+            }).catch(() => {
+                if (shokaijyoEditingDocId !== docId) return;
+                const inp = shokaijyoSheetContainer.querySelector('[name="name_kana"]');
+                if (inp) inp.value = '';
             });
         }
 
