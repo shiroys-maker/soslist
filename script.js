@@ -1535,34 +1535,57 @@ function openShokaijyoModal(docId, destKey) {
         const data = doc.data();
         const saved = data.referrals && data.referrals[destKey];
 
-        // 保存済みのpurposeがなければAI分類で自動生成
-        let classification = null;
-        if (!saved || !saved.purpose) {
-            classification = await classifyServicesWithAI(data.services || []);
-        }
+        const needsClassification = !saved || !saved.purpose;
+        const needsKana = !saved || !saved.name_kana;
 
+        // モーダルを即座に表示（AI結果待たず）
         shokaijyoModalTitle.textContent = `紹介状 — ${REFERRAL_FULL[destKey].name}`;
-        shokaijyoSheetContainer.innerHTML = buildSheetHTML(data, destKey, saved || null, classification);
+        shokaijyoSheetContainer.innerHTML = buildSheetHTML(data, destKey, saved || null, null);
         shokaijyoEditingDocId = docId;
         shokaijyoEditingDest  = destKey;
         shokaijyoModal.style.display = 'flex';
         document.body.classList.add('modal-open');
 
-        // 保存済みカタカナがなければAPIで自動変換
-        if (!saved || !saved.name_kana) {
-            const nameParts = (data.claimantName || '').split(',').map(s => s.trim());
-            const nameEn = nameParts.length === 2
-                ? nameParts[1].charAt(0).toUpperCase() + nameParts[1].slice(1).toLowerCase() + ' ' +
-                  nameParts[0].charAt(0).toUpperCase() + nameParts[0].slice(1).toLowerCase()
-                : (data.claimantName || '');
-            const kanaInput = shokaijyoSheetContainer.querySelector('[name="name_kana"]');
-            if (kanaInput) kanaInput.placeholder = '変換中...';
-            console.log('カタカナ変換開始:', nameEn);
-            const kana = await convertToKatakana(nameEn);
-            console.log('カタカナ変換結果:', kana);
-            if (kanaInput) {
-                kanaInput.placeholder = 'カタカナ氏名';
-                if (kana) kanaInput.value = kana;
+        // カタカナ欄に「変換中...」を表示
+        const kanaInput = shokaijyoSheetContainer.querySelector('[name="name_kana"]');
+        if (needsKana && kanaInput) kanaInput.value = '変換中...';
+
+        // 英語名の組み立て
+        const nameParts = (data.claimantName || '').split(',').map(s => s.trim());
+        const nameEn = nameParts.length === 2
+            ? nameParts[1].charAt(0).toUpperCase() + nameParts[1].slice(1).toLowerCase() + ' ' +
+              nameParts[0].charAt(0).toUpperCase() + nameParts[0].slice(1).toLowerCase()
+            : (data.claimantName || '');
+
+        // 分類とカタカナ変換を並列実行
+        const [classification, kana] = await Promise.all([
+            needsClassification ? classifyServicesWithAI(data.services || []) : Promise.resolve(null),
+            needsKana           ? convertToKatakana(nameEn)                   : Promise.resolve(null)
+        ]);
+
+        // カタカナ結果を反映
+        if (needsKana && kanaInput) {
+            kanaInput.value = kana || '';
+        }
+
+        // AI分類で紹介目的を更新（KINの部位名など）
+        if (needsClassification && classification) {
+            const purposeField = shokaijyoSheetContainer.querySelector('[name="purpose"]');
+            if (purposeField) {
+                const items = [];
+                if (destKey === 'ASBO') {
+                    if (classification.has_nasal)      items.push('鼻骨レントゲン(3方向)');
+                    if (classification.has_chest_xray) items.push('胸部レントゲン2方向');
+                    if (classification.has_ecg)        items.push('心電図');
+                } else if (destKey === 'KIN') {
+                    const ortho = classification.ortho_xrays_jp && classification.ortho_xrays_jp.length > 0
+                        ? classification.ortho_xrays_jp : ['整形外科レントゲン'];
+                    items.push(...ortho);
+                } else {
+                    if (classification.has_echo)       items.push('心エコー検査');
+                    if (classification.has_chest_xray) items.push('胸部レントゲン2方向');
+                }
+                if (items.length > 0) purposeField.value = items.join('、') + 'の依頼';
             }
         }
     });
