@@ -1445,6 +1445,7 @@ function buildSheetHTML(patientData, destKey, saved, classification) {
     } else {
         if (e.has_echo)       items.push('心エコー検査');
         if (e.has_chest_xray) items.push('胸部レントゲン2方向');
+        if (e.has_ecg)        items.push('心電図');
     }
     const defaultPurpose = items.length > 0 ? items.join('、') + 'の依頼' : '検査依頼';
 
@@ -1581,6 +1582,7 @@ function openShokaijyoModal(docId, destKey) {
                 } else {
                     if (classification.has_echo)       items.push('心エコー検査');
                     if (classification.has_chest_xray) items.push('胸部レントゲン2方向');
+                    if (classification.has_ecg)        items.push('心電図');
                 }
                 if (items.length > 0) purposeField.value = items.join('、') + 'の依頼';
             }).catch(err => console.error('AI分類エラー:', err));
