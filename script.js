@@ -1442,6 +1442,7 @@ function buildSheetHTML(patientData, destKey, saved, classification) {
             ? classification.ortho_xrays_jp
             : ['整形外科レントゲン'];
         items.push(...ortho);
+        if (e.has_chest_xray) items.push('胸部レントゲン2方向');
     } else {
         if (e.has_echo)       items.push('心エコー検査');
         if (e.has_chest_xray) items.push('胸部レントゲン2方向');
@@ -1583,6 +1584,7 @@ function openShokaijyoModal(docId, destKey) {
                     const ortho = classification.ortho_xrays_jp && classification.ortho_xrays_jp.length > 0
                         ? classification.ortho_xrays_jp : ['整形外科レントゲン'];
                     items.push(...ortho);
+                    if (classification.has_chest_xray) items.push('胸部レントゲン2方向');
                 } else {
                     if (classification.has_echo)       items.push('心エコー検査');
                     if (classification.has_chest_xray) items.push('胸部レントゲン2方向');
