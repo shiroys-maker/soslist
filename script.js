@@ -95,7 +95,6 @@ const SHOKAIJO_SENDER = {
 let shokaijyoEditingDocId = null;
 let shokaijyoEditingDest  = null;
 let visitDateEditingDocId = null;
-let visitDateEditingDest  = null;
 
 // 子ウィンドウからのノート更新を処理する関数 
 function updateAppointmentNote(docId, newNote) {
@@ -250,29 +249,21 @@ tableBody.addEventListener('click', (e) => {
         openShokaijyoModal(docId, destKey);
         return;
     }
-    if (target.classList.contains('visitdate-item')) {
-        openVisitDateModal(docId, target.dataset.dest);
+    if (target.classList.contains('visitdate-cell')) {
+        openVisitDateModal(docId);
         return;
     }
-    if (target.classList.contains('received-item')) {
-        const destKey = target.dataset.dest;
+    if (target.classList.contains('received-cell')) {
         const docRef = db.collection('appointments').doc(docId);
         docRef.get().then(doc => {
-            if (doc.exists) {
-                const cur = !!(doc.data().referralStatus?.[destKey]?.isReceived);
-                docRef.update({ [`referralStatus.${destKey}.isReceived`]: !cur });
-            }
+            if (doc.exists) docRef.update({ isReceived: !doc.data().isReceived });
         });
         return;
     }
-    if (target.classList.contains('completed-item')) {
-        const destKey = target.dataset.dest;
+    if (target.classList.contains('completed-cell')) {
         const docRef = db.collection('appointments').doc(docId);
         docRef.get().then(doc => {
-            if (doc.exists) {
-                const cur = !!(doc.data().referralStatus?.[destKey]?.isCompleted);
-                docRef.update({ [`referralStatus.${destKey}.isCompleted`]: !cur });
-            }
+            if (doc.exists) docRef.update({ isCompleted: !doc.data().isCompleted });
         });
         return;
     }
@@ -454,26 +445,16 @@ function setupRealtimeListener() {
               }
               const displayServicesText = (data.services || []).join(', ').toLowerCase().includes("audiologist") ? "Audiology" : (data.services || []).join(', ');
 
-              // 紹介先・受診日・受・済（紹介先ごとに1行）
-              const referralDests = determineReferralDests(data.services || [], data.referralClassification || null);
+              // 紹介先・受診日・受・済（フラット構造）
+              const referralDests = determineReferralDests(data.services || []);
               const savedReferrals = data.referrals || {};
-              const referralStatus = data.referralStatus || {};
               const referralHTML   = referralDests.map(dk => {
-                  const isSaved = !!(savedReferrals[dk] && savedReferrals[dk].content);
+                  const isSaved = !!(savedReferrals[dk] && savedReferrals[dk].savedAt);
                   return `<span class="referral-dest${isSaved ? ' saved' : ''}" data-dest="${dk}">${REFERRAL_DISPLAY[dk]}</span>`;
               }).join('');
-              const visitdateHTML  = referralDests.map(dk => {
-                  const vd = referralStatus[dk] ? (referralStatus[dk].visitDate || '') : '';
-                  return `<span class="visitdate-item" data-dest="${dk}">${vd}</span>`;
-              }).join('');
-              const receivedHTML   = referralDests.map(dk => {
-                  const r = !!(referralStatus[dk] && referralStatus[dk].isReceived);
-                  return `<span class="received-item" data-dest="${dk}">${r ? '✅' : ''}</span>`;
-              }).join('');
-              const completedHTML  = referralDests.map(dk => {
-                  const c = !!(referralStatus[dk] && referralStatus[dk].isCompleted);
-                  return `<span class="completed-item" data-dest="${dk}">${c ? '✅' : ''}</span>`;
-              }).join('');
+              const visitdateHTML  = data.visitDate   || '';
+              const receivedHTML   = data.isReceived  ? '✅' : '';
+              const completedHTML  = data.isCompleted ? '✅' : '';
 
               const age = calculateAge(data.dateOfBirth);
               const displayAge = age ? `${age}` : '不明';
@@ -489,9 +470,9 @@ function setupRealtimeListener() {
                       <td class="col-phone phone-cell">${data.japanCellPhone || ''}</td>
                       <td class="col-services services-cell">${displayServicesText}</td>
                       <td class="col-referral">${referralHTML}</td>
-                      <td class="col-visitdate">${visitdateHTML}</td>
-                      <td class="col-received">${receivedHTML}</td>
-                      <td class="col-completed">${completedHTML}</td>
+                      <td class="col-visitdate visitdate-cell">${visitdateHTML}</td>
+                      <td class="col-received received-cell">${receivedHTML}</td>
+                      <td class="col-completed completed-cell">${completedHTML}</td>
                       <td class="col-actions">
                         <button class="view-pdf-btn">PDF</button>
                         <button class="delete-btn">削除</button>
@@ -1548,14 +1529,13 @@ function openShokaijyoModal(docId, destKey) {
         if (!doc.exists) return;
         const data = doc.data();
         const saved = data.referrals && data.referrals[destKey];
-        const cachedClassification = data.referralClassification || null;
 
-        const needsAIClassification = !cachedClassification;
+        const needsAIClassification = !saved || !saved.purpose;
         const needsKana = !saved || !saved.name_kana;
 
-        // モーダルを即座に表示（キャッシュがあれば正確な分類で、なければ正規表現で）
+        // モーダルを即座に表示（保存済みデータがあればそのまま、なければ正規表現でデフォルト表示）
         shokaijyoModalTitle.textContent = `紹介状 — ${REFERRAL_FULL[destKey].name}`;
-        shokaijyoSheetContainer.innerHTML = buildSheetHTML(data, destKey, saved || null, cachedClassification);
+        shokaijyoSheetContainer.innerHTML = buildSheetHTML(data, destKey, saved || null, null);
         shokaijyoEditingDocId = docId;
         shokaijyoEditingDest  = destKey;
         shokaijyoModal.style.display = 'flex';
@@ -1572,45 +1552,37 @@ function openShokaijyoModal(docId, destKey) {
               nameParts[0].charAt(0).toUpperCase() + nameParts[0].slice(1).toLowerCase()
             : (data.claimantName || '');
 
-        // AI分類とカタカナ変換を並列実行（キャッシュがなければAPIを呼ぶ）
+        // AI分類とカタカナ変換を並列実行（未保存の場合のみAPIを呼ぶ）
         const [classification, kana] = await Promise.all([
-            needsAIClassification ? classifyServicesWithAI(data.services || []) : Promise.resolve(cachedClassification),
+            needsAIClassification ? classifyServicesWithAI(data.services || []) : Promise.resolve(null),
             needsKana             ? convertToKatakana(nameEn)                   : Promise.resolve(null)
         ]);
 
-        // カタカナ結果を反映
+        // カタカナ結果を反映（モーダルが既に切り替わっていたら中断）
+        if (shokaijyoEditingDocId !== docId) return;
         if (needsKana && kanaInput) {
             kanaInput.value = kana || '';
         }
 
-        // 新規AI分類ならFirestoreにキャッシュ保存（以降はAPIコール不要）
+        // AI分類結果で紹介目的フィールドを更新（保存済みでない場合のみ・Firestoreには保存しない）
         if (needsAIClassification && classification) {
-            db.collection('appointments').doc(docId).update({
-                referralClassification: {
-                    ...classification,
-                    classifiedAt: firebase.firestore.FieldValue.serverTimestamp()
+            if (shokaijyoEditingDocId !== docId) return; // モーダルが既に切り替わっていたら中断
+            const purposeField = shokaijyoSheetContainer.querySelector('[name="purpose"]');
+            if (purposeField) {
+                const items = [];
+                if (destKey === 'ASBO') {
+                    if (classification.has_nasal)      items.push('鼻骨レントゲン(3方向)');
+                    if (classification.has_chest_xray) items.push('胸部レントゲン2方向');
+                    if (classification.has_ecg)        items.push('心電図');
+                } else if (destKey === 'KIN') {
+                    const ortho = classification.ortho_xrays_jp && classification.ortho_xrays_jp.length > 0
+                        ? classification.ortho_xrays_jp : ['整形外科レントゲン'];
+                    items.push(...ortho);
+                } else {
+                    if (classification.has_echo)       items.push('心エコー検査');
+                    if (classification.has_chest_xray) items.push('胸部レントゲン2方向');
                 }
-            }).catch(err => console.error('分類キャッシュ保存エラー:', err));
-
-            // 紹介目的フィールドを更新（未保存の場合のみ）
-            if (!saved || !saved.purpose) {
-                const purposeField = shokaijyoSheetContainer.querySelector('[name="purpose"]');
-                if (purposeField) {
-                    const items = [];
-                    if (destKey === 'ASBO') {
-                        if (classification.has_nasal)      items.push('鼻骨レントゲン(3方向)');
-                        if (classification.has_chest_xray) items.push('胸部レントゲン2方向');
-                        if (classification.has_ecg)        items.push('心電図');
-                    } else if (destKey === 'KIN') {
-                        const ortho = classification.ortho_xrays_jp && classification.ortho_xrays_jp.length > 0
-                            ? classification.ortho_xrays_jp : ['整形外科レントゲン'];
-                        items.push(...ortho);
-                    } else {
-                        if (classification.has_echo)       items.push('心エコー検査');
-                        if (classification.has_chest_xray) items.push('胸部レントゲン2方向');
-                    }
-                    if (items.length > 0) purposeField.value = items.join('、') + 'の依頼';
-                }
+                if (items.length > 0) purposeField.value = items.join('、') + 'の依頼';
             }
         }
     });
@@ -1683,9 +1655,8 @@ ${sheet.outerHTML}
 }
 
 // ===== 受診日モーダル =====
-function openVisitDateModal(docId, destKey) {
+function openVisitDateModal(docId) {
     visitDateEditingDocId = docId;
-    visitDateEditingDest  = destKey;
     visitDateInput.value = '';
     visitDateModal.style.display = 'flex';
     document.body.classList.add('modal-open');
@@ -1694,20 +1665,17 @@ function openVisitDateModal(docId, destKey) {
 function closeVisitDateModal() {
     visitDateModal.style.display = 'none';
     visitDateEditingDocId = null;
-    visitDateEditingDest  = null;
     document.body.classList.remove('modal-open');
 }
 
 function saveVisitDate() {
-    if (!visitDateEditingDocId || !visitDateEditingDest || !visitDateInput.value) {
+    if (!visitDateEditingDocId || !visitDateInput.value) {
         closeVisitDateModal();
         return;
     }
     const parts = visitDateInput.value.split('-');
     const mmdd = `${parts[1]}/${parts[2]}`;
-    db.collection('appointments').doc(visitDateEditingDocId).update({
-        [`referralStatus.${visitDateEditingDest}.visitDate`]: mmdd
-    })
+    db.collection('appointments').doc(visitDateEditingDocId).update({ visitDate: mmdd })
         .then(() => closeVisitDateModal())
         .catch(err => { console.error(err); alert('保存に失敗しました'); });
 }
