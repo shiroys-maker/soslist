@@ -1392,6 +1392,10 @@ async function convertToKatakana(nameEn) {
             })
         });
         const data = await res.json();
+        if (data.error) {
+            console.error('カタカナ変換APIエラー:', data.error);
+            return '';
+        }
         return data.content?.[0]?.text?.trim() || '';
     } catch (e) {
         console.error('カタカナ変換エラー:', e);
@@ -1551,10 +1555,14 @@ function openShokaijyoModal(docId, destKey) {
                 ? nameParts[1].charAt(0).toUpperCase() + nameParts[1].slice(1).toLowerCase() + ' ' +
                   nameParts[0].charAt(0).toUpperCase() + nameParts[0].slice(1).toLowerCase()
                 : (data.claimantName || '');
+            const kanaInput = shokaijyoSheetContainer.querySelector('[name="name_kana"]');
+            if (kanaInput) kanaInput.placeholder = '変換中...';
+            console.log('カタカナ変換開始:', nameEn);
             const kana = await convertToKatakana(nameEn);
-            if (kana) {
-                const kanaInput = shokaijyoSheetContainer.querySelector('[name="name_kana"]');
-                if (kanaInput) kanaInput.value = kana;
+            console.log('カタカナ変換結果:', kana);
+            if (kanaInput) {
+                kanaInput.placeholder = 'カタカナ氏名';
+                if (kana) kanaInput.value = kana;
             }
         }
     });
