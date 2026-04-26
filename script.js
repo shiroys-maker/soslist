@@ -1525,7 +1525,7 @@ function buildSheetHTML(patientData, destKey, saved, classification) {
 }
 
 function openShokaijyoModal(docId, destKey) {
-    db.collection('appointments').doc(docId).get().then(async doc => {
+    db.collection('appointments').doc(docId).get().then(doc => {
         if (!doc.exists) return;
         const data = doc.data();
         const saved = data.referrals && data.referrals[destKey];
@@ -1541,10 +1541,6 @@ function openShokaijyoModal(docId, destKey) {
         shokaijyoModal.style.display = 'flex';
         document.body.classList.add('modal-open');
 
-        // カタカナ欄に「変換中...」を表示
-        const kanaInput = shokaijyoSheetContainer.querySelector('[name="name_kana"]');
-        if (needsKana && kanaInput) kanaInput.value = '変換中...';
-
         // 英語名の組み立て
         const nameParts = (data.claimantName || '').split(',').map(s => s.trim());
         const nameEn = nameParts.length === 2
@@ -1552,23 +1548,28 @@ function openShokaijyoModal(docId, destKey) {
               nameParts[0].charAt(0).toUpperCase() + nameParts[0].slice(1).toLowerCase()
             : (data.claimantName || '');
 
-        // AI分類とカタカナ変換を並列実行（未保存の場合のみAPIを呼ぶ）
-        const [classification, kana] = await Promise.all([
-            needsAIClassification ? classifyServicesWithAI(data.services || []) : Promise.resolve(null),
-            needsKana             ? convertToKatakana(nameEn)                   : Promise.resolve(null)
-        ]);
-
-        // カタカナ結果を反映（モーダルが既に切り替わっていたら中断）
-        if (shokaijyoEditingDocId !== docId) return;
-        if (needsKana && kanaInput) {
-            kanaInput.value = kana || '';
+        // カタカナ変換（独立して実行・結果が来たらその時点で反映）
+        if (needsKana && nameEn) {
+            const kanaInput = shokaijyoSheetContainer.querySelector('[name="name_kana"]');
+            if (kanaInput) kanaInput.value = '変換中...';
+            convertToKatakana(nameEn).then(kana => {
+                if (shokaijyoEditingDocId !== docId) return;
+                const inp = shokaijyoSheetContainer.querySelector('[name="name_kana"]');
+                if (inp) inp.value = kana || '';
+            }).catch(err => {
+                console.error('カタカナ変換エラー:', err);
+                if (shokaijyoEditingDocId !== docId) return;
+                const inp = shokaijyoSheetContainer.querySelector('[name="name_kana"]');
+                if (inp) inp.value = '';
+            });
         }
 
-        // AI分類結果で紹介目的フィールドを更新（保存済みでない場合のみ・Firestoreには保存しない）
-        if (needsAIClassification && classification) {
-            if (shokaijyoEditingDocId !== docId) return; // モーダルが既に切り替わっていたら中断
-            const purposeField = shokaijyoSheetContainer.querySelector('[name="purpose"]');
-            if (purposeField) {
+        // AI検査分類（独立して実行・結果が来たら紹介目的を更新）
+        if (needsAIClassification) {
+            classifyServicesWithAI(data.services || []).then(classification => {
+                if (shokaijyoEditingDocId !== docId) return;
+                const purposeField = shokaijyoSheetContainer.querySelector('[name="purpose"]');
+                if (!purposeField || purposeField.value) return; // 既に値があれば上書きしない
                 const items = [];
                 if (destKey === 'ASBO') {
                     if (classification.has_nasal)      items.push('鼻骨レントゲン(3方向)');
@@ -1583,7 +1584,7 @@ function openShokaijyoModal(docId, destKey) {
                     if (classification.has_chest_xray) items.push('胸部レントゲン2方向');
                 }
                 if (items.length > 0) purposeField.value = items.join('、') + 'の依頼';
-            }
+            }).catch(err => console.error('AI分類エラー:', err));
         }
     });
 }
