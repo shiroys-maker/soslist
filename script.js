@@ -455,7 +455,7 @@ function setupRealtimeListener() {
               const displayServicesText = (data.services || []).join(', ').toLowerCase().includes("audiologist") ? "Audiology" : (data.services || []).join(', ');
 
               // 紹介先・受診日・受・済（紹介先ごとに1行）
-              const referralDests = determineReferralDests(data.services || []);
+              const referralDests = determineReferralDests(data.services || [], data.referralClassification || null);
               const savedReferrals = data.referrals || {};
               const referralStatus = data.referralStatus || {};
               const referralHTML   = referralDests.map(dk => {
@@ -1297,13 +1297,24 @@ function classifyServices(services) {
     };
 }
 
-function determineReferralDests(services) {
-    const e = classifyServices(services);
+function determineReferralDests(services, classification) {
+    // AIキャッシュがあればそれを使用、なければ正規表現フォールバック
+    let e;
+    if (classification) {
+        e = {
+            has_nasal:      !!classification.has_nasal,
+            has_echo:       !!classification.has_echo,
+            has_chest_xray: !!classification.has_chest_xray,
+            has_ecg:        !!classification.has_ecg,
+            has_ortho:      !!(classification.ortho_xrays_jp && classification.ortho_xrays_jp.length > 0)
+        };
+    } else {
+        e = classifyServices(services);
+    }
     const dests = [];
     if (e.has_nasal) dests.push('ASBO');
     if (e.has_ortho) dests.push('KIN');
-    if (e.has_echo) dests.push('ANSHIN');
-    // KINがある場合、ecgなし・echoなしなら胸部XRはKINが担当 → ASBoは不要
+    if (e.has_echo)  dests.push('ANSHIN');
     const kinTakesChest = e.has_ortho && e.has_chest_xray && !e.has_ecg && !e.has_echo;
     if (!e.has_echo && !dests.includes('ASBO')) {
         if ((e.has_chest_xray && !kinTakesChest) || e.has_ecg) {
@@ -1436,7 +1447,10 @@ function buildSheetHTML(patientData, destKey, saved, classification) {
     if (dobM) dobFormatted = `${dobM[3]}年${parseInt(dobM[1])}月${parseInt(dobM[2])}日`;
     const ageVal = calculateAge(dobRaw) || '';
 
-    const e = classifyServices(patientData.services);
+    // AIキャッシュがあれば優先、なければ正規表現
+    const e = classification
+        ? { ...classification, has_ortho: !!(classification.ortho_xrays_jp && classification.ortho_xrays_jp.length > 0) }
+        : classifyServices(patientData.services);
     const items = [];
     if (destKey === 'ASBO') {
         if (e.has_nasal)      items.push('鼻骨レントゲン(3方向)');
@@ -1445,7 +1459,7 @@ function buildSheetHTML(patientData, destKey, saved, classification) {
     } else if (destKey === 'KIN') {
         const ortho = classification && classification.ortho_xrays_jp && classification.ortho_xrays_jp.length > 0
             ? classification.ortho_xrays_jp
-            : e.has_ortho ? ['整形外科レントゲン'] : ['整形外科レントゲン'];
+            : ['整形外科レントゲン'];
         items.push(...ortho);
     } else {
         if (e.has_echo)       items.push('心エコー検査');
@@ -1534,13 +1548,14 @@ function openShokaijyoModal(docId, destKey) {
         if (!doc.exists) return;
         const data = doc.data();
         const saved = data.referrals && data.referrals[destKey];
+        const cachedClassification = data.referralClassification || null;
 
-        const needsClassification = !saved || !saved.purpose;
+        const needsAIClassification = !cachedClassification;
         const needsKana = !saved || !saved.name_kana;
 
-        // モーダルを即座に表示（AI結果待たず）
+        // モーダルを即座に表示（キャッシュがあれば正確な分類で、なければ正規表現で）
         shokaijyoModalTitle.textContent = `紹介状 — ${REFERRAL_FULL[destKey].name}`;
-        shokaijyoSheetContainer.innerHTML = buildSheetHTML(data, destKey, saved || null, null);
+        shokaijyoSheetContainer.innerHTML = buildSheetHTML(data, destKey, saved || null, cachedClassification);
         shokaijyoEditingDocId = docId;
         shokaijyoEditingDest  = destKey;
         shokaijyoModal.style.display = 'flex';
@@ -1557,10 +1572,10 @@ function openShokaijyoModal(docId, destKey) {
               nameParts[0].charAt(0).toUpperCase() + nameParts[0].slice(1).toLowerCase()
             : (data.claimantName || '');
 
-        // 分類とカタカナ変換を並列実行
+        // AI分類とカタカナ変換を並列実行（キャッシュがなければAPIを呼ぶ）
         const [classification, kana] = await Promise.all([
-            needsClassification ? classifyServicesWithAI(data.services || []) : Promise.resolve(null),
-            needsKana           ? convertToKatakana(nameEn)                   : Promise.resolve(null)
+            needsAIClassification ? classifyServicesWithAI(data.services || []) : Promise.resolve(cachedClassification),
+            needsKana             ? convertToKatakana(nameEn)                   : Promise.resolve(null)
         ]);
 
         // カタカナ結果を反映
@@ -1568,24 +1583,34 @@ function openShokaijyoModal(docId, destKey) {
             kanaInput.value = kana || '';
         }
 
-        // AI分類で紹介目的を更新（KINの部位名など）
-        if (needsClassification && classification) {
-            const purposeField = shokaijyoSheetContainer.querySelector('[name="purpose"]');
-            if (purposeField) {
-                const items = [];
-                if (destKey === 'ASBO') {
-                    if (classification.has_nasal)      items.push('鼻骨レントゲン(3方向)');
-                    if (classification.has_chest_xray) items.push('胸部レントゲン2方向');
-                    if (classification.has_ecg)        items.push('心電図');
-                } else if (destKey === 'KIN') {
-                    const ortho = classification.ortho_xrays_jp && classification.ortho_xrays_jp.length > 0
-                        ? classification.ortho_xrays_jp : ['整形外科レントゲン'];
-                    items.push(...ortho);
-                } else {
-                    if (classification.has_echo)       items.push('心エコー検査');
-                    if (classification.has_chest_xray) items.push('胸部レントゲン2方向');
+        // 新規AI分類ならFirestoreにキャッシュ保存（以降はAPIコール不要）
+        if (needsAIClassification && classification) {
+            db.collection('appointments').doc(docId).update({
+                referralClassification: {
+                    ...classification,
+                    classifiedAt: firebase.firestore.FieldValue.serverTimestamp()
                 }
-                if (items.length > 0) purposeField.value = items.join('、') + 'の依頼';
+            }).catch(err => console.error('分類キャッシュ保存エラー:', err));
+
+            // 紹介目的フィールドを更新（未保存の場合のみ）
+            if (!saved || !saved.purpose) {
+                const purposeField = shokaijyoSheetContainer.querySelector('[name="purpose"]');
+                if (purposeField) {
+                    const items = [];
+                    if (destKey === 'ASBO') {
+                        if (classification.has_nasal)      items.push('鼻骨レントゲン(3方向)');
+                        if (classification.has_chest_xray) items.push('胸部レントゲン2方向');
+                        if (classification.has_ecg)        items.push('心電図');
+                    } else if (destKey === 'KIN') {
+                        const ortho = classification.ortho_xrays_jp && classification.ortho_xrays_jp.length > 0
+                            ? classification.ortho_xrays_jp : ['整形外科レントゲン'];
+                        items.push(...ortho);
+                    } else {
+                        if (classification.has_echo)       items.push('心エコー検査');
+                        if (classification.has_chest_xray) items.push('胸部レントゲン2方向');
+                    }
+                    if (items.length > 0) purposeField.value = items.join('、') + 'の依頼';
+                }
             }
         }
     });
