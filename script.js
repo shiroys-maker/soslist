@@ -1267,10 +1267,11 @@ function saveServices() {
 
 // ===== 紹介先 分類ロジック =====
 function classifyServices(services) {
-    // DBQ/Compensation はレントゲン検査依頼ではないので除外
-    const arr = (services || [])
-        .filter(s => !/DBQ|Compensation/i.test(s))
-        .map(s => s.replace(/\s*\(.*$/, '').trim());
+    // カンマ分割されたservicesを結合し、()内を丸ごと除去してから再分割
+    // 例: ["Gen Med DBQs, (chronic sinusitis, back strain)"] → "Gen Med DBQs," → ["Gen Med DBQs"]
+    const joined = (services || []).join(',');
+    const stripped = joined.replace(/\([^)]*\)/g, '');
+    const arr = stripped.split(',').map(s => s.trim()).filter(s => s.length > 0);
     return {
         has_nasal:      arr.some(s => /NASAL|SINUS/i.test(s)),
         has_echo:       arr.some(s => /ECHO/i.test(s)),
@@ -1310,7 +1311,10 @@ function determineReferralDests(services, classification) {
 
 // ===== AI 検査分類 (shokaijo-sakusei.html と同等) =====
 async function classifyServicesWithAI(services) {
-    const arr = (services || []).map(s => s.replace(/\s*\(.*$/, '').trim()).filter(s => s.length > 0);
+    // ()内を除去してからAIに渡す（classifyServicesと同じロジック）
+    const joined = (services || []).join(',');
+    const stripped = joined.replace(/\([^)]*\)/g, '');
+    const arr = stripped.split(',').map(s => s.trim()).filter(s => s.length > 0);
     if (arr.length === 0) return { ortho_xrays_jp: [], has_echo: false, has_chest_xray: false, has_nasal: false, has_ecg: false };
 
     const prompt = `以下は米国退役軍人の健康診断で依頼された検査サービスの一覧です（英語）。
