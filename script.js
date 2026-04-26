@@ -1453,8 +1453,8 @@ function buildSheetHTML(patientData, destKey, saved, classification) {
     let defaultClinical = '';
     if (destKey === 'ASBO') {
         defaultClinical = 'レントゲンは写真があれば特に読影は必要ないですが、写真の送付が困難であれば読影レポートをお願いします。';
-    } else if (destKey === 'ANSHIN' && e.has_echo) {
-        defaultClinical = '心エコーのレポートはLVEF(%), wall motion, wall thicknessに言及頂けると幸いです。';
+    } else if (destKey === 'ANSHIN') {
+        defaultClinical = '心エコーのレポートはLVEF(%), wall motion, wall thicknessに言及頂けると幸いです。\nレントゲンは写真があれば特に読影は必要ないですが、写真の送付が困難であれば読影レポートをお願いします。';
     }
     // KIN: defaultClinical は空のまま
 
