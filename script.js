@@ -1568,7 +1568,7 @@ function openShokaijyoModal(docId, destKey) {
             classifyServicesWithAI(data.services || []).then(classification => {
                 if (shokaijyoEditingDocId !== docId) return;
                 const purposeField = shokaijyoSheetContainer.querySelector('[name="purpose"]');
-                if (!purposeField || purposeField.value) return; // 既に値があれば上書きしない
+                if (!purposeField) return;
                 const items = [];
                 if (destKey === 'ASBO') {
                     if (classification.has_nasal)      items.push('鼻骨レントゲン(3方向)');
