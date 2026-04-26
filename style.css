@@ -493,3 +493,135 @@ body.modal-open {
         width: auto;
     }
 }
+
+/* ===== 紹介先・受診日・受・済 列 ===== */
+th.col-referral, td.col-referral {
+    width: 5ch; min-width: 5ch; max-width: 5ch;
+    overflow: hidden;
+}
+th.col-visitdate, td.col-visitdate {
+    width: 5ch; min-width: 5ch; max-width: 5ch;
+    overflow: hidden;
+}
+th.col-received, td.col-received {
+    width: 1.8ch; min-width: 1.8ch; max-width: 1.8ch;
+    text-align: center;
+}
+th.col-completed, td.col-completed {
+    width: 1.8ch; min-width: 1.8ch; max-width: 1.8ch;
+    text-align: center;
+}
+
+.referral-dest {
+    display: block;
+    color: #5a2d9a;
+    cursor: pointer;
+    font-size: 11px;
+    white-space: nowrap;
+}
+.referral-dest:hover { text-decoration: underline; }
+.referral-dest.saved { color: #228B22; font-weight: bold; }
+
+/* 受診日・受・済 — 紹介先ごとに1行 */
+.visitdate-item, .received-item, .completed-item {
+    display: block;
+    min-height: 1.5em;
+    line-height: 1.5em;
+}
+.visitdate-item { cursor: pointer; }
+.visitdate-item:hover { background-color: #f0f8ff; text-decoration: underline; }
+.received-item, .completed-item { cursor: pointer; text-align: center; }
+td.col-received, td.col-completed { padding: 0 2px; }
+
+/* 紹介状モーダル（幅広） */
+.shokaijyo-modal-content {
+    width: 750px;
+    max-width: 97vw;
+}
+
+.shokaijyo-sheet-container {
+    overflow-y: auto;
+    max-height: 72vh;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background: #f0f0f0;
+}
+
+/* ---- sheet スタイル (shokaijo-sakusei.html と同等、スコープ付き) ---- */
+.shokaijyo-sheet-container .sheet {
+    background: white;
+    padding: 12mm 15mm;
+    box-sizing: border-box;
+    font-family: "Hiragino Mincho ProN", "MS Mincho", serif;
+    font-size: 13px;
+    color: #333;
+    position: relative;
+    margin: 10px auto;
+    width: 97%;
+    box-shadow: 0 0 6px rgba(0,0,0,0.15);
+}
+.shokaijyo-sheet-container .title {
+    text-align: center;
+    font-size: 19px;
+    font-weight: bold;
+    text-decoration: underline;
+    margin-bottom: 6mm;
+    letter-spacing: 2px;
+}
+.shokaijyo-sheet-container .header-flex {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 4mm;
+    font-size: 13px;
+}
+.shokaijyo-sheet-container .header-left { width: 58%; }
+.shokaijyo-sheet-container .header-right { width: 40%; text-align: left; font-size: 12px; }
+.shokaijyo-sheet-container .doctor-names { margin-top: 4px; margin-left: 10px; font-size: 14px; }
+.shokaijyo-sheet-container .sender-info { margin-top: 4px; line-height: 1.4; }
+.shokaijyo-sheet-container .name-wrapper { position: relative; display: inline-block; }
+.shokaijyo-sheet-container .hanko-img {
+    position: absolute; top: -6px; right: -34px;
+    width: 34px; height: auto; opacity: 0.7; z-index: 10; mix-blend-mode: multiply;
+}
+.shokaijyo-sheet-container .sex-option {
+    display: inline-block; cursor: pointer;
+    width: 1.5em; height: 1.5em; line-height: 1.5em;
+    text-align: center; border-radius: 50%; border: 1px solid transparent;
+}
+.shokaijyo-sheet-container .sex-option:hover { background-color: #f0f0f0; }
+.shokaijyo-sheet-container .sex-option.selected { border-color: #000; font-weight: bold; }
+/* テーブルは必ずスコープを当てて既存スタイルを上書き */
+.shokaijyo-sheet-container table {
+    width: 100%; border-collapse: collapse; margin-bottom: 0;
+}
+.shokaijyo-sheet-container th,
+.shokaijyo-sheet-container td {
+    border: 1px solid #000;
+    padding: 3px 5px;
+    vertical-align: middle;
+    font-size: 13px;
+    color: #333;
+    background-color: transparent;
+}
+.shokaijyo-sheet-container th {
+    background-color: #f5f5f5 !important;
+    text-align: center;
+    white-space: nowrap;
+    color: #333 !important;
+}
+.shokaijyo-sheet-container td { vertical-align: top; }
+.shokaijyo-sheet-container .col-label { width: 88px; }
+.shokaijyo-sheet-container .input-area {
+    width: 100%; border: none;
+    font-family: "Hiragino Mincho ProN", "MS Mincho", serif;
+    font-size: 13px; line-height: 1.5;
+    resize: none; outline: none;
+    background: transparent; margin: 0; padding: 0;
+    box-sizing: border-box; overflow: hidden;
+}
+.shokaijyo-sheet-container .inline-input {
+    border: none; border-bottom: 1px dashed #aaa;
+    font-family: "Hiragino Mincho ProN", "MS Mincho", serif;
+    font-size: inherit; outline: none;
+    background: transparent; min-width: 80px;
+}

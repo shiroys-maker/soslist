@@ -59,12 +59,43 @@ const editPhoneModal = document.getElementById('editPhoneModal');
 const phoneInput = document.getElementById('phoneInput');
 const confirmPhoneEditBtn = document.getElementById('confirmPhoneEdit');
 const cancelPhoneEditBtn = document.getElementById('cancelPhoneEdit');
+// 紹介状モーダル
+const shokaijyoModal          = document.getElementById('shokaijyoModal');
+const shokaijyoSheetContainer = document.getElementById('shokaijyoSheetContainer');
+const shokaijyoModalTitle     = document.getElementById('shokaijyoModalTitle');
+const saveShokaijyoBtn        = document.getElementById('saveShokaijyoBtn');
+const printShokaijyoBtn       = document.getElementById('printShokaijyoBtn');
+const closeShokaijyoBtn       = document.getElementById('closeShokaijyoBtn');
+// 受診日モーダル
+const visitDateModal      = document.getElementById('visitDateModal');
+const visitDateInput      = document.getElementById('visitDateInput');
+const confirmVisitDateBtn = document.getElementById('confirmVisitDateBtn');
+const cancelVisitDateBtn  = document.getElementById('cancelVisitDateBtn');
 
 
 // --- グローバル変数 ---
 let logoutTimer;
 let editingDocId = null;
 let unsubscribe;
+
+// --- 紹介先 定数 ---
+// CLAUDE_API_KEY は config.js で定義（.gitignore済み）
+const REFERRAL_DISPLAY = { ASBO: 'aSBo', KIN: 'KINSP', ANSHIN: 'ANSIN' };
+const REFERRAL_FULL = {
+    ASBO:   { name: 'aSBoメディカルクリニック',     doctor: '梁先生、望月 先生' },
+    KIN:    { name: 'KINスポーツ・整形クリニック',  doctor: '新庄 琢磨 先生' },
+    ANSHIN: { name: '沖縄北あんしん内科クリニック',  doctor: '山口 怜 先生' }
+};
+const SHOKAIJO_SENDER = {
+    name: 'ニライシーサイドクリニック',
+    address: '沖縄県国頭郡恩納村瀬良垣',
+    tel: '090-4524-2828',
+    doctor: '廣安 俊吾'
+};
+let shokaijyoEditingDocId = null;
+let shokaijyoEditingDest  = null;
+let visitDateEditingDocId = null;
+let visitDateEditingDest  = null;
 
 // 子ウィンドウからのノート更新を処理する関数 
 function updateAppointmentNote(docId, newNote) {
@@ -214,6 +245,37 @@ tableBody.addEventListener('click', (e) => {
         openServicesEditModal(docId);
         return;
     }
+    if (target.classList.contains('referral-dest')) {
+        const destKey = target.dataset.dest;
+        openShokaijyoModal(docId, destKey);
+        return;
+    }
+    if (target.classList.contains('visitdate-item')) {
+        openVisitDateModal(docId, target.dataset.dest);
+        return;
+    }
+    if (target.classList.contains('received-item')) {
+        const destKey = target.dataset.dest;
+        const docRef = db.collection('appointments').doc(docId);
+        docRef.get().then(doc => {
+            if (doc.exists) {
+                const cur = !!(doc.data().referralStatus?.[destKey]?.isReceived);
+                docRef.update({ [`referralStatus.${destKey}.isReceived`]: !cur });
+            }
+        });
+        return;
+    }
+    if (target.classList.contains('completed-item')) {
+        const destKey = target.dataset.dest;
+        const docRef = db.collection('appointments').doc(docId);
+        docRef.get().then(doc => {
+            if (doc.exists) {
+                const cur = !!(doc.data().referralStatus?.[destKey]?.isCompleted);
+                docRef.update({ [`referralStatus.${destKey}.isCompleted`]: !cur });
+            }
+        });
+        return;
+    }
     if (target.classList.contains('view-pdf-btn')) {
         handleViewPdf(docId);
     }
@@ -283,6 +345,11 @@ confirmServicesEditBtn.addEventListener('click', saveServices);
 cancelServicesEditBtn.addEventListener('click', closeServicesEditModal);
 confirmPhoneEditBtn.addEventListener('click', savePhone);
 cancelPhoneEditBtn.addEventListener('click', closePhoneEditModal);
+saveShokaijyoBtn.addEventListener('click', saveShokaijyo);
+printShokaijyoBtn.addEventListener('click', printShokaijyo);
+closeShokaijyoBtn.addEventListener('click', closeShokaijyoModal);
+confirmVisitDateBtn.addEventListener('click', saveVisitDate);
+cancelVisitDateBtn.addEventListener('click', closeVisitDateModal);
 searchButton.addEventListener('click', searchAppointments);
 searchInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') { searchAppointments(); } });
 closeSearchResultsButton.addEventListener('click', () => { 
@@ -386,6 +453,28 @@ function setupRealtimeListener() {
                   displayDate = `${datePart}<br>${timePart}`;
               }
               const displayServicesText = (data.services || []).join(', ').toLowerCase().includes("audiologist") ? "Audiology" : (data.services || []).join(', ');
+
+              // 紹介先・受診日・受・済（紹介先ごとに1行）
+              const referralDests = determineReferralDests(data.services || []);
+              const savedReferrals = data.referrals || {};
+              const referralStatus = data.referralStatus || {};
+              const referralHTML   = referralDests.map(dk => {
+                  const isSaved = !!(savedReferrals[dk] && savedReferrals[dk].content);
+                  return `<span class="referral-dest${isSaved ? ' saved' : ''}" data-dest="${dk}">${REFERRAL_DISPLAY[dk]}</span>`;
+              }).join('');
+              const visitdateHTML  = referralDests.map(dk => {
+                  const vd = referralStatus[dk] ? (referralStatus[dk].visitDate || '') : '';
+                  return `<span class="visitdate-item" data-dest="${dk}">${vd}</span>`;
+              }).join('');
+              const receivedHTML   = referralDests.map(dk => {
+                  const r = !!(referralStatus[dk] && referralStatus[dk].isReceived);
+                  return `<span class="received-item" data-dest="${dk}">${r ? '✅' : ''}</span>`;
+              }).join('');
+              const completedHTML  = referralDests.map(dk => {
+                  const c = !!(referralStatus[dk] && referralStatus[dk].isCompleted);
+                  return `<span class="completed-item" data-dest="${dk}">${c ? '✅' : ''}</span>`;
+              }).join('');
+
               const age = calculateAge(data.dateOfBirth);
               const displayAge = age ? `${age}` : '不明';
               const ageCellClass = data.isAgePink ? 'age-cell pink' : 'age-cell';
@@ -399,6 +488,10 @@ function setupRealtimeListener() {
                       <td class="col-contract">${data.contractNumber || ''}</td>
                       <td class="col-phone phone-cell">${data.japanCellPhone || ''}</td>
                       <td class="col-services services-cell">${displayServicesText}</td>
+                      <td class="col-referral">${referralHTML}</td>
+                      <td class="col-visitdate">${visitdateHTML}</td>
+                      <td class="col-received">${receivedHTML}</td>
+                      <td class="col-completed">${completedHTML}</td>
                       <td class="col-actions">
                         <button class="view-pdf-btn">PDF</button>
                         <button class="delete-btn">削除</button>
@@ -1189,4 +1282,370 @@ function saveServices() {
         console.error('検査内容の更新エラー:', error);
         alert('検査内容の更新に失敗しました。');
     });
+}
+
+// ===== 紹介先 分類ロジック =====
+function classifyServices(services) {
+    const arr = (services || []).map(s => s.replace(/\s*\(.*$/, '').trim());
+    return {
+        has_nasal:      arr.some(s => /NASAL|SINUS/i.test(s)),
+        has_echo:       arr.some(s => /ECHO/i.test(s)),
+        has_chest_xray: arr.some(s => /CHEST/i.test(s)),
+        has_ecg:        arr.some(s => /ECG|EKG/i.test(s)),
+        has_ortho:      arr.some(s => /COMPLETE|X[\s-]?RAY|XRAY|RADIOGRAPH/i.test(s) &&
+                                     !/CHEST|NASAL|SINUS/i.test(s))
+    };
+}
+
+function determineReferralDests(services) {
+    const e = classifyServices(services);
+    const dests = [];
+    if (e.has_nasal) dests.push('ASBO');
+    if (e.has_ortho) dests.push('KIN');
+    if (e.has_echo || (!e.has_nasal && (e.has_chest_xray || e.has_ecg))) dests.push('ANSHIN');
+    if (dests.length === 0 && (e.has_chest_xray || e.has_ecg)) dests.push('ASBO');
+    return dests.slice(0, 3);
+}
+
+// ===== AI 検査分類 (shokaijo-sakusei.html と同等) =====
+async function classifyServicesWithAI(services) {
+    const arr = (services || []).map(s => s.replace(/\s*\(.*$/, '').trim()).filter(s => s.length > 0);
+    if (arr.length === 0) return { ortho_xrays_jp: [], has_echo: false, has_chest_xray: false, has_nasal: false, has_ecg: false };
+
+    const prompt = `以下は米国退役軍人の健康診断で依頼された検査サービスの一覧です（英語）。
+各項目を分類して、JSON形式で返してください。
+
+サービス一覧:
+${arr.map((s, i) => `${i + 1}. ${s}`).join('\n')}
+
+返却するJSONの形式:
+{
+  "has_chest_xray": true/false,
+  "has_nasal": true/false,
+  "has_echo": true/false,
+  "has_ecg": true/false,
+  "ortho_xrays_jp": []
+}
+★ortho_xrays_jp: "COMPLETE","X-RAY","XRAY","RADIOGRAPH"などのキーワードがある整形外科レントゲンのみ。部位名を日本語で（例:"右膝関節レントゲン3方向"）。胸部・鼻骨は除く。
+
+JSONのみ返してください。`;
+
+    try {
+        const res = await fetch("https://api.anthropic.com/v1/messages", {
+            method: "POST",
+            headers: {
+                "x-api-key": CLAUDE_API_KEY,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+                "anthropic-dangerous-direct-browser-access": "true"
+            },
+            body: JSON.stringify({
+                model: "claude-haiku-4-5-20251001",
+                max_tokens: 512,
+                messages: [{ role: "user", content: prompt }]
+            })
+        });
+        const data = await res.json();
+        const text = data.content?.[0]?.text?.trim() || '{}';
+        const json = JSON.parse(text.replace(/^```json\n?|```$/g, ''));
+        return {
+            ortho_xrays_jp: json.ortho_xrays_jp || [],
+            has_echo:       !!json.has_echo,
+            has_chest_xray: !!json.has_chest_xray,
+            has_nasal:      !!json.has_nasal,
+            has_ecg:        !!json.has_ecg
+        };
+    } catch (e) {
+        console.error('AI分類エラー:', e);
+        return {
+            ortho_xrays_jp: [],
+            has_echo:       arr.some(s => /echo/i.test(s)),
+            has_chest_xray: arr.some(s => /chest/i.test(s)),
+            has_nasal:      arr.some(s => /nasal/i.test(s)),
+            has_ecg:        arr.some(s => /ecg|ekg/i.test(s))
+        };
+    }
+}
+
+// ===== カタカナ変換 =====
+async function convertToKatakana(nameEn) {
+    if (!nameEn) return '';
+    try {
+        const res = await fetch("https://api.anthropic.com/v1/messages", {
+            method: "POST",
+            headers: {
+                "x-api-key": CLAUDE_API_KEY,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+                "anthropic-dangerous-direct-browser-access": "true"
+            },
+            body: JSON.stringify({
+                model: "claude-haiku-4-5-20251001",
+                max_tokens: 100,
+                messages: [{ role: "user", content: `"${nameEn}"を日本語のカタカナに変換してください。カタカナのみ返してください。` }]
+            })
+        });
+        const data = await res.json();
+        return data.content?.[0]?.text?.trim() || '';
+    } catch (e) {
+        console.error('カタカナ変換エラー:', e);
+        return '';
+    }
+}
+
+// ===== 紹介状モーダル =====
+function escapeHtml(str) {
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function shokaijyoSelectSex(el) {
+    const siblings = el.parentElement.querySelectorAll('.sex-option');
+    siblings.forEach(s => s.classList.remove('selected'));
+    el.classList.add('selected');
+}
+
+function buildSheetHTML(patientData, destKey, saved, classification) {
+    const dest = REFERRAL_FULL[destKey];
+    const today = new Date();
+    const reiwa = today.getFullYear() - 2018;
+    const dateStr = `令和${reiwa}年${today.getMonth() + 1}月${today.getDate()}日`;
+
+    const nameParts = (patientData.claimantName || '').split(',').map(s => s.trim());
+    const nameEn = nameParts.length === 2
+        ? nameParts[1].charAt(0).toUpperCase() + nameParts[1].slice(1).toLowerCase() + ' ' +
+          nameParts[0].charAt(0).toUpperCase() + nameParts[0].slice(1).toLowerCase()
+        : (patientData.claimantName || '');
+
+    const dobRaw = patientData.dateOfBirth || '';
+    let dobFormatted = dobRaw;
+    const dobM = dobRaw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (dobM) dobFormatted = `${dobM[3]}年${parseInt(dobM[1])}月${parseInt(dobM[2])}日`;
+    const ageVal = calculateAge(dobRaw) || '';
+
+    const e = classifyServices(patientData.services);
+    const items = [];
+    if (destKey === 'ASBO') {
+        if (e.has_nasal)      items.push('鼻骨レントゲン(3方向)');
+        if (e.has_chest_xray) items.push('胸部レントゲン2方向');
+        if (e.has_ecg)        items.push('心電図');
+    } else if (destKey === 'KIN') {
+        const ortho = classification && classification.ortho_xrays_jp && classification.ortho_xrays_jp.length > 0
+            ? classification.ortho_xrays_jp
+            : e.has_ortho ? ['整形外科レントゲン'] : ['整形外科レントゲン'];
+        items.push(...ortho);
+    } else {
+        if (e.has_echo)       items.push('心エコー検査');
+        if (e.has_chest_xray) items.push('胸部レントゲン2方向');
+    }
+    const defaultPurpose = items.length > 0 ? items.join('、') + 'の依頼' : '検査依頼';
+
+    let defaultClinical = '';
+    if (destKey === 'ASBO' || destKey === 'KIN') {
+        defaultClinical = 'レントゲンは写真があれば特に読影は必要ないですが、写真の送付が困難であれば読影レポートをお願いします。';
+    } else if (destKey === 'ANSHIN' && e.has_echo) {
+        defaultClinical = '心エコーのレポートはLVEF(%), wall motion, wall thicknessに言及頂けると幸いです。';
+    }
+
+    const defaultMessage = 'いつもお世話になっております。\n結果をPDF (or CD)で頂けると幸いです。よろしくお願いいたします。';
+    const isFemale = patientData.isAgePink === true;
+
+    const v = saved || {};
+    const kana     = v.name_kana !== undefined ? v.name_kana : '';
+    const en       = v.name_en   !== undefined ? v.name_en   : nameEn;
+    const dob      = v.dob       !== undefined ? v.dob       : dobFormatted;
+    const age      = v.age       !== undefined ? v.age       : String(ageVal);
+    const phone    = v.phone     !== undefined ? v.phone     : (patientData.japanCellPhone || '');
+    const injury   = v.injury    !== undefined ? v.injury    : '(主訴) ';
+    const purpose  = v.purpose   !== undefined ? v.purpose   : defaultPurpose;
+    const history  = v.history   !== undefined ? v.history   : '';
+    const clinical = v.clinical  !== undefined ? v.clinical  : defaultClinical;
+    const message  = v.message   !== undefined ? v.message   : defaultMessage;
+    const gender   = v.gender    !== undefined ? v.gender    : (isFemale ? 'F' : 'M');
+
+    const maleClass   = gender === 'M' ? 'sex-option selected' : 'sex-option';
+    const femaleClass = gender === 'F' ? 'sex-option selected' : 'sex-option';
+
+    return `
+    <div class="sheet">
+        <div class="title">紹介状(診療情報提供書)</div>
+        <div class="header-flex">
+            <div class="header-left">
+                <div><strong>紹介先医療機関名：</strong> ${escapeHtml(dest.name)}</div>
+                <div class="doctor-names"><strong>担当医師：</strong> ${escapeHtml(dest.doctor)} 殿</div>
+            </div>
+            <div class="header-right">
+                <div style="text-align:right;margin-bottom:5px;">${dateStr}</div>
+                <div class="sender-info">
+                    紹介元医療機関の所在地：${escapeHtml(SHOKAIJO_SENDER.address)}<br>
+                    名称：<strong>${escapeHtml(SHOKAIJO_SENDER.name)}</strong><br>
+                    電話番号：${escapeHtml(SHOKAIJO_SENDER.tel)}<br>
+                    医師氏名：<span class="name-wrapper"><strong>${escapeHtml(SHOKAIJO_SENDER.doctor)}</strong><img src="stamp.png" class="hanko-img" alt="印" onerror="this.style.display='none'"></span>
+                </div>
+            </div>
+        </div>
+        <table style="margin-bottom:0;">
+            <colgroup><col style="width:90px;"><col><col style="width:62px;"><col style="width:110px;"></colgroup>
+            <tr>
+                <th class="col-label">患者氏名</th>
+                <td style="font-size:1.05em;">
+                    <strong><input class="inline-input" style="width:95%;font-weight:bold;" name="name_kana" value="${escapeHtml(kana)}" placeholder="カタカナ氏名"></strong><br>
+                    <input class="inline-input" style="width:90%;" name="name_en" value="${escapeHtml(en)}" placeholder="English Name">&nbsp;殿
+                </td>
+                <th style="text-align:center;">性別</th>
+                <td style="text-align:center;">
+                    <span class="${maleClass}" data-gender="M" onclick="shokaijyoSelectSex(this)">男</span>・<span class="${femaleClass}" data-gender="F" onclick="shokaijyoSelectSex(this)">女</span>
+                </td>
+            </tr>
+            <tr>
+                <th class="col-label">生年月日</th>
+                <td style="white-space:nowrap;">
+                    <input class="inline-input" name="dob" value="${escapeHtml(dob)}" style="width:120px;">（<input class="inline-input" name="age" value="${escapeHtml(age)}" style="width:34px;text-align:right;">歳）
+                </td>
+                <th style="text-align:center;">電話番号</th>
+                <td><input class="inline-input" name="phone" value="${escapeHtml(phone)}" style="width:95%;"></td>
+            </tr>
+        </table>
+        <table style="margin-top:10px;">
+            <tr><th class="col-label">傷病名</th><td><textarea class="input-area" rows="1" name="injury">${escapeHtml(injury)}</textarea></td></tr>
+            <tr><th class="col-label">紹介目的</th><td><textarea class="input-area" rows="3" name="purpose">${escapeHtml(purpose)}</textarea></td></tr>
+            <tr><th class="col-label">既往歴</th><td><textarea class="input-area" rows="2" name="history">${escapeHtml(history)}</textarea></td></tr>
+            <tr><th class="col-label">病状経過及び<br>検査結果</th><td><textarea class="input-area" rows="12" name="clinical">${escapeHtml(clinical)}</textarea></td></tr>
+            <tr><th class="col-label">通信本文</th><td><textarea class="input-area" rows="3" name="message">${escapeHtml(message)}</textarea></td></tr>
+        </table>
+    </div>`;
+}
+
+function openShokaijyoModal(docId, destKey) {
+    db.collection('appointments').doc(docId).get().then(async doc => {
+        if (!doc.exists) return;
+        const data = doc.data();
+        const saved = data.referrals && data.referrals[destKey];
+
+        // 保存済みのpurposeがなければAI分類で自動生成
+        let classification = null;
+        if (!saved || !saved.purpose) {
+            classification = await classifyServicesWithAI(data.services || []);
+        }
+
+        shokaijyoModalTitle.textContent = `紹介状 — ${REFERRAL_FULL[destKey].name}`;
+        shokaijyoSheetContainer.innerHTML = buildSheetHTML(data, destKey, saved || null, classification);
+        shokaijyoEditingDocId = docId;
+        shokaijyoEditingDest  = destKey;
+        shokaijyoModal.style.display = 'flex';
+        document.body.classList.add('modal-open');
+
+        // 保存済みカタカナがなければAPIで自動変換
+        if (!saved || !saved.name_kana) {
+            const nameParts = (data.claimantName || '').split(',').map(s => s.trim());
+            const nameEn = nameParts.length === 2
+                ? nameParts[1].charAt(0).toUpperCase() + nameParts[1].slice(1).toLowerCase() + ' ' +
+                  nameParts[0].charAt(0).toUpperCase() + nameParts[0].slice(1).toLowerCase()
+                : (data.claimantName || '');
+            const kana = await convertToKatakana(nameEn);
+            if (kana) {
+                const kanaInput = shokaijyoSheetContainer.querySelector('[name="name_kana"]');
+                if (kanaInput) kanaInput.value = kana;
+            }
+        }
+    });
+}
+
+function closeShokaijyoModal() {
+    shokaijyoModal.style.display = 'none';
+    shokaijyoSheetContainer.innerHTML = '';
+    shokaijyoEditingDocId = null;
+    shokaijyoEditingDest  = null;
+    document.body.classList.remove('modal-open');
+}
+
+function saveShokaijyo() {
+    if (!shokaijyoEditingDocId || !shokaijyoEditingDest) return;
+    const sheet = shokaijyoSheetContainer.querySelector('.sheet');
+    if (!sheet) return;
+    const get = name => { const el = sheet.querySelector(`[name="${name}"]`); return el ? el.value : ''; };
+    const selectedGender = sheet.querySelector('.sex-option.selected');
+    const fieldPath = `referrals.${shokaijyoEditingDest}`;
+    db.collection('appointments').doc(shokaijyoEditingDocId).update({
+        [fieldPath]: {
+            name_kana: get('name_kana'), name_en: get('name_en'),
+            gender:    selectedGender ? selectedGender.dataset.gender : 'M',
+            dob: get('dob'), age: get('age'), phone: get('phone'),
+            injury: get('injury'), purpose: get('purpose'),
+            history: get('history'), clinical: get('clinical'), message: get('message'),
+            savedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }
+    })
+    .then(() => closeShokaijyoModal())
+    .catch(err => { console.error(err); alert('保存に失敗しました'); });
+}
+
+function printShokaijyo() {
+    const sheet = shokaijyoSheetContainer.querySelector('.sheet');
+    if (!sheet) return;
+    const w = window.open('', '_blank');
+    w.document.write(`<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8">
+<style>
+body{font-family:"Hiragino Mincho ProN","MS Mincho",serif;background:#f0f0f0;margin:0;padding:20px;color:#333;}
+.sheet{background:white;width:210mm;padding:20mm;margin:0 auto;box-sizing:border-box;position:relative;overflow:hidden;box-shadow:0 0 10px rgba(0,0,0,.1);}
+.title{text-align:center;font-size:22px;font-weight:bold;text-decoration:underline;margin-bottom:8mm;letter-spacing:2px;}
+.header-flex{display:flex;justify-content:space-between;margin-bottom:5mm;font-size:14px;}
+.header-left{width:60%;}.header-right{width:38%;text-align:left;}
+.doctor-names{margin-top:5px;margin-left:10px;font-size:16px;}
+.sender-info{margin-top:5px;line-height:1.3;}
+.name-wrapper{position:relative;display:inline-block;}
+.hanko-img{position:absolute;top:-6px;right:-32px;width:36px;height:auto;opacity:.7;z-index:10;mix-blend-mode:multiply;}
+.sex-option{display:inline-block;width:1.5em;height:1.5em;line-height:1.5em;text-align:center;border-radius:50%;border:1px solid transparent;}
+.sex-option.selected{border-color:#000;font-weight:bold;}
+table{width:100%;border-collapse:collapse;margin-bottom:0;}
+th,td{border:1px solid #000;padding:4px 6px;vertical-align:top;font-size:14px;}
+th{background-color:#f5f5f5;text-align:center;white-space:nowrap;vertical-align:middle;}
+.col-label{width:90px;}
+.input-area{width:100%;border:none;font-family:"Hiragino Mincho ProN","MS Mincho",serif;font-size:14px;line-height:1.5;resize:none;outline:none;background:transparent;margin:0;padding:0;overflow:hidden;}
+.inline-input{border:none;border-bottom:1px dashed #aaa;font-family:"Hiragino Mincho ProN","MS Mincho",serif;font-size:inherit;outline:none;background:transparent;min-width:80px;}
+@media print{
+  @page{size:A4;margin:0;}
+  html,body{width:210mm;height:297mm;margin:0;padding:0;background:white;}
+  .sheet{margin:0;padding:20mm;box-shadow:none;width:210mm;height:297mm;}
+  .inline-input{border-bottom:none;}
+  .sex-option.selected{border-color:#000!important;-webkit-print-color-adjust:exact;}
+}
+</style></head><body>
+${sheet.outerHTML}
+<script>window.onload=function(){window.print();};<\/script>
+</body></html>`);
+    w.document.close();
+}
+
+// ===== 受診日モーダル =====
+function openVisitDateModal(docId, destKey) {
+    visitDateEditingDocId = docId;
+    visitDateEditingDest  = destKey;
+    visitDateInput.value = '';
+    visitDateModal.style.display = 'flex';
+    document.body.classList.add('modal-open');
+}
+
+function closeVisitDateModal() {
+    visitDateModal.style.display = 'none';
+    visitDateEditingDocId = null;
+    visitDateEditingDest  = null;
+    document.body.classList.remove('modal-open');
+}
+
+function saveVisitDate() {
+    if (!visitDateEditingDocId || !visitDateEditingDest || !visitDateInput.value) {
+        closeVisitDateModal();
+        return;
+    }
+    const parts = visitDateInput.value.split('-');
+    const mmdd = `${parts[1]}/${parts[2]}`;
+    db.collection('appointments').doc(visitDateEditingDocId).update({
+        [`referralStatus.${visitDateEditingDest}.visitDate`]: mmdd
+    })
+        .then(() => closeVisitDateModal())
+        .catch(err => { console.error(err); alert('保存に失敗しました'); });
 }

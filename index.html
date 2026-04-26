@@ -80,7 +80,11 @@
                         <th class="col-contract">契約番号</th>
                         <th class="col-phone">電話番号</th>
                         <th class="col-services">検査内容</th>
-                        <th class="col-actions">操作</th> 
+                        <th class="col-referral">紹介先</th>
+                        <th class="col-visitdate">受診日</th>
+                        <th class="col-received">受</th>
+                        <th class="col-completed">済</th>
+                        <th class="col-actions">操作</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -168,6 +172,29 @@
           </div>
         </div>
     </div>
+
+    <div id="shokaijyoModal" class="modal">
+      <div class="modal-content shokaijyo-modal-content">
+        <h3 id="shokaijyoModalTitle">紹介状</h3>
+        <div id="shokaijyoSheetContainer" class="shokaijyo-sheet-container"></div>
+        <div class="modal-actions" style="text-align: right; margin-top: 8px;">
+          <button id="saveShokaijyoBtn">保存</button>
+          <button id="printShokaijyoBtn">印刷</button>
+          <button id="closeShokaijyoBtn">閉じる</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="visitDateModal" class="modal">
+      <div class="modal-content" style="width: 280px;">
+        <h3>受診日の入力</h3>
+        <input type="date" id="visitDateInput" style="width: 100%; box-sizing: border-box; margin-top: 5px;">
+        <div class="modal-actions" style="text-align: right; margin-top: 12px;">
+          <button id="confirmVisitDateBtn">確定</button>
+          <button id="cancelVisitDateBtn">キャンセル</button>
+        </div>
+      </div>
+    </div>
     
 
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
@@ -175,6 +202,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-storage-compat.js"></script>
     
+    <script src="config.js"></script>
     <script src="script.js"></script>
 
 </body>
