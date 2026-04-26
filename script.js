@@ -1450,13 +1450,17 @@ function buildSheetHTML(patientData, destKey, saved, classification) {
     const defaultPurpose = items.length > 0 ? items.join('、') + 'の依頼' : '検査依頼';
 
     let defaultClinical = '';
-    if (destKey === 'ASBO' || destKey === 'KIN') {
+    if (destKey === 'ASBO') {
         defaultClinical = 'レントゲンは写真があれば特に読影は必要ないですが、写真の送付が困難であれば読影レポートをお願いします。';
     } else if (destKey === 'ANSHIN' && e.has_echo) {
         defaultClinical = '心エコーのレポートはLVEF(%), wall motion, wall thicknessに言及頂けると幸いです。';
     }
+    // KIN: defaultClinical は空のまま
 
-    const defaultMessage = 'いつもお世話になっております。\n結果をPDF (or CD)で頂けると幸いです。よろしくお願いいたします。';
+    let defaultMessage = 'いつもお世話になっております。\n結果をPDF (or CD)で頂けると幸いです。よろしくお願いいたします。';
+    if (destKey === 'KIN') {
+        defaultMessage = 'いつもお世話になっております。\n結果をメールで頂けると幸いです。よろしくお願いいたします。\nshiroys@gmail.com';
+    }
     const isFemale = patientData.isAgePink === true;
 
     const v = saved || {};
