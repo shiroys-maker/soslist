@@ -1302,8 +1302,11 @@ function determineReferralDests(services) {
     const dests = [];
     if (e.has_nasal) dests.push('ASBO');
     if (e.has_ortho) dests.push('KIN');
-    if (e.has_echo || (!e.has_nasal && (e.has_chest_xray || e.has_ecg))) dests.push('ANSHIN');
-    if (dests.length === 0 && (e.has_chest_xray || e.has_ecg)) dests.push('ASBO');
+    if (e.has_echo) dests.push('ANSHIN');
+    // 胸部XR・ECGはechoがなければASBo（nasalで既にASBoに入っていなければ追加）
+    if ((e.has_chest_xray || e.has_ecg) && !e.has_echo && !dests.includes('ASBO')) {
+        dests.push('ASBO');
+    }
     return dests.slice(0, 3);
 }
 
