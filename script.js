@@ -1267,7 +1267,10 @@ function saveServices() {
 
 // ===== 紹介先 分類ロジック =====
 function classifyServices(services) {
-    const arr = (services || []).map(s => s.replace(/\s*\(.*$/, '').trim());
+    // DBQ/Compensation はレントゲン検査依頼ではないので除外
+    const arr = (services || [])
+        .filter(s => !/DBQ|Compensation/i.test(s))
+        .map(s => s.replace(/\s*\(.*$/, '').trim());
     return {
         has_nasal:      arr.some(s => /NASAL|SINUS/i.test(s)),
         has_echo:       arr.some(s => /ECHO/i.test(s)),
