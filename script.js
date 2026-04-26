@@ -1303,9 +1303,12 @@ function determineReferralDests(services) {
     if (e.has_nasal) dests.push('ASBO');
     if (e.has_ortho) dests.push('KIN');
     if (e.has_echo) dests.push('ANSHIN');
-    // 胸部XR・ECGはechoがなければASBo（nasalで既にASBoに入っていなければ追加）
-    if ((e.has_chest_xray || e.has_ecg) && !e.has_echo && !dests.includes('ASBO')) {
-        dests.push('ASBO');
+    // KINがある場合、ecgなし・echoなしなら胸部XRはKINが担当 → ASBoは不要
+    const kinTakesChest = e.has_ortho && e.has_chest_xray && !e.has_ecg && !e.has_echo;
+    if (!e.has_echo && !dests.includes('ASBO')) {
+        if ((e.has_chest_xray && !kinTakesChest) || e.has_ecg) {
+            dests.push('ASBO');
+        }
     }
     return dests.slice(0, 3);
 }
