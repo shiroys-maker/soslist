@@ -464,7 +464,7 @@ function setupRealtimeListener() {
                   <tr data-id="${docId}" class="${rowClass}">
                       <td class="col-show show-toggle-cell">${checkmark}</td>
                       <td class="col-date date-cell">${displayDate}</td>
-                      <td class="col-name name-cell">${data.claimantName || ''}</td>
+                      <td class="col-name name-cell${data.notes ? '' : ' name-no-notes'}">${data.claimantName || ''}</td>
                       <td class="col-age ${ageCellClass}">${displayAge}</td>
                       <td class="col-contract">${data.contractNumber || ''}</td>
                       <td class="col-phone phone-cell">${data.japanCellPhone || ''}</td>

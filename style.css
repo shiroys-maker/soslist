@@ -179,6 +179,12 @@ button:active {
     color: #D81B60;
 }
 
+/* notes未記入の氏名セルは紫・ノーマルウェイト */
+.name-cell.name-no-notes {
+    color: #7b2fbe;
+    font-weight: normal;
+}
+
 .name-cell:hover, .services-cell:hover, .fee-cell:hover, .age-cell:hover, .phone-cell:hover {
     text-decoration: underline;
     cursor: pointer;
