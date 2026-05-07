@@ -1272,14 +1272,24 @@ function classifyServices(services) {
     const joined = (services || []).join(',');
     const stripped = joined.replace(/\([^)]*\)/g, '');
     const arr = stripped.split(',').map(s => s.trim()).filter(s => s.length > 0);
+    // "RIGHT HAND, LIMITED" のように体の部位 + LIMITED/COMPLETE のペアを整形外科レントゲンと判定
+    const FACIAL_HEAD = /CHEST|NASAL|SINUS|FACIAL|SKULL|CRANIAL|MANDIBLE|MAXILLA|ORBIT|ZYGOMA/i;
+    let has_ortho = arr.some(s => /COMPLETE|X[\s-]?RAY|XRAY|RADIOGRAPH/i.test(s) && !FACIAL_HEAD.test(s));
+    if (!has_ortho) {
+        for (let i = 0; i < arr.length - 1; i++) {
+            if (/^(LIMITED|COMPLETE)$/i.test(arr[i + 1]) && !FACIAL_HEAD.test(arr[i])) {
+                has_ortho = true;
+                break;
+            }
+        }
+    }
     return {
         has_nasal:      arr.some(s => /NASAL|SINUS/i.test(s)),
         has_facial:     arr.some(s => /FACIAL|SKULL|CRANIAL|MANDIBLE|MAXILLA|ORBIT|ZYGOMA/i.test(s)),
         has_echo:       arr.some(s => /ECHO/i.test(s)),
         has_chest_xray: arr.some(s => /CHEST/i.test(s)),
         has_ecg:        arr.some(s => /ECG|EKG/i.test(s)),
-        has_ortho:      arr.some(s => /COMPLETE|X[\s-]?RAY|XRAY|RADIOGRAPH/i.test(s) &&
-                                     !/CHEST|NASAL|SINUS|FACIAL|SKULL|CRANIAL|MANDIBLE|MAXILLA|ORBIT|ZYGOMA/i.test(s))
+        has_ortho
     };
 }
 
