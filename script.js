@@ -1274,11 +1274,12 @@ function classifyServices(services) {
     const arr = stripped.split(',').map(s => s.trim()).filter(s => s.length > 0);
     return {
         has_nasal:      arr.some(s => /NASAL|SINUS/i.test(s)),
+        has_facial:     arr.some(s => /FACIAL|SKULL|CRANIAL|MANDIBLE|MAXILLA|ORBIT|ZYGOMA/i.test(s)),
         has_echo:       arr.some(s => /ECHO/i.test(s)),
         has_chest_xray: arr.some(s => /CHEST/i.test(s)),
         has_ecg:        arr.some(s => /ECG|EKG/i.test(s)),
         has_ortho:      arr.some(s => /COMPLETE|X[\s-]?RAY|XRAY|RADIOGRAPH/i.test(s) &&
-                                     !/CHEST|NASAL|SINUS/i.test(s))
+                                     !/CHEST|NASAL|SINUS|FACIAL|SKULL|CRANIAL|MANDIBLE|MAXILLA|ORBIT|ZYGOMA/i.test(s))
     };
 }
 
@@ -1288,6 +1289,7 @@ function determineReferralDests(services, classification) {
     if (classification) {
         e = {
             has_nasal:      !!classification.has_nasal,
+            has_facial:     !!classification.has_facial,
             has_echo:       !!classification.has_echo,
             has_chest_xray: !!classification.has_chest_xray,
             has_ecg:        !!classification.has_ecg,
@@ -1297,7 +1299,7 @@ function determineReferralDests(services, classification) {
         e = classifyServices(services);
     }
     const dests = [];
-    if (e.has_nasal) dests.push('ASBO');
+    if (e.has_nasal || e.has_facial) dests.push('ASBO');
     if (e.has_ortho) dests.push('KIN');
     if (e.has_echo)  dests.push('ANSHIN');
     const kinTakesChest = e.has_ortho && e.has_chest_xray && !e.has_ecg && !e.has_echo;
@@ -1306,6 +1308,7 @@ function determineReferralDests(services, classification) {
             dests.push('ASBO');
         }
     }
+    // has_facial は既に ASBO 追加済み（上の has_nasal || has_facial 判定で処理）
     return dests.slice(0, 3);
 }
 
@@ -1315,7 +1318,7 @@ async function classifyServicesWithAI(services) {
     const joined = (services || []).join(',');
     const stripped = joined.replace(/\([^)]*\)/g, '');
     const arr = stripped.split(',').map(s => s.trim()).filter(s => s.length > 0);
-    if (arr.length === 0) return { ortho_xrays_jp: [], has_echo: false, has_chest_xray: false, has_nasal: false, has_ecg: false };
+    if (arr.length === 0) return { ortho_xrays_jp: [], has_echo: false, has_chest_xray: false, has_nasal: false, has_facial: false, has_ecg: false };
 
     const prompt = `以下は米国退役軍人の健康診断で依頼された検査サービスの一覧です（英語）。
 各項目を分類して、JSON形式で返してください。
@@ -1327,11 +1330,14 @@ ${arr.map((s, i) => `${i + 1}. ${s}`).join('\n')}
 {
   "has_chest_xray": true/false,
   "has_nasal": true/false,
+  "has_facial": true/false,
   "has_echo": true/false,
   "has_ecg": true/false,
   "ortho_xrays_jp": []
 }
-★ortho_xrays_jp: "COMPLETE","X-RAY","XRAY","RADIOGRAPH"などのキーワードがある整形外科レントゲンのみ。部位名を日本語で（例:"右膝関節レントゲン3方向"）。胸部・鼻骨は除く。
+★has_nasal: 鼻骨・副鼻腔レントゲン（Nasal bone, Sinus など）
+★has_facial: 顔面骨・頭蓋骨レントゲン（Facial bone, Skull, Mandible, Orbit, Zygoma など）。has_nasalとは別にカウント。
+★ortho_xrays_jp: 整形外科レントゲンのみ（四肢・脊椎など）。部位名を日本語で（例:"右膝関節レントゲン2方向"）。胸部・鼻骨・顔面骨・頭蓋骨は除く。
 
 JSONのみ返してください。`;
 
@@ -1358,6 +1364,7 @@ JSONのみ返してください。`;
             has_echo:       !!json.has_echo,
             has_chest_xray: !!json.has_chest_xray,
             has_nasal:      !!json.has_nasal,
+            has_facial:     !!json.has_facial,
             has_ecg:        !!json.has_ecg
         };
     } catch (e) {
@@ -1367,6 +1374,7 @@ JSONのみ返してください。`;
             has_echo:       arr.some(s => /echo/i.test(s)),
             has_chest_xray: arr.some(s => /chest/i.test(s)),
             has_nasal:      arr.some(s => /nasal/i.test(s)),
+            has_facial:     arr.some(s => /FACIAL|SKULL|CRANIAL|MANDIBLE|MAXILLA|ORBIT|ZYGOMA/i.test(s)),
             has_ecg:        arr.some(s => /ecg|ekg/i.test(s))
         };
     }
@@ -1442,6 +1450,7 @@ function buildSheetHTML(patientData, destKey, saved, classification) {
     const items = [];
     if (destKey === 'ASBO') {
         if (e.has_nasal)      items.push('鼻骨レントゲン(3方向)');
+        if (e.has_facial)     items.push('顔面骨・頭蓋骨レントゲン');
         if (e.has_chest_xray) items.push('胸部レントゲン2方向');
         if (e.has_ecg)        items.push('心電図');
     } else if (destKey === 'KIN') {
@@ -1585,6 +1594,7 @@ function openShokaijyoModal(docId, destKey) {
                 const items = [];
                 if (destKey === 'ASBO') {
                     if (classification.has_nasal)      items.push('鼻骨レントゲン(3方向)');
+                    if (classification.has_facial)     items.push('顔面骨・頭蓋骨レントゲン');
                     if (classification.has_chest_xray) items.push('胸部レントゲン2方向');
                     if (classification.has_ecg)        items.push('心電図');
                 } else if (destKey === 'KIN') {
