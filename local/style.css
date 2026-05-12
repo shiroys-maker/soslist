@@ -169,15 +169,10 @@ button:active {
 /* ======== 新しいモーダル表示用のスタイル ======== */
 
 /* クリック可能な氏名セルの見た目 */
-.name-cell, .age-cell {
+.name-cell, .services-cell, .age-cell {
     cursor: pointer;
     color: #0056b3;
     font-weight: bold;
-}
-
-.services-cell {
-    color: inherit;
-    font-weight: normal;
 }
 
 .age-cell.pink {
@@ -190,7 +185,7 @@ button:active {
     font-weight: normal;
 }
 
-.name-cell:hover, .fee-cell:hover, .age-cell:hover, .phone-cell:hover {
+.name-cell:hover, .services-cell:hover, .fee-cell:hover, .age-cell:hover, .phone-cell:hover {
     text-decoration: underline;
     cursor: pointer;
 }

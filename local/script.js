@@ -49,6 +49,11 @@ const searchButton = document.getElementById('searchButton');
 const searchResultsModal = document.getElementById('searchResultsModal');
 const searchResultsList = document.getElementById('searchResultsList');
 const closeSearchResultsButton = document.getElementById('closeSearchResultsButton');
+// 検査内容編集モーダル用の要素取得
+const editServicesModal = document.getElementById('editServicesModal');
+const servicesTextarea = document.getElementById('servicesTextarea');
+const confirmServicesEditBtn = document.getElementById('confirmServicesEdit');
+const cancelServicesEditBtn = document.getElementById('cancelServicesEdit');
 // 電話番号編集モーダル用の要素取得
 const editPhoneModal = document.getElementById('editPhoneModal');
 const phoneInput = document.getElementById('phoneInput');
@@ -61,10 +66,6 @@ const shokaijyoModalTitle     = document.getElementById('shokaijyoModalTitle');
 const saveShokaijyoBtn        = document.getElementById('saveShokaijyoBtn');
 const printShokaijyoBtn       = document.getElementById('printShokaijyoBtn');
 const closeShokaijyoBtn       = document.getElementById('closeShokaijyoBtn');
-const detailsModalLabel       = document.querySelector('label[for="notesTextarea"]');
-const DETAILS_EDITABLE        = false;
-const SERVICES_EDITABLE       = false;
-const SHOKAIJO_EDITABLE       = false;
 // 受診日モーダル
 const visitDateModal      = document.getElementById('visitDateModal');
 const visitDateInput      = document.getElementById('visitDateInput');
@@ -239,6 +240,10 @@ tableBody.addEventListener('click', (e) => {
         openEditModal(docId);
         return;
     }
+    if (target.classList.contains('services-cell')) {
+        openServicesEditModal(docId);
+        return;
+    }
     if (target.classList.contains('referral-dest')) {
         const destKey = target.dataset.dest;
         openShokaijyoModal(docId, destKey);
@@ -327,6 +332,8 @@ cancelEditBtn.addEventListener('click', closeEditModal);
 saveNotesButton.addEventListener('click', saveNotes);
 closeDetailsModalButton.addEventListener('click', closeDetailsModal);
 printInvoiceButton.addEventListener('click', printInvoice);
+confirmServicesEditBtn.addEventListener('click', saveServices);
+cancelServicesEditBtn.addEventListener('click', closeServicesEditModal);
 confirmPhoneEditBtn.addEventListener('click', savePhone);
 cancelPhoneEditBtn.addEventListener('click', closePhoneEditModal);
 saveShokaijyoBtn.addEventListener('click', saveShokaijyo);
@@ -452,7 +459,6 @@ function setupRealtimeListener() {
               const age = calculateAge(data.dateOfBirth);
               const displayAge = age ? `${age}` : '不明';
               const ageCellClass = data.isAgePink ? 'age-cell pink' : 'age-cell';
-              const servicesCellClass = SERVICES_EDITABLE ? 'col-services services-cell' : 'col-services';
 
               tableRowsHTML += `
                   <tr data-id="${docId}" class="${rowClass}">
@@ -462,7 +468,7 @@ function setupRealtimeListener() {
                       <td class="col-age ${ageCellClass}">${displayAge}</td>
                       <td class="col-contract">${data.contractNumber || ''}</td>
                       <td class="col-phone phone-cell">${data.japanCellPhone || ''}</td>
-                      <td class="${servicesCellClass}">${displayServicesText}</td>
+                      <td class="col-services services-cell">${displayServicesText}</td>
                       <td class="col-referral">${referralHTML}</td>
                       <td class="col-visitdate visitdate-cell">${visitdateHTML}</td>
                       <td class="col-received received-cell">${receivedHTML}</td>
@@ -716,10 +722,6 @@ function openDetailsModal(docId) {
       </div>
     `;
     notesTextarea.value = data.notes || '';
-    notesTextarea.readOnly = !DETAILS_EDITABLE;
-    notesTextarea.placeholder = DETAILS_EDITABLE ? '1500文字程度まで入力可能...' : '';
-    if (detailsModalLabel) detailsModalLabel.textContent = DETAILS_EDITABLE ? 'メモ (所見など):' : 'メモ:';
-    saveNotesButton.style.display = DETAILS_EDITABLE ? '' : 'none';
     detailsModal.dataset.editingId = docId;
     detailsModal.style.display = 'flex';
     document.body.classList.add('modal-open');
@@ -980,6 +982,28 @@ function generateNewInvoiceHTML(audiologyRecords, dayRateList, from, to) {
     newWindow.document.close();
 }
 
+function openServicesEditModal(docId) {
+    db.collection('appointments').doc(docId).get().then(doc => {
+        if (!doc.exists) {
+            alert('データが見つかりません');
+            return;
+        }
+        const data = doc.data();
+        const currentServices = (data.services || []).join(', ');
+        servicesTextarea.value = currentServices;
+        
+        editingDocId = docId;
+        editServicesModal.style.display = 'flex';
+        document.body.classList.add('modal-open');
+    });
+}
+
+function closeServicesEditModal() {
+    editServicesModal.style.display = 'none';
+    editingDocId = null;
+    document.body.classList.remove('modal-open');
+}
+
 function openPhoneEditModal(docId) {
     db.collection('appointments').doc(docId).get().then(doc => {
         if (!doc.exists) {
@@ -1016,6 +1040,27 @@ function savePhone() {
     .catch(error => {
         console.error('電話番号の更新エラー:', error);
         alert('電話番号の更新に失敗しました。');
+    });
+}
+
+function saveServices() {
+    if (!editingDocId) return;
+
+    const newServicesString = servicesTextarea.value;
+    const newServicesArray = newServicesString.split(',')
+                                            .map(s => s.trim())
+                                            .filter(s => s !== '');
+
+    db.collection('appointments').doc(editingDocId).update({
+        services: newServicesArray
+    })
+    .then(() => {
+        console.log('検査内容を更新しました。');
+        closeServicesEditModal();
+    })
+    .catch(error => {
+        console.error('検査内容の更新エラー:', error);
+        alert('検査内容の更新に失敗しました。');
     });
 }
 
@@ -1189,7 +1234,7 @@ function shokaijyoSelectSex(el) {
     el.classList.add('selected');
 }
 
-function buildSheetHTML(patientData, destKey, saved, classification, editable = true) {
+function buildSheetHTML(patientData, destKey, saved, classification) {
     const dest = REFERRAL_FULL[destKey];
     const today = new Date();
     const reiwa = today.getFullYear() - 2018;
@@ -1259,10 +1304,6 @@ function buildSheetHTML(patientData, destKey, saved, classification, editable = 
 
     const maleClass   = gender === 'M' ? 'sex-option selected' : 'sex-option';
     const femaleClass = gender === 'F' ? 'sex-option selected' : 'sex-option';
-    const readOnlyAttr = editable ? '' : ' readonly';
-    const sexSelectorHTML = editable
-        ? `<span class="${maleClass}" data-gender="M" onclick="shokaijyoSelectSex(this)">男</span>・<span class="${femaleClass}" data-gender="F" onclick="shokaijyoSelectSex(this)">女</span>`
-        : `<span class="${maleClass}" data-gender="M">男</span>・<span class="${femaleClass}" data-gender="F">女</span>`;
 
     return `
     <div class="sheet">
@@ -1278,7 +1319,7 @@ function buildSheetHTML(patientData, destKey, saved, classification, editable = 
                     紹介元医療機関の所在地：${escapeHtml(SHOKAIJO_SENDER.address)}<br>
                     名称：<strong>${escapeHtml(SHOKAIJO_SENDER.name)}</strong><br>
                     電話番号：${escapeHtml(SHOKAIJO_SENDER.tel)}<br>
-                    医師氏名：<span class="name-wrapper"><strong>${escapeHtml(SHOKAIJO_SENDER.doctor)}</strong><img src="stamp.png" class="hanko-img" alt="印" onerror="this.style.display='none'"></span>
+                    医師氏名：<span class="name-wrapper"><strong>${escapeHtml(SHOKAIJO_SENDER.doctor)}</strong><img src="../stamp.png" class="hanko-img" alt="印" onerror="this.style.display='none'"></span>
                 </div>
             </div>
         </div>
@@ -1287,29 +1328,29 @@ function buildSheetHTML(patientData, destKey, saved, classification, editable = 
             <tr>
                 <th class="col-label">患者氏名</th>
                 <td style="font-size:1.05em;">
-                    <strong><input class="inline-input" style="width:95%;font-weight:bold;" name="name_kana" value="${escapeHtml(kana)}" placeholder="カタカナ氏名"${readOnlyAttr}></strong><br>
-                    <input class="inline-input" style="width:90%;" name="name_en" value="${escapeHtml(en)}" placeholder="English Name"${readOnlyAttr}>&nbsp;殿
+                    <strong><input class="inline-input" style="width:95%;font-weight:bold;" name="name_kana" value="${escapeHtml(kana)}" placeholder="カタカナ氏名"></strong><br>
+                    <input class="inline-input" style="width:90%;" name="name_en" value="${escapeHtml(en)}" placeholder="English Name">&nbsp;殿
                 </td>
                 <th style="text-align:center;">性別</th>
                 <td style="text-align:center;">
-                    ${sexSelectorHTML}
+                    <span class="${maleClass}" data-gender="M" onclick="shokaijyoSelectSex(this)">男</span>・<span class="${femaleClass}" data-gender="F" onclick="shokaijyoSelectSex(this)">女</span>
                 </td>
             </tr>
             <tr>
                 <th class="col-label">生年月日</th>
                 <td style="white-space:nowrap;">
-                    <input class="inline-input" name="dob" value="${escapeHtml(dob)}" style="width:120px;"${readOnlyAttr}>（<input class="inline-input" name="age" value="${escapeHtml(age)}" style="width:34px;text-align:right;"${readOnlyAttr}>歳）
+                    <input class="inline-input" name="dob" value="${escapeHtml(dob)}" style="width:120px;">（<input class="inline-input" name="age" value="${escapeHtml(age)}" style="width:34px;text-align:right;">歳）
                 </td>
                 <th style="text-align:center;">電話番号</th>
-                <td><input class="inline-input" name="phone" value="${escapeHtml(phone)}" style="width:95%;"${readOnlyAttr}></td>
+                <td><input class="inline-input" name="phone" value="${escapeHtml(phone)}" style="width:95%;"></td>
             </tr>
         </table>
         <table style="margin-top:10px;">
-            <tr><th class="col-label">傷病名</th><td><textarea class="input-area" rows="1" name="injury"${readOnlyAttr}>${escapeHtml(injury)}</textarea></td></tr>
-            <tr><th class="col-label">紹介目的</th><td><textarea class="input-area" rows="3" name="purpose"${readOnlyAttr}>${escapeHtml(purpose)}</textarea></td></tr>
-            <tr><th class="col-label">既往歴</th><td><textarea class="input-area" rows="2" name="history"${readOnlyAttr}>${escapeHtml(history)}</textarea></td></tr>
-            <tr><th class="col-label">病状経過及び<br>検査結果</th><td><textarea class="input-area" rows="12" name="clinical"${readOnlyAttr}>${escapeHtml(clinical)}</textarea></td></tr>
-            <tr><th class="col-label">通信本文</th><td><textarea class="input-area" rows="3" name="message"${readOnlyAttr}>${escapeHtml(message)}</textarea></td></tr>
+            <tr><th class="col-label">傷病名</th><td><textarea class="input-area" rows="1" name="injury">${escapeHtml(injury)}</textarea></td></tr>
+            <tr><th class="col-label">紹介目的</th><td><textarea class="input-area" rows="3" name="purpose">${escapeHtml(purpose)}</textarea></td></tr>
+            <tr><th class="col-label">既往歴</th><td><textarea class="input-area" rows="2" name="history">${escapeHtml(history)}</textarea></td></tr>
+            <tr><th class="col-label">病状経過及び<br>検査結果</th><td><textarea class="input-area" rows="12" name="clinical">${escapeHtml(clinical)}</textarea></td></tr>
+            <tr><th class="col-label">通信本文</th><td><textarea class="input-area" rows="3" name="message">${escapeHtml(message)}</textarea></td></tr>
         </table>
     </div>`;
 }
@@ -1325,14 +1366,11 @@ function openShokaijyoModal(docId, destKey) {
 
         // モーダルを即座に表示（保存済みデータがあればそのまま、なければ正規表現でデフォルト表示）
         shokaijyoModalTitle.textContent = `紹介状 — ${REFERRAL_FULL[destKey].name}`;
-        shokaijyoSheetContainer.innerHTML = buildSheetHTML(data, destKey, saved || null, null, SHOKAIJO_EDITABLE);
+        shokaijyoSheetContainer.innerHTML = buildSheetHTML(data, destKey, saved || null, null);
         shokaijyoEditingDocId = docId;
         shokaijyoEditingDest  = destKey;
         shokaijyoModal.style.display = 'flex';
         document.body.classList.add('modal-open');
-        saveShokaijyoBtn.style.display = SHOKAIJO_EDITABLE ? '' : 'none';
-        printShokaijyoBtn.style.display = '';
-        if (!SHOKAIJO_EDITABLE) return;
 
         // 英語名の組み立て
         const nameParts = (data.claimantName || '').split(',').map(s => s.trim());

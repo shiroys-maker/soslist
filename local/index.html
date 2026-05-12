@@ -3,13 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SOS Appointment Viewer</title>
+    <title>SOS Appointment Viewer Local</title>
     <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.webmanifest">
+    <meta name="theme-color" content="#5b2b74">
     <style>
         /* メインアプリを最初は非表示にする */
         #main-app-container { display: none; }
         /* 日付セルにカーソルを合わせるとクリック可能に見せる */
         .date-cell:hover { cursor: pointer; background-color: #f0f8ff; }
+        /* 検査内容セルにカーソルを合わせるとクリック可能に見せる */
+        .services-cell:hover { cursor: pointer; text-decoration: underline; }
     </style>
 </head>
 <body>
@@ -24,7 +28,7 @@
 
     <div id="main-app-container">
         <h1>
-            Nirai Seaside Clinic Appointments
+            Nirai Seaside Clinic Appointments (Local)
             <div id="auth-status">
                 <p>ログイン中: <span id="userEmail"></span></p>
                 <button id="logoutButton">ログアウト</button>
@@ -123,8 +127,8 @@
         <h3>予約詳細</h3>
         <div id="details-content-container">
             </div>
-        <label for="notesTextarea">メモ:</label>
-        <textarea id="notesTextarea" placeholder=""></textarea>
+        <label for="notesTextarea">メモ (所見など):</label>
+        <textarea id="notesTextarea" placeholder="1500文字程度まで入力可能..."></textarea>
         <div class="modal-actions">
             <button id="saveNotesButton">メモを保存</button>
             <button id="closeDetailsModalButton">閉じる</button>
@@ -145,6 +149,19 @@
       </div>
     </div>
     
+    <div id="editServicesModal" class="modal">
+        <div class="modal-content">
+          <h3>検査内容の編集</h3>
+          <label for="servicesTextarea">検査内容 (カンマ区切りで入力):</label>
+          <textarea id="servicesTextarea" rows="5" style="width: 100%; box-sizing: border-box; margin-top: 5px;"></textarea>
+          <br><br>
+          <div class="modal-actions" style="text-align: right;">
+            <button id="confirmServicesEdit">更新</button>
+            <button id="cancelServicesEdit">キャンセル</button>
+          </div>
+        </div>
+    </div>
+
     <div id="editPhoneModal" class="modal">
         <div class="modal-content">
           <h3>電話番号の編集</h3>
@@ -186,6 +203,15 @@
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-storage-compat.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/local/sw.js').catch(error => {
+                    console.error('Service worker registration failed:', error);
+                });
+            });
+        }
+    </script>
     
     <script src="config.js"></script>
     <script src="script.js"></script>
