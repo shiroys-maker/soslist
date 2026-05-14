@@ -1488,11 +1488,8 @@ function saveShokaijyo() {
     .catch(err => { console.error(err); alert('保存に失敗しました'); });
 }
 
-function printShokaijyo() {
-    const sheet = shokaijyoSheetContainer.querySelector('.sheet');
-    if (!sheet) return;
-    const w = window.open('', '_blank');
-    w.document.write(`<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8">
+function buildShokaijyoPrintHTML(sheetHTML) {
+    return `<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8">
 <style>
 body{font-family:"Hiragino Mincho ProN","MS Mincho",serif;background:#f0f0f0;margin:0;padding:20px;color:#333;}
 .sheet{background:white;width:210mm;padding:20mm;margin:0 auto;box-sizing:border-box;position:relative;overflow:hidden;box-shadow:0 0 10px rgba(0,0,0,.1);}
@@ -1519,9 +1516,31 @@ th{background-color:#f5f5f5;text-align:center;white-space:nowrap;vertical-align:
   .sex-option.selected{border-color:#000!important;-webkit-print-color-adjust:exact;}
 }
 </style></head><body>
-${sheet.outerHTML}
+${sheetHTML}
 <script>window.onload=function(){window.print();};<\/script>
-</body></html>`);
+</body></html>`;
+}
+
+function printShokaijyo() {
+    const sheet = shokaijyoSheetContainer.querySelector('.sheet');
+    if (!sheet) return;
+
+    const printHTML = buildShokaijyoPrintHTML(sheet.outerHTML);
+    const nativePrintHandler = window.webkit?.messageHandlers?.printHTML;
+    if (nativePrintHandler) {
+        nativePrintHandler.postMessage({
+            html: printHTML,
+            title: '紹介状'
+        });
+        return;
+    }
+
+    const w = window.open('', '_blank');
+    if (!w) {
+        alert('印刷ウインドウを開けませんでした。ポップアップ設定を確認してください。');
+        return;
+    }
+    w.document.write(printHTML);
     w.document.close();
 }
 
