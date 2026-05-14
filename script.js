@@ -27,6 +27,8 @@ const loginError = document.getElementById('loginError');
 const userEmailSpan = document.getElementById('userEmail');
 const tableBody = document.querySelector("#appointmentsTable tbody");
 const dateFilter = document.getElementById('dateFilter');
+const prevDateButton = document.getElementById('prevDateButton');
+const nextDateButton = document.getElementById('nextDateButton');
 // 日時編集モーダル
 const editModal = document.getElementById('editModal');
 const dateSelect = document.getElementById('dateSelect');
@@ -213,6 +215,14 @@ dateFilter.addEventListener('change', () => {
     setupRealtimeListener();
 });
 
+prevDateButton?.addEventListener('click', () => {
+    jumpToAdjacentReservationDate(-1);
+});
+
+nextDateButton?.addEventListener('click', () => {
+    jumpToAdjacentReservationDate(1);
+});
+
 tableBody.addEventListener('click', (e) => {
     const target = e.target;
     const tr = target.closest('tr');
@@ -355,6 +365,71 @@ activityEvents.forEach(eventName => { window.addEventListener(eventName, resetLo
 
 function resetLogoutTimer() {
     startLogoutTimer();
+}
+
+function formatDateInputValue(dateObj) {
+    const year = dateObj.getFullYear();
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const day = String(dateObj.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function normalizeAppointmentDateForDisplay(appointment) {
+    if (!appointment?.appointmentDateTime) {
+        return null;
+    }
+
+    const dateObj = appointment.appointmentDateTime.toDate();
+    const normalizedDateObj = new Date(dateObj);
+    const transitionTimestamp = new Date('2025-10-26T00:00:00+09:00').getTime();
+    const processedAtTimestamp = appointment.processedAt ? appointment.processedAt.toDate().getTime() : 0;
+
+    if (processedAtTimestamp > 0 && processedAtTimestamp < transitionTimestamp) {
+        normalizedDateObj.setHours(normalizedDateObj.getHours() - 9);
+    }
+
+    return normalizedDateObj;
+}
+
+async function jumpToAdjacentReservationDate(direction) {
+    if (!dateFilter.value) {
+        return;
+    }
+
+    const currentDate = new Date(`${dateFilter.value}T00:00:00`);
+    if (Number.isNaN(currentDate.getTime())) {
+        return;
+    }
+
+    const startOfDay = new Date(`${dateFilter.value}T00:00:00+09:00`);
+    const endOfDay = new Date(`${dateFilter.value}T23:59:59.999+09:00`);
+    const isPrevious = direction < 0;
+    const comparisonOperator = isPrevious ? '<' : '>';
+    const boundaryDate = isPrevious ? startOfDay : endOfDay;
+    const sortDirection = isPrevious ? 'desc' : 'asc';
+
+    try {
+        const querySnapshot = await db.collection("appointments")
+            .where("appointmentDateTime", comparisonOperator, boundaryDate)
+            .orderBy("appointmentDateTime", sortDirection)
+            .limit(1)
+            .get();
+
+        if (querySnapshot.empty) {
+            return;
+        }
+
+        const targetAppointment = querySnapshot.docs[0].data();
+        const targetDate = normalizeAppointmentDateForDisplay(targetAppointment);
+        if (!targetDate) {
+            return;
+        }
+
+        dateFilter.value = formatDateInputValue(targetDate);
+        dateFilter.dispatchEvent(new Event('change'));
+    } catch (error) {
+        console.error('予約日ジャンプエラー:', error);
+    }
 }
 
 function setupRealtimeListener() {

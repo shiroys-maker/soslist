@@ -147,6 +147,13 @@ button:active {
     gap: 10px;
 }
 
+.date-nav-button {
+    min-width: 30px;
+    padding: 4px 8px;
+    line-height: 1;
+    font-size: 12px;
+}
+
 .invoice-area h2 {
     font-size: 1em; /* labelと同じサイズに */
     font-weight: normal; /* labelと同じ太さに */
