@@ -70,6 +70,7 @@ const SHOKAIJO_EDITABLE       = false;
 // 受診日モーダル
 const visitDateModal      = document.getElementById('visitDateModal');
 const visitDateInput      = document.getElementById('visitDateInput');
+const visitTimeInput      = document.getElementById('visitTimeInput');
 const confirmVisitDateBtn = document.getElementById('confirmVisitDateBtn');
 const cancelVisitDateBtn  = document.getElementById('cancelVisitDateBtn');
 
@@ -1545,11 +1546,65 @@ function printShokaijyo() {
 }
 
 // ===== 受診日モーダル =====
+function parseVisitDateForModal(rawVisitDate, appointmentDateTime) {
+    const defaultTime = '09:00';
+    const appointmentYear = appointmentDateTime?.toDate
+        ? appointmentDateTime.toDate().getFullYear()
+        : new Date().getFullYear();
+    const trimmed = (rawVisitDate || '').trim();
+
+    if (!trimmed) {
+        return { dateValue: '', timeValue: defaultTime };
+    }
+
+    const slashMatch = trimmed.match(/^(\d{2})\/(\d{2})(?:\s+(\d{2}:\d{2}))?$/);
+    if (slashMatch) {
+        const [, month, day, time] = slashMatch;
+        return {
+            dateValue: `${appointmentYear}-${month}-${day}`,
+            timeValue: time || defaultTime
+        };
+    }
+
+    const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})(?:\s+(\d{2}:\d{2}))?$/);
+    if (isoMatch) {
+        const [, year, month, day, time] = isoMatch;
+        return {
+            dateValue: `${year}-${month}-${day}`,
+            timeValue: time || defaultTime
+        };
+    }
+
+    return { dateValue: '', timeValue: defaultTime };
+}
+
 function openVisitDateModal(docId) {
     visitDateEditingDocId = docId;
     visitDateInput.value = '';
-    visitDateModal.style.display = 'flex';
-    document.body.classList.add('modal-open');
+    if (visitTimeInput) {
+        visitTimeInput.value = '09:00';
+    }
+
+    db.collection('appointments').doc(docId).get().then(doc => {
+        if (!doc.exists) {
+            visitDateModal.style.display = 'flex';
+            document.body.classList.add('modal-open');
+            return;
+        }
+
+        const data = doc.data() || {};
+        const parsed = parseVisitDateForModal(data.visitDate || '', data.appointmentDateTime || null);
+        visitDateInput.value = parsed.dateValue;
+        if (visitTimeInput) {
+            visitTimeInput.value = parsed.timeValue;
+        }
+        visitDateModal.style.display = 'flex';
+        document.body.classList.add('modal-open');
+    }).catch(err => {
+        console.error(err);
+        visitDateModal.style.display = 'flex';
+        document.body.classList.add('modal-open');
+    });
 }
 
 function closeVisitDateModal() {
@@ -1563,9 +1618,13 @@ function saveVisitDate() {
         closeVisitDateModal();
         return;
     }
+
     const parts = visitDateInput.value.split('-');
     const mmdd = `${parts[1]}/${parts[2]}`;
-    db.collection('appointments').doc(visitDateEditingDocId).update({ visitDate: mmdd })
+    const timeValue = visitTimeInput?.value || '09:00';
+    const visitDateValue = `${mmdd} ${timeValue}`;
+
+    db.collection('appointments').doc(visitDateEditingDocId).update({ visitDate: visitDateValue })
         .then(() => closeVisitDateModal())
         .catch(err => { console.error(err); alert('保存に失敗しました'); });
 }

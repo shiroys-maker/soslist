@@ -175,7 +175,10 @@
     <div id="visitDateModal" class="modal">
       <div class="modal-content" style="width: 280px;">
         <h3>受診日の入力</h3>
+        <label for="visitDateInput">日付</label>
         <input type="date" id="visitDateInput" style="width: 100%; box-sizing: border-box; margin-top: 5px;">
+        <label for="visitTimeInput" style="display:block; margin-top: 10px;">時刻</label>
+        <input type="time" id="visitTimeInput" value="09:00" step="300" style="width: 100%; box-sizing: border-box; margin-top: 5px;">
         <div class="modal-actions" style="text-align: right; margin-top: 12px;">
           <button id="confirmVisitDateBtn">確定</button>
           <button id="cancelVisitDateBtn">キャンセル</button>
