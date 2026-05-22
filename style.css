@@ -187,6 +187,10 @@ button:active {
     color: #0056b3;
 }
 
+.contract-cell:hover {
+    text-decoration: underline;
+}
+
 .services-cell {
     color: inherit;
     font-weight: normal;
