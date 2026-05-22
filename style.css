@@ -182,6 +182,11 @@ button:active {
     font-weight: bold;
 }
 
+.contract-cell {
+    cursor: pointer;
+    color: #0056b3;
+}
+
 .services-cell {
     color: inherit;
     font-weight: normal;

@@ -273,8 +273,9 @@ tableBody.addEventListener('click', (e) => {
         });
         return;
     }
-    if (target.classList.contains('view-pdf-btn')) {
+    if (target.classList.contains('col-contract')) {
         handleViewPdf(docId);
+        return;
     }
     if (target.classList.contains('phone-cell')) {
         openPhoneEditModal(docId);
@@ -531,16 +532,13 @@ function setupRealtimeListener() {
                       <td class="col-date date-cell">${displayDate}</td>
                       <td class="col-name name-cell${data.notes ? '' : ' name-no-notes'}">${data.claimantName || ''}</td>
                       <td class="col-age ${ageCellClass}">${displayAge}</td>
-                      <td class="col-contract">${data.contractNumber || ''}</td>
+                      <td class="col-contract contract-cell">${data.contractNumber || ''}</td>
                       <td class="col-phone phone-cell">${data.japanCellPhone || ''}</td>
                       <td class="${servicesCellClass}">${displayServicesText}</td>
                       <td class="col-referral">${referralHTML}</td>
                       <td class="col-visitdate visitdate-cell">${visitdateHTML}</td>
                       <td class="col-received received-cell">${receivedHTML}</td>
                       <td class="col-completed completed-cell">${completedHTML}</td>
-                      <td class="col-actions">
-                        <button class="view-pdf-btn">PDF</button>
-                      </td>
                   </tr>`;
               previousDateStr = currentDateStr;
           });
@@ -595,6 +593,11 @@ function tryNextPath(paths, index, originalFileName) {
     storage.ref(currentPath).getDownloadURL()
         .then(url => {
             console.log("PDF見つかりました:", currentPath);
+            const nativeOpenHandler = window.webkit?.messageHandlers?.openExternalURL;
+            if (nativeOpenHandler) {
+                nativeOpenHandler.postMessage({ url });
+                return;
+            }
             window.open(url, '_blank');
         })
         .catch(error => {
