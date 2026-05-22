@@ -297,11 +297,6 @@ tableBody.addEventListener('dblclick', (e) => {
     const docId = tr.dataset.id;
     if (!docId) return;
 
-    if (target.classList.contains('delete-btn')) {
-        if (confirm('このデータを本当に削除しますか？')) {
-            db.collection('appointments').doc(docId).delete();
-        }
-    }
 });
 
 confirmEditBtn.addEventListener('click', () => {
@@ -545,7 +540,6 @@ function setupRealtimeListener() {
                       <td class="col-completed completed-cell">${completedHTML}</td>
                       <td class="col-actions">
                         <button class="view-pdf-btn">PDF</button>
-                        <button class="delete-btn">削除</button>
                       </td>
                   </tr>`;
               previousDateStr = currentDateStr;
