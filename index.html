@@ -69,6 +69,15 @@
                     <button id="printInvoiceButton">印刷</button>
                 </div>
             </div>
+            <div class="summary-area">
+                <h2>Summary</h2>
+                <div class="summary-controls">
+                    <button type="button" id="summaryPrevDateButton" class="date-nav-button" aria-label="1日前">&#9664;</button>
+                    <input type="date" id="summaryDateInput">
+                    <button type="button" id="summaryNextDateButton" class="date-nav-button" aria-label="1日後">&#9654;</button>
+                    <button type="button" id="showSummaryButton">表示</button>
+                </div>
+            </div>
     </div>
         <div class="data-section">
             <table id="appointmentsTable">
@@ -182,6 +191,17 @@
         <div class="modal-actions" style="text-align: right; margin-top: 12px;">
           <button id="confirmVisitDateBtn">確定</button>
           <button id="cancelVisitDateBtn">キャンセル</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="summaryModal" class="modal">
+      <div class="modal-content summary-modal-content">
+        <h3 id="summaryModalTitle">Summary</h3>
+        <div id="summaryModalMeta" class="summary-modal-meta"></div>
+        <div id="summaryModalBody" class="summary-modal-body"></div>
+        <div class="modal-actions" style="text-align: right; margin-top: 12px;">
+          <button id="closeSummaryModalButton">閉じる</button>
         </div>
       </div>
     </div>

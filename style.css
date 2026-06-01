@@ -141,7 +141,7 @@ button:active {
     gap: 10px;
 }
 
-.invoice-area, .date-filter-area, .search-area {
+.invoice-area, .summary-area, .date-filter-area, .search-area {
     display: flex;
     align-items: center;
     gap: 10px;
@@ -154,7 +154,7 @@ button:active {
     font-size: 12px;
 }
 
-.invoice-area h2 {
+.invoice-area h2, .summary-area h2 {
     font-size: 1em; /* labelと同じサイズに */
     font-weight: normal; /* labelと同じ太さに */
     margin: 0; /* 不要なマージンを削除 */
@@ -291,6 +291,35 @@ button:active {
     width: 400px;
 }
 
+.summary-modal-content {
+    width: 80%;
+    max-width: 1100px;
+    text-align: left;
+}
+
+.summary-modal-meta {
+    color: #6b7280;
+    margin-bottom: 16px;
+}
+
+.summary-modal-body {
+    max-height: 70vh;
+    overflow-y: auto;
+    line-height: 1.75;
+}
+
+.summary-modal-body h1,
+.summary-modal-body h2,
+.summary-modal-body h3 {
+    color: #4c1d95;
+}
+
+.summary-modal-body code {
+    background: #f3f4f6;
+    padding: 2px 6px;
+    border-radius: 6px;
+}
+
  /* 詳細表示モーダル(#detailsModal)のコンテンツ部分のみサイズを調整 */
     #detailsModal .modal-content {
         width: 80%;
@@ -307,13 +336,21 @@ button:active {
     gap: 10px;
 }
 
+.summary-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
 .invoice-controls label {
     font-weight: bold;
 }
-.invoice-controls input[type="date"] {
+.invoice-controls input[type="date"],
+.summary-controls input[type="date"] {
     padding: 5px;
 }
-.invoice-controls button {
+.invoice-controls button,
+.summary-controls button {
     padding: 5px 15px;
 }
 

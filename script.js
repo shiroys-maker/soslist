@@ -15,6 +15,7 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 const storage = firebase.storage();
+const SUMMARY_MIRROR_DOC_PREFIX = 'dailyBrief_';
 
 // --- DOM要素の取得 ---
 const loginContainer = document.getElementById('login-container');
@@ -46,6 +47,15 @@ const closeDetailsModalButton = document.getElementById('closeDetailsModalButton
 const invoiceYearSelect = document.getElementById('invoiceYearSelect');
 const invoiceMonthSelect = document.getElementById('invoiceMonthSelect');
 const printInvoiceButton = document.getElementById('printInvoiceButton');
+const summaryDateInput = document.getElementById('summaryDateInput');
+const summaryPrevDateButton = document.getElementById('summaryPrevDateButton');
+const summaryNextDateButton = document.getElementById('summaryNextDateButton');
+const showSummaryButton = document.getElementById('showSummaryButton');
+const summaryModal = document.getElementById('summaryModal');
+const summaryModalTitle = document.getElementById('summaryModalTitle');
+const summaryModalMeta = document.getElementById('summaryModalMeta');
+const summaryModalBody = document.getElementById('summaryModalBody');
+const closeSummaryModalButton = document.getElementById('closeSummaryModalButton');
 const searchInput = document.getElementById('searchInput');
 const searchButton = document.getElementById('searchButton');
 const searchResultsModal = document.getElementById('searchResultsModal');
@@ -79,6 +89,7 @@ const cancelVisitDateBtn  = document.getElementById('cancelVisitDateBtn');
 let logoutTimer;
 let editingDocId = null;
 let unsubscribe;
+const APPOINTMENT_TRANSITION_TIMESTAMP = new Date('2025-10-26T00:00:00+09:00').getTime();
 
 // --- 紹介先 定数 ---
 // CLAUDE_API_KEY は config.js で定義（.gitignore済み）
@@ -130,6 +141,177 @@ function getLastDayOfMonth(year, month) {
     return new Date(year, parseInt(month), 0).getDate();
 }
 
+function formatDateInputValue(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function formatDateInTokyo(date) {
+    return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Tokyo',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    }).format(date);
+}
+
+function getTokyoTimeParts(date) {
+    const formatter = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Tokyo',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+    });
+    const parts = formatter.formatToParts(date);
+    return {
+        hour: Number(parts.find((part) => part.type === 'hour')?.value || 0),
+        minute: Number(parts.find((part) => part.type === 'minute')?.value || 0)
+    };
+}
+
+function getCorrectedAppointmentDate(data) {
+    if (!data?.appointmentDateTime?.toDate) {
+        return null;
+    }
+    const dateObj = data.appointmentDateTime.toDate();
+    const processedAtTimestamp = data.processedAt ? data.processedAt.toDate().getTime() : 0;
+    if (processedAtTimestamp > 0 && processedAtTimestamp < APPOINTMENT_TRANSITION_TIMESTAMP) {
+        const correctedDateObj = new Date(dateObj.getTime());
+        correctedDateObj.setHours(correctedDateObj.getHours() - 9);
+        return correctedDateObj;
+    }
+    return dateObj;
+}
+
+async function initializeSummaryDate() {
+    if (!summaryDateInput) return;
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    summaryDateInput.value = formatDateInputValue(tomorrow);
+
+    try {
+        const now = new Date();
+        const todayYmd = formatDateInTokyo(now);
+        const { hour, minute } = getTokyoTimeParts(now);
+        const isAfterCutoff = hour > 16 || (hour === 16 && minute >= 30);
+        const snapshot = await db.collection("appointments").get();
+
+        let hasTodayAppointment = false;
+        let nextAppointmentDate = null;
+
+        snapshot.forEach((doc) => {
+            const correctedDateObj = getCorrectedAppointmentDate(doc.data());
+            if (!correctedDateObj) return;
+            const appointmentYmd = formatDateInTokyo(correctedDateObj);
+            if (appointmentYmd < todayYmd) return;
+            if (appointmentYmd === todayYmd) {
+                hasTodayAppointment = true;
+                return;
+            }
+            if (!nextAppointmentDate || appointmentYmd < nextAppointmentDate) {
+                nextAppointmentDate = appointmentYmd;
+            }
+        });
+
+        if (!isAfterCutoff && hasTodayAppointment) {
+            summaryDateInput.value = todayYmd;
+            return;
+        }
+        if (nextAppointmentDate) {
+            summaryDateInput.value = nextAppointmentDate;
+            return;
+        }
+        if (hasTodayAppointment) {
+            summaryDateInput.value = todayYmd;
+        }
+    } catch (error) {
+        console.error('Summary default date initialization failed:', error);
+    }
+}
+
+function shiftSummaryDate(days) {
+    if (!summaryDateInput) return;
+    const baseValue = summaryDateInput.value || formatDateInputValue(new Date());
+    const next = new Date(`${baseValue}T00:00:00`);
+    next.setDate(next.getDate() + days);
+    summaryDateInput.value = formatDateInputValue(next);
+}
+
+function renderInlineMarkdown(text) {
+    return escapeHtml(text)
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*([^*]+)\*/g, '<em>$1</em>');
+}
+
+function renderMarkdownToHtml(markdown) {
+    const blocks = String(markdown || '').replace(/\r/g, '').split(/\n{2,}/);
+    return blocks.map((block) => {
+        const lines = block.split('\n').filter(Boolean);
+        if (lines.length === 0) return '';
+
+        const heading = lines[0].match(/^(#{1,3})\s+(.+)$/);
+        if (heading && lines.length === 1) {
+            const level = Math.min(heading[1].length, 3);
+            return `<h${level}>${renderInlineMarkdown(heading[2])}</h${level}>`;
+        }
+
+        const unordered = lines.every((line) => /^-\s+/.test(line));
+        if (unordered) {
+            return `<ul>${lines.map((line) => `<li>${renderInlineMarkdown(line.replace(/^-\s+/, ''))}</li>`).join('')}</ul>`;
+        }
+
+        const ordered = lines.every((line) => /^\d+\.\s+/.test(line));
+        if (ordered) {
+            return `<ol>${lines.map((line) => `<li>${renderInlineMarkdown(line.replace(/^\d+\.\s+/, ''))}</li>`).join('')}</ol>`;
+        }
+
+        return `<p>${lines.map((line) => renderInlineMarkdown(line)).join('<br>')}</p>`;
+    }).join('\n');
+}
+
+function openSummaryModal(ymd, summaryMarkdown) {
+    summaryModalTitle.textContent = 'Summary';
+    summaryModalMeta.textContent = ymd;
+    summaryModalBody.innerHTML = summaryMarkdown
+        ? renderMarkdownToHtml(summaryMarkdown)
+        : '<p>サマリーは未作成です。</p>';
+    summaryModal.style.display = 'flex';
+    document.body.classList.add('modal-open');
+}
+
+function closeSummaryModal() {
+    summaryModal.style.display = 'none';
+    summaryModalMeta.textContent = '';
+    summaryModalBody.innerHTML = '';
+    document.body.classList.remove('modal-open');
+}
+
+async function showSummary() {
+    if (!summaryDateInput?.value) {
+        alert('Summaryの日付を選んでください。');
+        return;
+    }
+
+    const targetDate = summaryDateInput.value;
+    const summaryMarkdown = await fetchSummaryMarkdown(targetDate);
+    openSummaryModal(targetDate, summaryMarkdown);
+}
+
+async function fetchSummaryMarkdown(targetDate) {
+    const mirrorSnapshot = await db
+        .collection('appointments')
+        .doc(`${SUMMARY_MIRROR_DOC_PREFIX}${targetDate}`)
+        .get();
+    if (mirrorSnapshot.exists) {
+        const mirrorData = mirrorSnapshot.data() || {};
+        return mirrorData.summaryMarkdown || '';
+    }
+    return '';
+}
+
 // --- ログイン状態の監視 ---
 auth.onAuthStateChanged(user => {
     if (user) {
@@ -139,6 +321,7 @@ auth.onAuthStateChanged(user => {
         
         // 年選択オプションを生成
         generateYearOptions();
+        initializeSummaryDate();
 
         const today = new Date();
         const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -334,6 +517,15 @@ cancelEditBtn.addEventListener('click', closeEditModal);
 saveNotesButton.addEventListener('click', saveNotes);
 closeDetailsModalButton.addEventListener('click', closeDetailsModal);
 printInvoiceButton.addEventListener('click', printInvoice);
+summaryPrevDateButton?.addEventListener('click', () => shiftSummaryDate(-1));
+summaryNextDateButton?.addEventListener('click', () => shiftSummaryDate(1));
+showSummaryButton?.addEventListener('click', () => {
+    showSummary().catch(error => {
+        console.error('Summary display error:', error);
+        alert(`Summaryの表示に失敗しました: ${error.message}`);
+    });
+});
+closeSummaryModalButton?.addEventListener('click', closeSummaryModal);
 confirmPhoneEditBtn.addEventListener('click', savePhone);
 cancelPhoneEditBtn.addEventListener('click', closePhoneEditModal);
 saveShokaijyoBtn.addEventListener('click', saveShokaijyo);
@@ -951,6 +1143,27 @@ function printInvoice() {
 function generateNewInvoiceHTML(audiologyRecords, dayRateList, from, to) {
     const audiologyTotal = audiologyRecords.reduce((sum, record) => sum + record.fee, 0);
 
+    let audiologyRows = '';
+    audiologyRecords.forEach(data => {
+        audiologyRows += `
+            <tr>
+                <td>${data.contractNumber}</td>
+                <td class="fee-cell">${data.fee.toLocaleString()}</td>
+            </tr>
+        `;
+    });
+
+    let dayRateRows = '';
+    dayRateList.forEach(data => {
+        dayRateRows += `
+            <tr>
+                <td>${data.date}</td>
+                <td>${data.dayRate}</td>
+                <td>${data.amount}</td>
+            </tr>
+        `;
+    });
+
     const invoiceHTML = `
         <!DOCTYPE html>
         <html lang="ja">
@@ -969,14 +1182,13 @@ function generateNewInvoiceHTML(audiologyRecords, dayRateList, from, to) {
                 tfoot td { font-weight: bold; font-size: 16px; background-color: #f9f9f9; }
                 .fee-cell { text-align: right; }
                 .button-area { margin-top: 30px; text-align: center; }
-                .day-rate-sheet { page-break-before: always; } /* 2ページ目の開始 */
+                .day-rate-sheet { page-break-before: always; }
                 @media print {
                     .no-print { display: none; }
                 }
             </style>
         </head>
         <body>
-            <!-- 1ページ目: Audiology Invoice -->
             <div class="page-container">
                 <h1>Audiology Invoice</h1>
                 <h2>Period: ${from} to ${to}</h2>
@@ -988,7 +1200,8 @@ function generateNewInvoiceHTML(audiologyRecords, dayRateList, from, to) {
                         </tr>
                     </thead>
                     <tbody id="audiology-tbody">
-                        </tbody>
+                        ${audiologyRows}
+                    </tbody>
                     <tfoot>
                         <tr>
                             <td style="text-align: right;"><strong>合計:</strong></td>
@@ -998,7 +1211,6 @@ function generateNewInvoiceHTML(audiologyRecords, dayRateList, from, to) {
                 </table>
             </div>
 
-            <!-- 2ページ目: Day Rate Sheet -->
             <div class="page-container day-rate-sheet">
                 <h1>Day Rate Sheet</h1>
                 <h2>Period: ${from} to ${to}</h2>
@@ -1011,10 +1223,11 @@ function generateNewInvoiceHTML(audiologyRecords, dayRateList, from, to) {
                         </tr>
                     </thead>
                     <tbody id="dayrate-tbody">
-                        </tbody>
+                        ${dayRateRows}
+                    </tbody>
                 </table>
             </div>
-            
+
             <div class="button-area no-print">
                 <button onclick="window.print()">このページを印刷</button>
             </div>
@@ -1022,34 +1235,21 @@ function generateNewInvoiceHTML(audiologyRecords, dayRateList, from, to) {
         </html>
     `;
 
+    const nativePrintHandler = window.webkit?.messageHandlers?.printHTML;
+    if (nativePrintHandler) {
+        nativePrintHandler.postMessage({
+            html: invoiceHTML,
+            title: `invoice-${from}-to-${to}`
+        });
+        return;
+    }
+
     const newWindow = window.open('', '_blank');
+    if (!newWindow) {
+        alert('印刷ウインドウを開けませんでした。ポップアップ設定を確認してください。');
+        return;
+    }
     newWindow.document.write(invoiceHTML);
-    
-    // Audiologyテーブルの内容を書き込み
-    let audiologyRows = '';
-    audiologyRecords.forEach(data => {
-        audiologyRows += `
-            <tr>
-                <td>${data.contractNumber}</td>
-                <td class="fee-cell">${data.fee.toLocaleString()}</td>
-            </tr>
-        `;
-    });
-    newWindow.document.getElementById('audiology-tbody').innerHTML = audiologyRows;
-
-    // Day Rateテーブルの内容を書き込み
-    let dayRateRows = '';
-    dayRateList.forEach(data => {
-        dayRateRows += `
-            <tr>
-                <td>${data.date}</td>
-                <td>${data.dayRate}</td>
-                <td>${data.amount}</td>
-            </tr>
-        `;
-    });
-    newWindow.document.getElementById('dayrate-tbody').innerHTML = dayRateRows;
-
     newWindow.document.close();
 }
 
