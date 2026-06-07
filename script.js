@@ -795,7 +795,7 @@ function setupRealtimeListener() {
                           <div><span class="appointment-card-label">受診日</span><button type="button" class="appointment-card-value visitdate-cell">${escapeHtml(visitdateHTML || '未入力')}</button></div>
                       </div>
                       <div class="appointment-card-grid">
-                          <div><span class="appointment-card-label">契約番号</span><button type="button" class="appointment-card-value contract-cell">${escapeHtml(data.contractNumber || '')}</button></div>
+                          <div><span class="appointment-card-label">契約番号</span><span class="appointment-card-value">${escapeHtml(data.contractNumber || '')}</span></div>
                           <div><span class="appointment-card-label">年齢</span><span class="appointment-card-value ${ageCellClass}">${escapeHtml(displayAge)}</span></div>
                           <div><span class="appointment-card-label">電話</span><button type="button" class="appointment-card-value phone-cell">${escapeHtml(data.japanCellPhone || '')}</button></div>
                           <div><span class="appointment-card-label">受診日</span><button type="button" class="appointment-card-value visitdate-cell">${escapeHtml(visitdateHTML || '未入力')}</button></div>
