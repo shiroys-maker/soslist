@@ -800,7 +800,13 @@ function setupRealtimeListener() {
                           <div><span class="appointment-card-label">電話</span><button type="button" class="appointment-card-value phone-cell">${escapeHtml(data.japanCellPhone || '')}</button></div>
                           <div><span class="appointment-card-label">受診日</span><button type="button" class="appointment-card-value visitdate-cell">${escapeHtml(visitdateHTML || '未入力')}</button></div>
                       </div>
-                      <div class="appointment-card-referrals appointment-card-referrals-full">${referralHTML || '<span class="appointment-card-label">紹介先なし</span>'}</div>
+                      <div class="appointment-card-footer">
+                          <div class="appointment-card-referrals appointment-card-referrals-full">${referralHTML || '<span class="appointment-card-label">紹介先なし</span>'}</div>
+                          <div class="appointment-card-statuses">
+                              <button type="button" class="appointment-flag received-cell" aria-label="受領">${receivedHTML || '受'}</button>
+                              <button type="button" class="appointment-flag completed-cell" aria-label="完了">${completedHTML || '済'}</button>
+                          </div>
+                      </div>
                   </article>`;
               previousDateStr = currentDateStr;
           });

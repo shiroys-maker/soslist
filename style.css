@@ -610,6 +610,20 @@ body.modal-open {
         gap: 8px;
     }
 
+    .appointment-card-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 10px;
+        margin-top: 12px;
+    }
+
+    .appointment-card-statuses {
+        display: flex;
+        gap: 6px;
+        flex-shrink: 0;
+    }
+
     .appointment-card-referrals .referral-dest {
         display: inline-flex;
         align-items: center;
@@ -665,7 +679,7 @@ body.modal-open {
     }
 
     body[data-mobile-view-mode="compact"] .appointment-card-grid,
-    body[data-mobile-view-mode="compact"] .appointment-card-referrals-full {
+    body[data-mobile-view-mode="compact"] .appointment-card-footer {
         display: none;
     }
 
@@ -725,7 +739,7 @@ body.modal-open {
         display: none;
     }
 
-    body[data-mobile-view-mode="card"] .appointment-card-referrals-full {
+    body[data-mobile-view-mode="card"] .appointment-card-footer {
         display: flex;
     }
 
