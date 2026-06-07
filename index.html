@@ -80,6 +80,10 @@
             </div>
     </div>
         <div class="data-section">
+            <div class="mobile-view-toggle" id="mobileViewToggle" aria-label="モバイル表示切替">
+                <button type="button" id="mobileCompactViewButton" class="is-active">俯瞰</button>
+                <button type="button" id="mobileCardViewButton">詳細</button>
+            </div>
             <table id="appointmentsTable">
                 <thead>
                     <tr>
@@ -99,6 +103,7 @@
                 <tbody>
                     </tbody>
             </table>
+            <div id="mobileAppointmentsList" class="mobile-appointments-list"></div>
         </div>
     </div>
 

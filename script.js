@@ -27,6 +27,10 @@ const loginPasswordInput = document.getElementById('loginPassword');
 const loginError = document.getElementById('loginError');
 const userEmailSpan = document.getElementById('userEmail');
 const tableBody = document.querySelector("#appointmentsTable tbody");
+const mobileAppointmentsList = document.getElementById('mobileAppointmentsList');
+const mobileViewToggle = document.getElementById('mobileViewToggle');
+const mobileCompactViewButton = document.getElementById('mobileCompactViewButton');
+const mobileCardViewButton = document.getElementById('mobileCardViewButton');
 const dateFilter = document.getElementById('dateFilter');
 const prevDateButton = document.getElementById('prevDateButton');
 const nextDateButton = document.getElementById('nextDateButton');
@@ -90,6 +94,7 @@ let logoutTimer;
 let editingDocId = null;
 let unsubscribe;
 const APPOINTMENT_TRANSITION_TIMESTAMP = new Date('2025-10-26T00:00:00+09:00').getTime();
+const MOBILE_VIEW_MODE_KEY = 'soslist-mobile-view-mode';
 
 // --- 紹介先 定数 ---
 // CLAUDE_API_KEY は config.js で定義（.gitignore済み）
@@ -239,6 +244,27 @@ function shiftSummaryDate(days) {
     summaryDateInput.value = formatDateInputValue(next);
 }
 
+function applyMobileViewMode(mode) {
+    const normalizedMode = mode === 'card' ? 'card' : 'compact';
+    document.body.dataset.mobileViewMode = normalizedMode;
+    mobileCompactViewButton?.classList.toggle('is-active', normalizedMode === 'compact');
+    mobileCardViewButton?.classList.toggle('is-active', normalizedMode === 'card');
+    try {
+        localStorage.setItem(MOBILE_VIEW_MODE_KEY, normalizedMode);
+    } catch (error) {
+        console.warn('Failed to persist mobile view mode:', error);
+    }
+}
+
+function initializeMobileViewMode() {
+    try {
+        const savedMode = localStorage.getItem(MOBILE_VIEW_MODE_KEY);
+        applyMobileViewMode(savedMode === 'card' ? 'card' : 'compact');
+    } catch (error) {
+        applyMobileViewMode('compact');
+    }
+}
+
 function renderInlineMarkdown(text) {
     return escapeHtml(text)
         .replace(/`([^`]+)`/g, '<code>$1</code>')
@@ -321,6 +347,7 @@ auth.onAuthStateChanged(user => {
         
         // 年選択オプションを生成
         generateYearOptions();
+        initializeMobileViewMode();
         initializeSummaryDate();
 
         const today = new Date();
@@ -407,14 +434,7 @@ nextDateButton?.addEventListener('click', () => {
     jumpToAdjacentReservationDate(1);
 });
 
-tableBody.addEventListener('click', (e) => {
-    const target = e.target;
-    const tr = target.closest('tr');
-    if (!tr) return;
-
-    const docId = tr.dataset.id;
-    if (!docId) return;
-
+function handleAppointmentInteraction(target, docId) {
     if (target.classList.contains('name-cell')) {
         openDetailsModal(docId);
         return;
@@ -470,6 +490,28 @@ tableBody.addEventListener('click', (e) => {
         docRef.update({ isAgePink: isPink });
         return;
     }
+}
+
+tableBody.addEventListener('click', (e) => {
+    const target = e.target;
+    const tr = target.closest('tr');
+    if (!tr) return;
+
+    const docId = tr.dataset.id;
+    if (!docId) return;
+
+    handleAppointmentInteraction(target, docId);
+});
+
+mobileAppointmentsList?.addEventListener('click', (e) => {
+    const target = e.target.closest('button, .referral-dest');
+    if (!target) return;
+
+    const card = target.closest('.appointment-card');
+    const docId = card?.dataset.id;
+    if (!docId) return;
+
+    handleAppointmentInteraction(target, docId);
 });
 
 // ダブルクリックで削除を実行
@@ -526,6 +568,8 @@ showSummaryButton?.addEventListener('click', () => {
     });
 });
 closeSummaryModalButton?.addEventListener('click', closeSummaryModal);
+mobileCompactViewButton?.addEventListener('click', () => applyMobileViewMode('compact'));
+mobileCardViewButton?.addEventListener('click', () => applyMobileViewMode('card'));
 confirmPhoneEditBtn.addEventListener('click', savePhone);
 cancelPhoneEditBtn.addEventListener('click', closePhoneEditModal);
 saveShokaijyoBtn.addEventListener('click', saveShokaijyo);
@@ -663,6 +707,7 @@ function setupRealtimeListener() {
               return a._sortTimeMillis - b._sortTimeMillis;
           });
           let tableRowsHTML = "";
+          let mobileCardsHTML = "";
           let previousDateStr = null;
           appointments.forEach(appointment => {
               const docId = appointment.id;
@@ -712,6 +757,7 @@ function setupRealtimeListener() {
               const visitdateHTML  = data.visitDate   || '';
               const receivedHTML   = data.isReceived  ? '✅' : '';
               const completedHTML  = data.isCompleted ? '✅' : '';
+              const mobileDateText = displayDate.replace('<br>', ' ');
 
               const age = calculateAge(data.dateOfBirth);
               const displayAge = age ? `${age}` : '不明';
@@ -732,9 +778,37 @@ function setupRealtimeListener() {
                       <td class="col-received received-cell">${receivedHTML}</td>
                       <td class="col-completed completed-cell">${completedHTML}</td>
                   </tr>`;
+
+              mobileCardsHTML += `
+                  <article class="appointment-card${rowClass ? ' date-boundary' : ''}" data-id="${docId}">
+                      <div class="appointment-card-top">
+                          <button type="button" class="appointment-card-name name-cell${data.notes ? '' : ' name-no-notes'}">${escapeHtml(data.claimantName || '')}</button>
+                          <div class="appointment-card-flags">
+                              <button type="button" class="appointment-flag show-toggle-cell" aria-label="来院表示">${checkmark || '来'}</button>
+                              <button type="button" class="appointment-flag received-cell" aria-label="受領">${receivedHTML || '受'}</button>
+                              <button type="button" class="appointment-flag completed-cell" aria-label="完了">${completedHTML || '済'}</button>
+                          </div>
+                      </div>
+                      <div class="appointment-card-meta">${mobileDateText}</div>
+                      <div class="appointment-card-services">${escapeHtml(displayServicesText || '検査内容なし')}</div>
+                      <div class="appointment-card-compact-extra">
+                          <div><span class="appointment-card-label">紹介先</span><div class="appointment-card-referrals compact-referrals">${referralHTML || '<span class="appointment-card-empty">なし</span>'}</div></div>
+                          <div><span class="appointment-card-label">受診日</span><button type="button" class="appointment-card-value visitdate-cell">${escapeHtml(visitdateHTML || '未入力')}</button></div>
+                      </div>
+                      <div class="appointment-card-grid">
+                          <div><span class="appointment-card-label">契約番号</span><button type="button" class="appointment-card-value contract-cell">${escapeHtml(data.contractNumber || '')}</button></div>
+                          <div><span class="appointment-card-label">年齢</span><span class="appointment-card-value ${ageCellClass}">${escapeHtml(displayAge)}</span></div>
+                          <div><span class="appointment-card-label">電話</span><button type="button" class="appointment-card-value phone-cell">${escapeHtml(data.japanCellPhone || '')}</button></div>
+                          <div><span class="appointment-card-label">受診日</span><button type="button" class="appointment-card-value visitdate-cell">${escapeHtml(visitdateHTML || '未入力')}</button></div>
+                      </div>
+                      <div class="appointment-card-referrals appointment-card-referrals-full">${referralHTML || '<span class="appointment-card-label">紹介先なし</span>'}</div>
+                  </article>`;
               previousDateStr = currentDateStr;
           });
           tableBody.innerHTML = tableRowsHTML;
+          if (mobileAppointmentsList) {
+              mobileAppointmentsList.innerHTML = mobileCardsHTML || '<p class="mobile-empty">該当する予約はありません。</p>';
+          }
       }, error => {
           console.error("Firestoreのリアルタイム監視でエラー:", error);
       });
