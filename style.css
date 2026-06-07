@@ -986,6 +986,10 @@ td.col-received, td.col-completed { padding: 0 2px; }
     border: 1px solid #ccc;
     border-radius: 4px;
     background: #f0f0f0;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    --shokaijyo-scale: 1;
 }
 
 /* ---- sheet スタイル (shokaijo-sakusei.html と同等、スコープ付き) ---- */
@@ -1000,6 +1004,8 @@ td.col-received, td.col-completed { padding: 0 2px; }
     margin: 10px auto;
     width: 97%;
     box-shadow: 0 0 6px rgba(0,0,0,0.15);
+    transform: scale(var(--shokaijyo-scale));
+    transform-origin: top center;
 }
 .shokaijyo-sheet-container .title {
     text-align: center;
@@ -1065,4 +1071,23 @@ td.col-received, td.col-completed { padding: 0 2px; }
     font-family: "Hiragino Mincho ProN", "MS Mincho", serif;
     font-size: inherit; outline: none;
     background: transparent; min-width: 80px;
+}
+
+@media (max-width: 768px) {
+    .shokaijyo-modal-content {
+        width: 98vw;
+        max-width: 98vw;
+        padding: 12px;
+    }
+
+    .shokaijyo-sheet-container {
+        max-height: 64vh;
+        padding: 8px 0;
+    }
+
+    .shokaijyo-sheet-container .sheet {
+        width: 720px;
+        max-width: none;
+        margin: 0;
+    }
 }

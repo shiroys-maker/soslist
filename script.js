@@ -114,6 +114,8 @@ let shokaijyoEditingDocId = null;
 let shokaijyoEditingDest  = null;
 let visitDateEditingDocId = null;
 
+window.addEventListener('resize', updateShokaijyoSheetScale);
+
 // 子ウィンドウからのノート更新を処理する関数 
 function updateAppointmentNote(docId, newNote) {
   // 予約リストが表示されている場合は再読み込みする
@@ -1706,6 +1708,7 @@ function openShokaijyoModal(docId, destKey) {
         shokaijyoEditingDocId = docId;
         shokaijyoEditingDest  = destKey;
         shokaijyoModal.style.display = 'flex';
+        updateShokaijyoSheetScale();
         document.body.classList.add('modal-open');
         saveShokaijyoBtn.style.display = SHOKAIJO_EDITABLE ? '' : 'none';
         printShokaijyoBtn.style.display = '';
@@ -1764,9 +1767,31 @@ function openShokaijyoModal(docId, destKey) {
 function closeShokaijyoModal() {
     shokaijyoModal.style.display = 'none';
     shokaijyoSheetContainer.innerHTML = '';
+    shokaijyoSheetContainer.style.removeProperty('--shokaijyo-scale');
+    shokaijyoSheetContainer.style.minHeight = '';
     shokaijyoEditingDocId = null;
     shokaijyoEditingDest  = null;
     document.body.classList.remove('modal-open');
+}
+
+function updateShokaijyoSheetScale() {
+    const sheet = shokaijyoSheetContainer?.querySelector('.sheet');
+    if (!sheet) return;
+
+    if (window.innerWidth > 768) {
+        shokaijyoSheetContainer.style.setProperty('--shokaijyo-scale', '1');
+        shokaijyoSheetContainer.style.minHeight = '';
+        return;
+    }
+
+    const availableWidth = Math.max(shokaijyoSheetContainer.clientWidth - 12, 1);
+    const availableHeight = Math.max(window.innerHeight * 0.62, 1);
+    const baseWidth = sheet.offsetWidth || 1;
+    const baseHeight = sheet.offsetHeight || 1;
+    const scale = Math.min(1, availableWidth / baseWidth, availableHeight / baseHeight);
+
+    shokaijyoSheetContainer.style.setProperty('--shokaijyo-scale', String(scale));
+    shokaijyoSheetContainer.style.minHeight = `${Math.ceil(baseHeight * scale) + 12}px`;
 }
 
 function saveShokaijyo() {
