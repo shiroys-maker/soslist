@@ -847,21 +847,46 @@ body.modal-open {
 
     /* 編集モーダル（ポップアップ） */
     .modal-content {
-        width: 90%; /* 画面幅いっぱいに広げる */
+        width: 92%;
+        max-width: 92vw;
+        padding: 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
     }
 
     .modal-content h3 {
-        font-size: 20px;
+        font-size: 16px;
+        margin: 0;
     }
     
     .modal-content label,
     .modal-content input[type="date"],
     .modal-content select,
+    .modal-content input[type="time"],
+    .modal-content input[type="tel"],
+    .modal-content input[type="url"],
+    .modal-content textarea {
+        font-size: 14px;
+    }
+
+    .modal-content input[type="date"],
+    .modal-content select,
+    .modal-content input[type="time"],
+    .modal-content input[type="tel"],
+    .modal-content input[type="url"],
+    .modal-content textarea {
+        width: 100%;
+        padding: 8px 10px;
+        margin-bottom: 0;
+    }
+
     .modal-content button {
-        font-size: 18px; /* モーダル内の文字や部品を大きく */
-        padding: 12px;
-        width: 80%;
-        margin-bottom: 10px;
+        width: auto;
+        min-height: 34px;
+        padding: 6px 10px;
+        font-size: 12px;
+        margin-bottom: 0;
     }
 
     #main-app-container h1 {
@@ -925,9 +950,41 @@ body.modal-open {
     }
 
     #detailsModal .modal-actions button {
-        padding: 8px 12px;
-        font-size: 14px;
+        padding: 6px 10px;
+        font-size: 12px;
         width: auto;
+    }
+
+    .modal-actions,
+    #detailsModal .button-row {
+        order: -1;
+        position: sticky;
+        top: 0;
+        z-index: 3;
+        background: #fff;
+        padding-bottom: 8px;
+        margin-top: 0;
+        margin-bottom: 4px;
+    }
+
+    .modal-actions {
+        display: flex;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    #detailsModal .button-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+    }
+
+    #detailsModal .button-group {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
     }
 
     .header-spacer {
