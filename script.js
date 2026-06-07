@@ -818,19 +818,38 @@ function startLogoutTimer() {
 }
 
 function handleViewPdf(docId) {
+    const nativeOpenHandler = window.webkit?.messageHandlers?.openExternalURL;
+    const pendingWindow = nativeOpenHandler ? null : window.open('', '_blank');
+    if (!nativeOpenHandler && !pendingWindow) {
+        alert('PDFウインドウを開けませんでした。ポップアップ設定を確認してください。');
+        return;
+    }
+
     db.collection('appointments').doc(docId).get().then(doc => {
-        if (!doc.exists) return alert('データベースにレコードが見つかりません。');
+        if (!doc.exists) {
+            if (pendingWindow) pendingWindow.close();
+            alert('データベースにレコードが見つかりません。');
+            return;
+        }
         const fileName = doc.data().originalFileName;
-        if (!fileName) return alert('このレコードにPDFファイルは関連付けられていません。');
+        if (!fileName) {
+            if (pendingWindow) pendingWindow.close();
+            alert('このレコードにPDFファイルは関連付けられていません。');
+            return;
+        }
         
         console.log("PDF表示試行:", fileName);
         
         // 複数のパスパターンを試す
-        tryMultiplePaths(fileName);
+        tryMultiplePaths(fileName, pendingWindow);
+    }).catch(error => {
+        if (pendingWindow) pendingWindow.close();
+        console.error("PDF参照エラー:", error);
+        alert(`PDFの参照中にエラーが発生しました: ${error.message}`);
     });
 }
 
-function tryMultiplePaths(fileName) {
+function tryMultiplePaths(fileName, pendingWindow = null) {
     // パスのバリエーションを試す
     const pathVariations = [
         fileName,                    // そのままのファイル名
@@ -841,12 +860,13 @@ function tryMultiplePaths(fileName) {
     ];
     
     // 最初のパスから順に試す
-    tryNextPath(pathVariations, 0, fileName);
+    tryNextPath(pathVariations, 0, fileName, pendingWindow);
 }
 
-function tryNextPath(paths, index, originalFileName) {
+function tryNextPath(paths, index, originalFileName, pendingWindow = null) {
     if (index >= paths.length) {
         // すべてのパスを試しても見つからなかった
+        if (pendingWindow) pendingWindow.close();
         console.error("すべてのパスバリエーションで見つかりませんでした:", originalFileName);
         alert(`PDFファイル「${originalFileName}」がストレージ内に見つかりませんでした。`);
         return;
@@ -863,14 +883,19 @@ function tryNextPath(paths, index, originalFileName) {
                 nativeOpenHandler.postMessage({ url });
                 return;
             }
+            if (pendingWindow) {
+                pendingWindow.location.href = url;
+                return;
+            }
             window.open(url, '_blank');
         })
         .catch(error => {
             if (error.code === 'storage/object-not-found') {
                 console.log(`パスパターン ${index+1} では見つかりませんでした、次を試します`);
                 // 次のパスパターンを試す
-                tryNextPath(paths, index + 1, originalFileName);
+                tryNextPath(paths, index + 1, originalFileName, pendingWindow);
             } else {
+                if (pendingWindow) pendingWindow.close();
                 console.error("PDF取得エラー:", error.code, error.message, currentPath);
                 alert(`PDFの表示中にエラーが発生しました: ${error.message}`);
             }
