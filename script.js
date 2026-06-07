@@ -31,6 +31,8 @@ const mobileAppointmentsList = document.getElementById('mobileAppointmentsList')
 const mobileViewToggle = document.getElementById('mobileViewToggle');
 const mobileCompactViewButton = document.getElementById('mobileCompactViewButton');
 const mobileCardViewButton = document.getElementById('mobileCardViewButton');
+const mobileControlsToggle = document.getElementById('mobileControlsToggle');
+const mobileControlsPanel = document.getElementById('mobileControlsPanel');
 const dateFilter = document.getElementById('dateFilter');
 const prevDateButton = document.getElementById('prevDateButton');
 const nextDateButton = document.getElementById('nextDateButton');
@@ -95,6 +97,7 @@ let editingDocId = null;
 let unsubscribe;
 const APPOINTMENT_TRANSITION_TIMESTAMP = new Date('2025-10-26T00:00:00+09:00').getTime();
 const MOBILE_VIEW_MODE_KEY = 'soslist-mobile-view-mode';
+const MOBILE_CONTROLS_OPEN_KEY = 'soslist-mobile-controls-open';
 
 // --- 紹介先 定数 ---
 // CLAUDE_API_KEY は config.js で定義（.gitignore済み）
@@ -267,6 +270,27 @@ function initializeMobileViewMode() {
     }
 }
 
+function setMobileControlsOpen(isOpen) {
+    const normalized = Boolean(isOpen);
+    document.body.dataset.mobileControlsOpen = normalized ? 'true' : 'false';
+    mobileControlsToggle?.setAttribute('aria-expanded', normalized ? 'true' : 'false');
+    mobileControlsToggle.textContent = normalized ? '操作 ▲' : '操作 ▼';
+    try {
+        localStorage.setItem(MOBILE_CONTROLS_OPEN_KEY, normalized ? 'true' : 'false');
+    } catch (error) {
+        console.warn('Failed to persist mobile controls state:', error);
+    }
+}
+
+function initializeMobileControlsState() {
+    try {
+        const savedState = localStorage.getItem(MOBILE_CONTROLS_OPEN_KEY);
+        setMobileControlsOpen(savedState === 'true');
+    } catch (error) {
+        setMobileControlsOpen(false);
+    }
+}
+
 function renderInlineMarkdown(text) {
     return escapeHtml(text)
         .replace(/`([^`]+)`/g, '<code>$1</code>')
@@ -350,6 +374,7 @@ auth.onAuthStateChanged(user => {
         // 年選択オプションを生成
         generateYearOptions();
         initializeMobileViewMode();
+        initializeMobileControlsState();
         initializeSummaryDate();
 
         const today = new Date();
@@ -572,6 +597,9 @@ showSummaryButton?.addEventListener('click', () => {
 closeSummaryModalButton?.addEventListener('click', closeSummaryModal);
 mobileCompactViewButton?.addEventListener('click', () => applyMobileViewMode('compact'));
 mobileCardViewButton?.addEventListener('click', () => applyMobileViewMode('card'));
+mobileControlsToggle?.addEventListener('click', () => {
+    setMobileControlsOpen(document.body.dataset.mobileControlsOpen !== 'true');
+});
 confirmPhoneEditBtn.addEventListener('click', savePhone);
 cancelPhoneEditBtn.addEventListener('click', closePhoneEditModal);
 saveShokaijyoBtn.addEventListener('click', saveShokaijyo);

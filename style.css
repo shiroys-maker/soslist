@@ -134,6 +134,14 @@ button:active {
     height: 5.5em; /* PC表示用のスペーサーの高さ */
 }
 
+.mobile-controls-toggle {
+    display: none;
+}
+
+.mobile-controls-panel {
+    overflow: visible;
+}
+
 /* フィルターと検索セクションのレイアウト */
 .filter-section {
     display: flex;
@@ -486,6 +494,40 @@ body.modal-open {
 /* --- ▼▼▼ ここからがスマホ用の追加スタイルです ▼▼▼ --- */
 
 @media (max-width: 768px) {
+    .mobile-controls-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 28px;
+        padding: 4px 12px;
+        margin: 0 0 8px auto;
+        border-radius: 999px;
+        border: 1px solid rgba(60, 53, 94, 0.22);
+        background: rgba(255, 255, 255, 0.9);
+        color: #3c355e;
+        font-size: 12px;
+        font-weight: 700;
+        text-shadow: none;
+    }
+
+    .mobile-controls-panel {
+        overflow: hidden;
+        max-height: 0;
+        opacity: 0;
+        transform: translateY(-10px);
+        transition: max-height 240ms ease, opacity 180ms ease, transform 220ms ease, margin-bottom 220ms ease;
+        margin-bottom: 0;
+        pointer-events: none;
+    }
+
+    body[data-mobile-controls-open="true"] .mobile-controls-panel {
+        max-height: 520px;
+        opacity: 1;
+        transform: translateY(0);
+        margin-bottom: 8px;
+        pointer-events: auto;
+    }
+
     #appointmentsTable {
         display: none;
     }
@@ -770,7 +812,11 @@ body.modal-open {
 
     .filter-section {
         gap: 10px;
-        margin-bottom: 12px;
+        margin-bottom: 0;
+        padding: 10px 10px 8px;
+        border-radius: 14px;
+        background: rgba(248, 250, 255, 0.96);
+        border: 1px solid #dde4ef;
     }
 
     .filter-section label,
