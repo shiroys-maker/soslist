@@ -495,12 +495,12 @@ body.modal-open {
 
 @media (max-width: 768px) {
     .mobile-controls-toggle {
-        display: inline-flex;
+        display: flex;
         align-items: center;
         justify-content: center;
         min-height: 30px;
         padding: 5px 18px 7px;
-        margin: -6px auto 8px;
+        margin: -14px auto 8px;
         border-radius: 0 0 14px 14px;
         border: 1px solid rgba(60, 53, 94, 0.18);
         border-top: none;
@@ -514,6 +514,7 @@ body.modal-open {
         position: relative;
         z-index: 2;
         min-width: 88px;
+        width: fit-content;
     }
 
     .mobile-controls-toggle::before {
@@ -522,7 +523,7 @@ body.modal-open {
         top: 0;
         left: 50%;
         width: 54px;
-        height: 7px;
+        height: 10px;
         transform: translate(-50%, -100%);
         background: linear-gradient(to bottom, rgba(246, 243, 252, 0.98), rgba(232, 226, 244, 0.98));
         border-left: 1px solid rgba(60, 53, 94, 0.18);
@@ -973,7 +974,7 @@ body.modal-open {
     #main-app-container h1 {
         font-size: 1.05em;
         padding: 0.75em 0.9em 0.85em;
-        margin-bottom: 8px;
+        margin-bottom: 0;
     }
 
     .header-spacer {
