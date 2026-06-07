@@ -785,8 +785,7 @@ function setupRealtimeListener() {
                           <button type="button" class="appointment-card-name name-cell${data.notes ? '' : ' name-no-notes'}">${escapeHtml(data.claimantName || '')}</button>
                           <div class="appointment-card-flags">
                               <button type="button" class="appointment-flag show-toggle-cell" aria-label="来院表示">${checkmark || '来'}</button>
-                              <button type="button" class="appointment-flag received-cell" aria-label="受領">${receivedHTML || '受'}</button>
-                              <button type="button" class="appointment-flag completed-cell" aria-label="完了">${completedHTML || '済'}</button>
+                              <button type="button" class="appointment-flag contract-cell" aria-label="201Bill PDF">P</button>
                           </div>
                       </div>
                       <div class="appointment-card-meta">${mobileDateText}</div>
