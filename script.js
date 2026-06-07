@@ -98,6 +98,7 @@ let unsubscribe;
 const APPOINTMENT_TRANSITION_TIMESTAMP = new Date('2025-10-26T00:00:00+09:00').getTime();
 const MOBILE_VIEW_MODE_KEY = 'soslist-mobile-view-mode';
 const MOBILE_CONTROLS_OPEN_KEY = 'soslist-mobile-controls-open';
+const MOBILE_CARD_ACTIONABLE_SELECTOR = 'button, a, .name-cell, .show-toggle-cell, .contract-cell, .phone-cell, .visitdate-cell, .received-cell, .completed-cell, .referral-dest';
 
 // --- 紹介先 定数 ---
 // CLAUDE_API_KEY は config.js で定義（.gitignore済み）
@@ -262,11 +263,17 @@ function applyMobileViewMode(mode) {
 }
 
 function initializeMobileViewMode() {
-    try {
-        const savedMode = localStorage.getItem(MOBILE_VIEW_MODE_KEY);
-        applyMobileViewMode(savedMode === 'card' ? 'card' : 'compact');
-    } catch (error) {
-        applyMobileViewMode('compact');
+    applyMobileViewMode('compact');
+}
+
+function toggleAppointmentCardExpansion(card) {
+    if (!card) return;
+    const willExpand = !card.classList.contains('is-expanded');
+    mobileAppointmentsList?.querySelectorAll('.appointment-card.is-expanded').forEach((expandedCard) => {
+        expandedCard.classList.remove('is-expanded');
+    });
+    if (willExpand) {
+        card.classList.add('is-expanded');
     }
 }
 
@@ -533,14 +540,18 @@ tableBody.addEventListener('click', (e) => {
 });
 
 mobileAppointmentsList?.addEventListener('click', (e) => {
-    const target = e.target.closest('button, .referral-dest');
-    if (!target) return;
-
-    const card = target.closest('.appointment-card');
+    const rawTarget = e.target;
+    if (!(rawTarget instanceof HTMLElement)) return;
+    const card = rawTarget.closest('.appointment-card');
+    if (!card) return;
+    const interactiveTarget = rawTarget.closest(MOBILE_CARD_ACTIONABLE_SELECTOR);
+    if (!interactiveTarget) {
+        toggleAppointmentCardExpansion(card);
+        return;
+    }
     const docId = card?.dataset.id;
     if (!docId) return;
-
-    handleAppointmentInteraction(target, docId);
+    handleAppointmentInteraction(interactiveTarget, docId);
 });
 
 // ダブルクリックで削除を実行
