@@ -274,6 +274,8 @@ function setMobileControlsOpen(isOpen) {
     const normalized = Boolean(isOpen);
     document.body.dataset.mobileControlsOpen = normalized ? 'true' : 'false';
     mobileControlsToggle?.setAttribute('aria-expanded', normalized ? 'true' : 'false');
+    mobileControlsToggle?.classList.toggle('is-open', normalized);
+    mobileControlsPanel?.classList.toggle('is-open', normalized);
     mobileControlsToggle.textContent = normalized ? '操作 ▲' : '操作 ▼';
     try {
         localStorage.setItem(MOBILE_CONTROLS_OPEN_KEY, normalized ? 'true' : 'false');

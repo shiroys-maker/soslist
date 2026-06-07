@@ -528,6 +528,15 @@ body.modal-open {
         pointer-events: auto;
     }
 
+    .mobile-controls-toggle.is-open + .mobile-controls-panel,
+    .mobile-controls-panel.is-open {
+        max-height: 520px;
+        opacity: 1;
+        transform: translateY(0);
+        margin-bottom: 8px;
+        pointer-events: auto;
+    }
+
     #appointmentsTable {
         display: none;
     }
@@ -1031,6 +1040,70 @@ body.modal-open {
         display: flex;
         gap: 6px;
         flex-wrap: wrap;
+    }
+
+    .filter-section {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+        margin-bottom: 0;
+    }
+
+    .search-area,
+    .date-filter-area,
+    .invoice-area,
+    .summary-area {
+        width: 100%;
+        flex-wrap: nowrap;
+    }
+
+    .invoice-area,
+    .summary-area {
+        align-items: center;
+    }
+
+    .invoice-controls,
+    .summary-controls {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: nowrap;
+        min-width: 0;
+    }
+
+    .summary-controls {
+        flex: 1 1 auto;
+    }
+
+    .invoice-area h2,
+    .summary-area h2,
+    .search-area label,
+    .date-filter-area label {
+        white-space: nowrap;
+        flex: 0 0 auto;
+    }
+
+    .search-area input,
+    .date-filter-area input[type="date"],
+    .summary-controls input[type="date"],
+    .invoice-controls select {
+        min-height: 34px;
+        min-width: 0;
+    }
+
+    .search-area input {
+        flex: 1 1 100px;
+        width: 100px;
+    }
+
+    .date-filter-area input[type="date"],
+    .summary-controls input[type="date"] {
+        flex: 1 1 auto;
+    }
+
+    .invoice-controls button:last-child,
+    .summary-controls button:last-child {
+        flex: 0 0 auto;
     }
 
     .header-spacer {
