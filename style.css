@@ -754,6 +754,7 @@ body.modal-open {
     .invoice-area,
     .summary-area {
         gap: 6px;
+        align-items: center;
     }
 
     .search-area input,
@@ -784,9 +785,24 @@ body.modal-open {
         flex: 1 1 180px;
     }
 
-    .search-area label,
+    .search-area label {
+        width: auto;
+        white-space: nowrap;
+    }
+
+    .date-filter-area {
+        flex-wrap: nowrap;
+    }
+
     .date-filter-area label {
-        width: 100%;
+        width: auto;
+        white-space: nowrap;
+        flex: 0 0 auto;
+    }
+
+    .date-filter-area input[type="date"] {
+        flex: 1 1 auto;
+        min-width: 0;
     }
 
     /* テーブル内のボタン */

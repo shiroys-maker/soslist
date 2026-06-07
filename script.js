@@ -476,7 +476,7 @@ function handleAppointmentInteraction(target, docId) {
         });
         return;
     }
-    if (target.classList.contains('col-contract')) {
+    if (target.classList.contains('contract-cell') || target.classList.contains('col-contract')) {
         handleViewPdf(docId);
         return;
     }
