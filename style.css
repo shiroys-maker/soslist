@@ -782,12 +782,15 @@ body.modal-open {
     }
 
     .search-area input {
-        flex: 1 1 180px;
+        flex: 1 1 120px;
+        width: 120px;
+        min-width: 0;
     }
 
     .search-area label {
         width: auto;
         white-space: nowrap;
+        flex: 0 0 auto;
     }
 
     .date-filter-area {
