@@ -613,15 +613,32 @@ body.modal-open {
     .appointment-card-footer {
         display: flex;
         justify-content: space-between;
-        align-items: flex-start;
+        align-items: center;
         gap: 10px;
         margin-top: 12px;
+        flex-wrap: nowrap;
     }
 
     .appointment-card-statuses {
         display: flex;
         gap: 6px;
         flex-shrink: 0;
+    }
+
+    .appointment-card-referrals-full {
+        flex: 1 1 auto;
+        min-width: 0;
+        margin-top: 0;
+        flex-wrap: nowrap;
+        overflow: hidden;
+        gap: 6px;
+    }
+
+    .appointment-card-referrals-full .referral-dest {
+        min-height: 30px;
+        padding: 0 8px;
+        font-size: 12px;
+        white-space: nowrap;
     }
 
     .appointment-card-referrals .referral-dest {
