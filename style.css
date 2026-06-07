@@ -656,11 +656,12 @@ body.modal-open {
     }
 
     body[data-mobile-view-mode="compact"] .appointment-card-compact-extra {
-        display: grid;
-        grid-template-columns: 1fr 120px;
-        gap: 10px 12px;
+        display: flex;
+        gap: 10px;
         margin-top: 8px;
-        align-items: start;
+        align-items: center;
+        flex-wrap: nowrap;
+        overflow: hidden;
     }
 
     body[data-mobile-view-mode="compact"] .appointment-card-grid,
@@ -675,20 +676,40 @@ body.modal-open {
     }
 
     body[data-mobile-view-mode="compact"] .compact-referrals {
-        display: flex;
+        display: inline-flex;
         flex-wrap: wrap;
-        gap: 6px;
+        gap: 4px;
         margin-top: 0;
+        vertical-align: middle;
     }
 
     body[data-mobile-view-mode="compact"] .compact-referrals .referral-dest {
-        min-height: 28px;
-        padding: 0 8px;
-        font-size: 12px;
+        min-height: 24px;
+        padding: 0 6px;
+        font-size: 11px;
     }
 
     body[data-mobile-view-mode="compact"] .appointment-card-value.visitdate-cell {
-        font-size: 13px;
+        font-size: 12px;
+        white-space: nowrap;
+    }
+
+    body[data-mobile-view-mode="compact"] .appointment-card-compact-extra > div {
+        min-width: 0;
+    }
+
+    body[data-mobile-view-mode="compact"] .appointment-card-compact-extra > div:first-child {
+        flex: 1 1 auto;
+    }
+
+    body[data-mobile-view-mode="compact"] .appointment-card-compact-extra > div:last-child {
+        flex: 0 0 auto;
+    }
+
+    body[data-mobile-view-mode="compact"] .appointment-card-compact-extra .appointment-card-label {
+        display: inline;
+        margin: 0 4px 0 0;
+        font-size: 11px;
     }
 
     .appointment-card-empty {
