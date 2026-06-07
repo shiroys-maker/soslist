@@ -737,13 +737,56 @@ body.modal-open {
         -webkit-text-size-adjust: 100%; /* iPhoneで文字が勝手に大きくなるのを防ぐ */
     }
 
-    /* 「表示する予約の開始日」の入力欄 */
-    .filter-section label, 
-    .filter-section input[type="date"] {
-        font-size: 16px; /* 文字サイズを大きく */
+    .filter-section {
+        gap: 10px;
+        margin-bottom: 12px;
     }
-    .filter-section input[type="date"] {
-        padding: 8px; /* 入力欄自体も大きく */
+
+    .filter-section label,
+    .invoice-area h2,
+    .summary-area h2 {
+        font-size: 12px;
+        line-height: 1.2;
+    }
+
+    .search-area,
+    .date-filter-area,
+    .invoice-area,
+    .summary-area {
+        gap: 6px;
+    }
+
+    .search-area input,
+    .date-filter-area input,
+    .summary-controls input,
+    .invoice-controls select {
+        min-height: 34px;
+        padding: 4px 6px;
+        font-size: 13px;
+    }
+
+    .search-area button,
+    .date-filter-area button,
+    .invoice-controls button,
+    .summary-controls button {
+        min-height: 34px;
+        padding: 4px 10px;
+        font-size: 12px;
+    }
+
+    .date-nav-button {
+        min-width: 28px;
+        padding: 4px 6px;
+        font-size: 11px;
+    }
+
+    .search-area input {
+        flex: 1 1 180px;
+    }
+
+    .search-area label,
+    .date-filter-area label {
+        width: 100%;
     }
 
     /* テーブル内のボタン */
@@ -772,8 +815,9 @@ body.modal-open {
     }
 
     #main-app-container h1 {
-        font-size: 1.2em; /* スマホでは少し文字を小さく */
-        padding: 0.8em 1em; /* パディングも調整 */
+        font-size: 1.05em;
+        padding: 0.75em 0.9em 0.85em;
+        margin-bottom: 8px;
     }
 
     .header-spacer {
@@ -807,6 +851,11 @@ body.modal-open {
         gap: 0.5em;
         right: 5px;
         bottom: 2px;
+    }
+
+    #auth-status button {
+        padding: 4px 8px;
+        font-size: 11px;
     }
 
     #main-app-container h1 {
