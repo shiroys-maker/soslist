@@ -242,14 +242,6 @@ async function initializeSummaryDate() {
     }
 }
 
-function shiftSummaryDate(days) {
-    if (!summaryDateInput) return;
-    const baseValue = summaryDateInput.value || formatDateInputValue(new Date());
-    const next = new Date(`${baseValue}T00:00:00`);
-    next.setDate(next.getDate() + days);
-    summaryDateInput.value = formatDateInputValue(next);
-}
-
 function applyMobileViewMode(mode) {
     const normalizedMode = mode === 'card' ? 'card' : 'compact';
     document.body.dataset.mobileViewMode = normalizedMode;
@@ -599,8 +591,8 @@ cancelEditBtn.addEventListener('click', closeEditModal);
 saveNotesButton.addEventListener('click', saveNotes);
 closeDetailsModalButton.addEventListener('click', closeDetailsModal);
 printInvoiceButton.addEventListener('click', printInvoice);
-summaryPrevDateButton?.addEventListener('click', () => shiftSummaryDate(-1));
-summaryNextDateButton?.addEventListener('click', () => shiftSummaryDate(1));
+summaryPrevDateButton?.addEventListener('click', () => jumpToAdjacentSummaryReservationDate(-1));
+summaryNextDateButton?.addEventListener('click', () => jumpToAdjacentSummaryReservationDate(1));
 showSummaryButton?.addEventListener('click', () => {
     showSummary().catch(error => {
         console.error('Summary display error:', error);
@@ -672,39 +664,63 @@ async function jumpToAdjacentReservationDate(direction) {
         return;
     }
 
-    const currentDate = new Date(`${dateFilter.value}T00:00:00`);
+    try {
+        const targetDate = await findAdjacentReservationDate(dateFilter.value, direction);
+        if (!targetDate) {
+            return;
+        }
+        dateFilter.value = targetDate;
+        dateFilter.dispatchEvent(new Event('change'));
+    } catch (error) {
+        console.error('予約日ジャンプエラー:', error);
+    }
+}
+
+async function findAdjacentReservationDate(baseYmd, direction) {
+    const currentDate = new Date(`${baseYmd}T00:00:00`);
     if (Number.isNaN(currentDate.getTime())) {
-        return;
+        return null;
     }
 
-    const startOfDay = new Date(`${dateFilter.value}T00:00:00+09:00`);
-    const endOfDay = new Date(`${dateFilter.value}T23:59:59.999+09:00`);
+    const startOfDay = new Date(`${baseYmd}T00:00:00+09:00`);
+    const endOfDay = new Date(`${baseYmd}T23:59:59.999+09:00`);
     const isPrevious = direction < 0;
     const comparisonOperator = isPrevious ? '<' : '>';
     const boundaryDate = isPrevious ? startOfDay : endOfDay;
     const sortDirection = isPrevious ? 'desc' : 'asc';
 
+    const querySnapshot = await db.collection("appointments")
+        .where("appointmentDateTime", comparisonOperator, boundaryDate)
+        .orderBy("appointmentDateTime", sortDirection)
+        .limit(1)
+        .get();
+
+    if (querySnapshot.empty) {
+        return null;
+    }
+
+    const targetAppointment = querySnapshot.docs[0].data();
+    const targetDate = normalizeAppointmentDateForDisplay(targetAppointment);
+    if (!targetDate) {
+        return null;
+    }
+
+    return formatDateInputValue(targetDate);
+}
+
+async function jumpToAdjacentSummaryReservationDate(direction) {
+    if (!summaryDateInput?.value) {
+        return;
+    }
+
     try {
-        const querySnapshot = await db.collection("appointments")
-            .where("appointmentDateTime", comparisonOperator, boundaryDate)
-            .orderBy("appointmentDateTime", sortDirection)
-            .limit(1)
-            .get();
-
-        if (querySnapshot.empty) {
-            return;
-        }
-
-        const targetAppointment = querySnapshot.docs[0].data();
-        const targetDate = normalizeAppointmentDateForDisplay(targetAppointment);
+        const targetDate = await findAdjacentReservationDate(summaryDateInput.value, direction);
         if (!targetDate) {
             return;
         }
-
-        dateFilter.value = formatDateInputValue(targetDate);
-        dateFilter.dispatchEvent(new Event('change'));
+        summaryDateInput.value = targetDate;
     } catch (error) {
-        console.error('予約日ジャンプエラー:', error);
+        console.error('Summary 予約日ジャンプエラー:', error);
     }
 }
 
