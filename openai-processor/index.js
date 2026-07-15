@@ -7,7 +7,7 @@ const pdf = require("pdf-parse");
 
 // --- 設定項目 ---
 // ★★★ あなたが監視したいフォルダのパスに変更してください ★★★
-const WATCH_FOLDER = '/Users/shungohiroyasu/Library/CloudStorage/Dropbox/SOSPDF';
+const WATCH_FOLDER = process.env.SOSPDF_WATCH_FOLDER || '/Users/shungohiroyasu/Library/CloudStorage/Dropbox/VA/SOSPDF';
 // ★★★ FirebaseプロジェクトのデフォルトStorageバケット名 ★★★
 const BUCKET_NAME = 'sos-list-4d150.firebasestorage.app';
 // ★★★ OpenAI APIキーを環境変数から読み込み ★★★
@@ -51,6 +51,27 @@ watcher.on('add', async (filePath) => {
     console.log(`新しいファイルを発見: ${filePath}`);
 
     try {
+        const destination = `uploads/${path.basename(filePath)}`;
+        const storageFile = bucket.file(destination);
+        const existingSnapshot = await db.collection("appointments")
+          .where("originalFileName", "==", destination)
+          .limit(1)
+          .get();
+
+        if (!existingSnapshot.empty) {
+            const [existsInStorage] = await storageFile.exists();
+            if (!existsInStorage) {
+                await bucket.upload(filePath, {
+                    destination,
+                    metadata: { contentType: 'application/pdf' },
+                });
+                console.log(`既存FirestoreレコードのPDFをCloud Storageへ補充: ${destination}`);
+            } else {
+                console.log(`既存レコードとPDFがあるためスキップ: ${destination}`);
+            }
+            return;
+        }
+
         const fileBuffer = await fs.readFile(filePath);
         const data = await pdf(fileBuffer);
         const pdfText = data.text;
@@ -98,8 +119,6 @@ watcher.on('add', async (filePath) => {
             dateString += "+09:00";
         }
 
-        const destination = `uploads/${path.basename(filePath)}`;
-
         const firestoreData = {
           ...extractedData,
           japanCellPhone: finalPhoneNumber,
@@ -108,12 +127,18 @@ watcher.on('add', async (filePath) => {
           processedAt: admin.firestore.FieldValue.serverTimestamp(),
         };
 
+        await bucket.upload(filePath, {
+            destination,
+            metadata: { contentType: 'application/pdf' },
+        });
+        const [uploaded] = await storageFile.exists();
+        if (!uploaded) {
+            throw new Error(`Cloud Storage upload verification failed: ${destination}`);
+        }
+        console.log(`Cloud Storageへのアップロード成功: ${filePath}`);
+
         await db.collection("appointments").add(firestoreData);
         console.log(`Firestoreへのデータ追加成功: ${filePath}`);
-
-        // Cloud Storageへアップロード
-        await bucket.upload(filePath, { destination: destination });
-        console.log(`Cloud Storageへのアップロード成功: ${filePath}`);
 
     } catch (error) {
         console.error(`処理中にエラーが発生しました: ${filePath}`, error);

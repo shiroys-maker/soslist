@@ -1,0 +1,17 @@
+{
+  "name": "soslist-openai-processor",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Watch SOS service bill PDFs and register appointments in Firebase.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "repair-pdfs": "node repair-missing-pdfs.js"
+  },
+  "dependencies": {
+    "chokidar": "^3.6.0",
+    "firebase-admin": "^12.7.0",
+    "openai": "^4.104.0",
+    "pdf-parse": "^1.1.1"
+  }
+}

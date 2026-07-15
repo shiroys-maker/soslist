@@ -1,4 +1,6 @@
 config.js
+openai-processor/node_modules/
+node_modules/
 local/
 viewer-mac-app/
 daily-brief/
