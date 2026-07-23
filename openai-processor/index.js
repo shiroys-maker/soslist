@@ -1,5 +1,6 @@
 const chokidar = require('chokidar');
 const path = require('path');
+const crypto = require('crypto');
 const fs = require('fs').promises;
 const admin = require('firebase-admin');
 const OpenAI = require('openai');
@@ -102,7 +103,11 @@ async function extractAppointmentData(filePath, destination) {
 async function uploadAndVerify(filePath, destination) {
     await bucket.upload(filePath, {
         destination,
-        metadata: { contentType: 'application/pdf' },
+        metadata: {
+          contentType: 'application/pdf',
+          cacheControl: 'no-store, max-age=0',
+          metadata: { firebaseStorageDownloadTokens: crypto.randomUUID() },
+        },
     });
 
     const [uploaded] = await bucket.file(destination).exists();
