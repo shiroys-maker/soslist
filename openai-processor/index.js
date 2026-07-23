@@ -137,26 +137,28 @@ async function processPdf(filePath, eventType) {
             return;
         }
 
+        if (!existingSnapshot.empty && isChange) {
+            await uploadAndVerify(filePath, destination);
+            console.log(`Cloud StorageのPDF更新成功: ${filePath}`);
+
+            const batch = db.batch();
+            existingSnapshot.docs.forEach((doc) => {
+                batch.update(doc.ref, {
+                    pdfUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                });
+            });
+            await batch.commit();
+            console.log(`FirestoreのPDF更新日時を反映: ${filePath} (${existingSnapshot.size}件)`);
+            return;
+        }
+
         const firestoreData = await extractAppointmentData(filePath, destination);
 
         await uploadAndVerify(filePath, destination);
         console.log(`Cloud Storageへのアップロード成功: ${filePath}`);
 
-        if (existingSnapshot.empty) {
-            await db.collection("appointments").add(firestoreData);
-            console.log(`Firestoreへのデータ追加成功: ${filePath}`);
-            return;
-        }
-
-        const batch = db.batch();
-        existingSnapshot.docs.forEach((doc) => {
-            batch.update(doc.ref, {
-                ...firestoreData,
-                pdfUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            });
-        });
-        await batch.commit();
-        console.log(`Firestoreの既存データ更新成功: ${filePath} (${existingSnapshot.size}件)`);
+        await db.collection("appointments").add(firestoreData);
+        console.log(`Firestoreへのデータ追加成功: ${filePath}`);
 
     } catch (error) {
         console.error(`処理中にエラーが発生しました: ${filePath}`, error);
