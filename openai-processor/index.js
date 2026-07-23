@@ -42,41 +42,12 @@ const watcher = chokidar.watch(WATCH_FOLDER, {
     }
 });
 
-watcher.on('add', async (filePath) => {
-    if (path.extname(filePath).toLowerCase() !== '.pdf') {
-        console.log(`PDFではないためスキップ: ${filePath}`);
-        return;
-    }
+async function extractAppointmentData(filePath, destination) {
+    const fileBuffer = await fs.readFile(filePath);
+    const data = await pdf(fileBuffer);
+    const pdfText = data.text;
 
-    console.log(`新しいファイルを発見: ${filePath}`);
-
-    try {
-        const destination = `uploads/${path.basename(filePath)}`;
-        const storageFile = bucket.file(destination);
-        const existingSnapshot = await db.collection("appointments")
-          .where("originalFileName", "==", destination)
-          .limit(1)
-          .get();
-
-        if (!existingSnapshot.empty) {
-            const [existsInStorage] = await storageFile.exists();
-            if (!existsInStorage) {
-                await bucket.upload(filePath, {
-                    destination,
-                    metadata: { contentType: 'application/pdf' },
-                });
-                console.log(`既存FirestoreレコードのPDFをCloud Storageへ補充: ${destination}`);
-            } else {
-                console.log(`既存レコードとPDFがあるためスキップ: ${destination}`);
-            }
-            return;
-        }
-
-        const fileBuffer = await fs.readFile(filePath);
-        const data = await pdf(fileBuffer);
-        const pdfText = data.text;
-
-        const prompt = `
+    const prompt = `
           以下のテキストは医療サービスの請求書PDFから抽出したものです。
           この内容を解析し、以下のキーを持つJSON形式で情報を抽出してください。
           - claimantName: 受験者名 (例: "JONES, JONATHAN")
@@ -96,51 +67,101 @@ watcher.on('add', async (filePath) => {
           ---
       `;
 
-        const completion = await openai.chat.completions.create({
-            model: "gpt-4o",
-            messages: [{ role: "user", content: prompt }],
-            response_format: { type: "json_object" },
-        });
+    const completion = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [{ role: "user", content: prompt }],
+        response_format: { type: "json_object" },
+    });
 
-        const responseText = completion.choices[0].message.content;
-        const extractedData = JSON.parse(responseText);
+    const responseText = completion.choices[0].message.content;
+    const extractedData = JSON.parse(responseText);
 
-        const excludedPhoneNumbers = ["+819045242828", "09045242828"];
-        const validPhoneNumbers = (extractedData.japanCellPhones || []).filter(
-            (phone) => !excludedPhoneNumbers.includes(phone),
-        );
-        const finalPhoneNumber = validPhoneNumbers.length > 0 ?
-          validPhoneNumbers[0] :
-          null;
+    const excludedPhoneNumbers = ["+819045242828", "09045242828"];
+    const validPhoneNumbers = (extractedData.japanCellPhones || []).filter(
+        (phone) => !excludedPhoneNumbers.includes(phone),
+    );
+    const finalPhoneNumber = validPhoneNumbers.length > 0 ?
+      validPhoneNumbers[0] :
+      null;
 
-        // Ensure the date string is treated as JST
-        let dateString = extractedData.appointmentDate;
-        if (dateString && !dateString.includes('Z') && !dateString.match(/[+-]\d{2}:\d{2}$/)) {
-            dateString += "+09:00";
+    // Ensure the date string is treated as JST
+    let dateString = extractedData.appointmentDate;
+    if (dateString && !dateString.includes('Z') && !dateString.match(/[+-]\d{2}:\d{2}$/)) {
+        dateString += "+09:00";
+    }
+
+    return {
+      ...extractedData,
+      japanCellPhone: finalPhoneNumber,
+      appointmentDateTime: new Date(dateString),
+      originalFileName: destination,
+      processedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+}
+
+async function uploadAndVerify(filePath, destination) {
+    await bucket.upload(filePath, {
+        destination,
+        metadata: { contentType: 'application/pdf' },
+    });
+
+    const [uploaded] = await bucket.file(destination).exists();
+    if (!uploaded) {
+        throw new Error(`Cloud Storage upload verification failed: ${destination}`);
+    }
+}
+
+async function processPdf(filePath, eventType) {
+    if (path.extname(filePath).toLowerCase() !== '.pdf') {
+        console.log(`PDFではないためスキップ: ${filePath}`);
+        return;
+    }
+
+    const isChange = eventType === 'change';
+    console.log(isChange ? `更新されたPDFを発見: ${filePath}` : `新しいファイルを発見: ${filePath}`);
+
+    try {
+        const destination = `uploads/${path.basename(filePath)}`;
+        const existingSnapshot = await db.collection("appointments")
+          .where("originalFileName", "==", destination)
+          .get();
+
+        if (!existingSnapshot.empty && !isChange) {
+            const [existsInStorage] = await bucket.file(destination).exists();
+            if (!existsInStorage) {
+                await uploadAndVerify(filePath, destination);
+                console.log(`既存FirestoreレコードのPDFをCloud Storageへ補充: ${destination}`);
+            } else {
+                console.log(`既存レコードとPDFがあるためスキップ: ${destination}`);
+            }
+            return;
         }
 
-        const firestoreData = {
-          ...extractedData,
-          japanCellPhone: finalPhoneNumber,
-          appointmentDateTime: new Date(dateString),
-          originalFileName: destination,
-          processedAt: admin.firestore.FieldValue.serverTimestamp(),
-        };
+        const firestoreData = await extractAppointmentData(filePath, destination);
 
-        await bucket.upload(filePath, {
-            destination,
-            metadata: { contentType: 'application/pdf' },
-        });
-        const [uploaded] = await storageFile.exists();
-        if (!uploaded) {
-            throw new Error(`Cloud Storage upload verification failed: ${destination}`);
-        }
+        await uploadAndVerify(filePath, destination);
         console.log(`Cloud Storageへのアップロード成功: ${filePath}`);
 
-        await db.collection("appointments").add(firestoreData);
-        console.log(`Firestoreへのデータ追加成功: ${filePath}`);
+        if (existingSnapshot.empty) {
+            await db.collection("appointments").add(firestoreData);
+            console.log(`Firestoreへのデータ追加成功: ${filePath}`);
+            return;
+        }
+
+        const batch = db.batch();
+        existingSnapshot.docs.forEach((doc) => {
+            batch.update(doc.ref, {
+                ...firestoreData,
+                pdfUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+        });
+        await batch.commit();
+        console.log(`Firestoreの既存データ更新成功: ${filePath} (${existingSnapshot.size}件)`);
 
     } catch (error) {
         console.error(`処理中にエラーが発生しました: ${filePath}`, error);
     }
-});
+}
+
+watcher.on('add', (filePath) => processPdf(filePath, 'add'));
+watcher.on('change', (filePath) => processPdf(filePath, 'change'));
