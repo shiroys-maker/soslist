@@ -85,7 +85,9 @@ const cancelVisitDateBtn  = document.getElementById('cancelVisitDateBtn');
 
 // --- グローバル変数 ---
 let logoutTimer;
-let editingDocId = null;
+let editingDateTimeDocId = null;
+let editingServicesDocId = null;
+let editingPhoneDocId = null;
 let unsubscribe;
 const CD_MONITOR_ENABLED_KEY = 'soslist-cd-monitor-enabled';
 const DAILY_BRIEF_BASE_URL = 'http://127.0.0.1:8790';
@@ -241,7 +243,11 @@ async function initializeSummaryDate() {
         const todayYmd = formatDateInTokyo(now);
         const { hour, minute } = getTokyoTimeParts(now);
         const isAfterCutoff = hour > 16 || (hour === 16 && minute >= 30);
-        const snapshot = await db.collection("appointments").get();
+        // 今日以降の予約だけあれば十分（dailyBrief_ドキュメントも自動的に除外される）
+        const windowStart = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        const snapshot = await db.collection("appointments")
+            .where("appointmentDateTime", ">=", windowStart)
+            .get();
 
         let hasTodayAppointment = false;
         let nextAppointmentDate = null;
@@ -479,8 +485,11 @@ tableBody.addEventListener('click', (e) => {
         docRef.get().then(doc => {
             if (doc.exists) {
                 const currentIsShown = doc.data().isShown === true;
-                docRef.update({ isShown: !currentIsShown });
+                return docRef.update({ isShown: !currentIsShown });
             }
+        }).catch(error => {
+            console.error('来院表示の更新エラー:', error);
+            alert('来院表示の更新に失敗しました。');
         });
         return;
     }
@@ -504,14 +513,20 @@ tableBody.addEventListener('click', (e) => {
     if (target.classList.contains('received-cell')) {
         const docRef = db.collection('appointments').doc(docId);
         docRef.get().then(doc => {
-            if (doc.exists) docRef.update({ isReceived: !doc.data().isReceived });
+            if (doc.exists) return docRef.update({ isReceived: !doc.data().isReceived });
+        }).catch(error => {
+            console.error('受領フラグの更新エラー:', error);
+            alert('受領フラグの更新に失敗しました。');
         });
         return;
     }
     if (target.classList.contains('completed-cell')) {
         const docRef = db.collection('appointments').doc(docId);
         docRef.get().then(doc => {
-            if (doc.exists) docRef.update({ isCompleted: !doc.data().isCompleted });
+            if (doc.exists) return docRef.update({ isCompleted: !doc.data().isCompleted });
+        }).catch(error => {
+            console.error('完了フラグの更新エラー:', error);
+            alert('完了フラグの更新に失敗しました。');
         });
         return;
     }
@@ -531,13 +546,18 @@ tableBody.addEventListener('click', (e) => {
     if (target.classList.contains('age-cell')) {
         const docRef = db.collection('appointments').doc(docId);
         const isPink = target.classList.toggle('pink');
-        docRef.update({ isAgePink: isPink });
+        docRef.update({ isAgePink: isPink }).catch(error => {
+            // 書き込み失敗時は先行して切り替えた表示を元に戻す
+            target.classList.toggle('pink', !isPink);
+            console.error('性別フラグの更新エラー:', error);
+            alert('性別フラグの更新に失敗しました。');
+        });
         return;
     }
 });
 
 confirmEditBtn.addEventListener('click', () => {
-    if (!dateSelect.value || !hourSelect.value || !minuteSelect.value || !editingDocId) return;
+    if (!dateSelect.value || !hourSelect.value || !minuteSelect.value || !editingDateTimeDocId) return;
     const timeValue = `${hourSelect.value}:${minuteSelect.value}`;
 
     // 2025/10/26以降のデータはJST（UTC+9）として保存する
@@ -558,7 +578,7 @@ confirmEditBtn.addEventListener('click', () => {
         processedAt: processedAt // 処理日時を記録（タイムスタンプ判定用）
     };
     
-    db.collection('appointments').doc(editingDocId).update(dataToUpdate)
+    db.collection('appointments').doc(editingDateTimeDocId).update(dataToUpdate)
       .then(() => closeEditModal())
       .catch(error => {
           console.error('更新エラー:', error);
@@ -682,6 +702,8 @@ function setupRealtimeListener() {
     const filterDate = new Date(`${localDateStr}T00:00:00+09:00`);
     unsubscribe = db.collection("appointments")
       .where("appointmentDateTime", ">=", filterDate)
+      .orderBy("appointmentDateTime")
+      .limit(300)
       .onSnapshot(querySnapshot => {
           const appointments = [];
           querySnapshot.forEach(doc => {
@@ -844,15 +866,18 @@ function openEditModal(docId) {
       hourSelect.value = hours.padStart(2, '0');
       minuteSelect.value = minutes.padStart(2, '0');
     }
-    editingDocId = docId;
+    editingDateTimeDocId = docId;
     editModal.style.display = 'flex';
     document.body.classList.add('modal-open');
+  }).catch(error => {
+      console.error('日時編集モーダルの表示エラー:', error);
+      alert('データの取得に失敗しました。');
   });
 }
 
 function closeEditModal() {
     editModal.style.display = 'none';
-    editingDocId = null;
+    editingDateTimeDocId = null;
     document.body.classList.remove('modal-open');
 }
 
@@ -970,6 +995,9 @@ function openDetailsModal(docId) {
             return;
         }
         newWindow.location.href = detailsUrl;
+    }).catch(error => {
+        console.error('詳細ウィンドウの表示エラー:', error);
+        alert('データの取得に失敗しました。');
     });
 }
 
@@ -1403,15 +1431,18 @@ function openServicesEditModal(docId) {
         const currentServices = (data.services || []).join(', ');
         servicesTextarea.value = currentServices;
         
-        editingDocId = docId;
+        editingServicesDocId = docId;
         editServicesModal.style.display = 'flex';
         document.body.classList.add('modal-open');
+    }).catch(error => {
+        console.error('検査内容編集モーダルの表示エラー:', error);
+        alert('データの取得に失敗しました。');
     });
 }
 
 function closeServicesEditModal() {
     editServicesModal.style.display = 'none';
-    editingDocId = null;
+    editingServicesDocId = null;
     document.body.classList.remove('modal-open');
 }
 
@@ -1424,24 +1455,27 @@ function openPhoneEditModal(docId) {
         const data = doc.data();
         phoneInput.value = data.japanCellPhone || '';
         
-        editingDocId = docId;
+        editingPhoneDocId = docId;
         editPhoneModal.style.display = 'flex';
         document.body.classList.add('modal-open');
+    }).catch(error => {
+        console.error('電話編集モーダルの表示エラー:', error);
+        alert('データの取得に失敗しました。');
     });
 }
 
 function closePhoneEditModal() {
     editPhoneModal.style.display = 'none';
-    editingDocId = null;
+    editingPhoneDocId = null;
     document.body.classList.remove('modal-open');
 }
 
 function savePhone() {
-    if (!editingDocId) return;
+    if (!editingPhoneDocId) return;
 
     const newPhone = phoneInput.value.trim();
 
-    db.collection('appointments').doc(editingDocId).update({
+    db.collection('appointments').doc(editingPhoneDocId).update({
         japanCellPhone: newPhone
     })
     .then(() => {
@@ -1455,14 +1489,14 @@ function savePhone() {
 }
 
 function saveServices() {
-    if (!editingDocId) return;
+    if (!editingServicesDocId) return;
 
     const newServicesString = servicesTextarea.value;
     const newServicesArray = newServicesString.split(',')
                                             .map(s => s.trim())
                                             .filter(s => s !== '');
 
-    db.collection('appointments').doc(editingDocId).update({
+    db.collection('appointments').doc(editingServicesDocId).update({
         services: newServicesArray
     })
     .then(() => {
@@ -1709,6 +1743,9 @@ function openShokaijyoModal(docId, destKey) {
                 if (items.length > 0) purposeField.value = items.join('、') + 'の依頼';
             }
         }
+    }).catch(error => {
+        console.error('紹介状モーダルの表示エラー:', error);
+        alert('データの取得に失敗しました。');
     });
 }
 
