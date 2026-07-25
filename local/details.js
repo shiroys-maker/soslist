@@ -113,7 +113,7 @@ function renderDetails(targetDocId, data) {
         <section class="notes-card">
             <span class="detail-label">URL</span>
             <input id="referenceUrlInput" type="url" class="detail-input" placeholder="https://..." value="${escapeHtml(referenceUrl)}">
-            <a id="referenceUrlLink" class="reference-link${referenceUrl ? '' : ' is-hidden'}" href="${escapeAttribute(referenceUrl)}" rel="noopener noreferrer">${escapeHtml(referenceUrl || '')}</a>
+            <a id="referenceUrlLink" class="reference-link${sanitizeUrl(referenceUrl) ? '' : ' is-hidden'}" href="${escapeAttribute(sanitizeUrl(referenceUrl))}" rel="noopener noreferrer">${escapeHtml(sanitizeUrl(referenceUrl))}</a>
             <span class="detail-label">メモ (所見など)</span>
             <textarea id="notesTextarea" placeholder="1500文字程度まで入力可能...">${escapeHtml(notes)}</textarea>
             <div class="button-row">
@@ -346,9 +346,16 @@ function syncReferenceUrlLink(rawValue) {
         return;
     }
 
+    const safeUrl = sanitizeUrl(trimmedValue);
+    if (!safeUrl) {
+        link.classList.add('is-hidden');
+        link.removeAttribute('href');
+        link.textContent = '';
+        return;
+    }
     link.classList.remove('is-hidden');
-    link.href = trimmedValue;
-    link.textContent = trimmedValue;
+    link.href = safeUrl;
+    link.textContent = safeUrl;
 }
 
 function renderError(message) {
@@ -404,4 +411,17 @@ function escapeHtml(value) {
 
 function escapeAttribute(value) {
     return escapeHtml(value);
+}
+
+// http/https 以外のスキーム（javascript: 等）はリンク化しない
+function sanitizeUrl(value) {
+    const trimmed = String(value || '').trim();
+    if (!trimmed) return '';
+    try {
+        const parsed = new URL(trimmed);
+        if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+            return trimmed;
+        }
+    } catch (_) { /* 不正なURLはリンク化しない */ }
+    return '';
 }

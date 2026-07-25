@@ -1445,15 +1445,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
 
     private func buildAppointmentMarkdown(details: [String: Any]) -> String {
-        let claimantName = stringValue(details["claimantName"])
-        let contractNumber = stringValue(details["contractNumber"])
+        let claimantName = sanitizeMarkdownInline(stringValue(details["claimantName"]))
+        let contractNumber = sanitizeMarkdownInline(stringValue(details["contractNumber"]))
         let appointmentDate = formattedAppointmentDate(details["appointmentDateTimeMs"])
-        let dateOfBirth = stringValue(details["dateOfBirth"])
-        let phone = stringValue(details["japanCellPhone"])
-        let visitDate = stringValue(details["visitDate"])
-        let referenceUrl = stringValue(details["referenceUrl"])
+        let dateOfBirth = sanitizeMarkdownInline(stringValue(details["dateOfBirth"]))
+        let phone = sanitizeMarkdownInline(stringValue(details["japanCellPhone"]))
+        let visitDate = sanitizeMarkdownInline(stringValue(details["visitDate"]))
+        let referenceUrl = sanitizeMarkdownInline(stringValue(details["referenceUrl"]))
         let notes = stringValue(details["notes"])
-        let services = (details["services"] as? [String]) ?? []
+        let services = ((details["services"] as? [String]) ?? []).map { sanitizeMarkdownInline($0) }
         let referralDests = (details["referralDests"] as? [String]) ?? []
 
         let serviceLines = services.isEmpty ? "- なし" : services.map { "- \($0)" }.joined(separator: "\n")
@@ -1515,6 +1515,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             return string
         }
         return ""
+    }
+
+    // Firestore由来の値が改行を含むとMarkdownの見出し・リストとして解釈されうるため1行に潰す
+    private func sanitizeMarkdownInline(_ value: String) -> String {
+        return value
+            .replacingOccurrences(of: "\r\n", with: " ")
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\r", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func extractDate(_ rawValue: Any?) -> Date {

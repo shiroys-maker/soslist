@@ -798,13 +798,13 @@ function setupRealtimeListener() {
                   <tr data-id="${docId}" class="${rowClass}">
                       <td class="col-show show-toggle-cell">${checkmark}</td>
                       <td class="col-date date-cell">${displayDate}</td>
-                      <td class="col-name name-cell${data.notes ? '' : ' name-no-notes'}">${data.claimantName || ''}</td>
-                      <td class="col-age ${ageCellClass}">${displayAge}</td>
-                      <td class="col-contract contract-cell">${data.contractNumber || ''}</td>
-                      <td class="col-phone phone-cell">${data.japanCellPhone || ''}</td>
-                      <td class="col-services services-cell">${displayServicesText}</td>
+                      <td class="col-name name-cell${data.notes ? '' : ' name-no-notes'}">${escapeHtml(data.claimantName || '')}</td>
+                      <td class="col-age ${ageCellClass}">${escapeHtml(displayAge)}</td>
+                      <td class="col-contract contract-cell">${escapeHtml(data.contractNumber || '')}</td>
+                      <td class="col-phone phone-cell">${escapeHtml(data.japanCellPhone || '')}</td>
+                      <td class="col-services services-cell">${escapeHtml(displayServicesText)}</td>
                       <td class="col-referral">${referralHTML}</td>
-                      <td class="col-visitdate visitdate-cell">${visitdateHTML}</td>
+                      <td class="col-visitdate visitdate-cell">${escapeHtml(visitdateHTML)}</td>
                       <td class="col-received received-cell">${receivedHTML}</td>
                       <td class="col-completed completed-cell">${completedHTML}</td>
                       <td class="col-actions">
@@ -996,7 +996,7 @@ function handleSearchResults(docs, searchTerm) {
         const jstOptions = { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' };
         const targetDate = new Intl.DateTimeFormat('en-CA', jstOptions).format(correctedDateObj);
 
-        resultsHTML += `<div class="result-item" data-date="${targetDate}"><span>${data.claimantName}</span><span>${targetDate}</span></div>`;
+        resultsHTML += `<div class="result-item" data-date="${targetDate}"><span>${escapeHtml(data.claimantName || '')}</span><span>${targetDate}</span></div>`;
     });
     searchResultsList.innerHTML = resultsHTML;
     searchResultsModal.style.display = 'flex';
@@ -1378,7 +1378,7 @@ function generateNewInvoiceHTML(audiologyRecords, dayRateList, from, to) {
     audiologyRecords.forEach(data => {
         audiologyRows += `
             <tr>
-                <td>${data.contractNumber}</td>
+                <td>${escapeHtml(data.contractNumber || '')}</td>
                 <td class="fee-cell">${data.fee.toLocaleString()}</td>
             </tr>
         `;
@@ -1727,7 +1727,8 @@ function escapeHtml(str) {
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }
 
 function shokaijyoSelectSex(el) {
