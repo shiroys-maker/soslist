@@ -23,7 +23,7 @@
  *   LLM_PROVIDER     (default anthropic)        … anthropic / openai
  *   PODCAST_MODEL    (default claude-sonnet-5)  … 台本生成モデル
  *   PODCAST_FALLBACK_MODEL (default empty)      … 初回モデルで薄い時の高品質フォールバック
- *   ANTHROPIC_EFFORT (default medium)           … Claude API の出力工数(low / medium / high / xhigh / max)
+ *   ANTHROPIC_EFFORT (default high)             … Claude API の出力工数(low / medium / high / xhigh / max)
  *   PODCAST_REASONING_EFFORT (default medium)   … gpt-5系 Responses API の reasoning effort
  *   PODCAST_AUDIO_ENGINE (default aivis)         … aivis / say / openai
  *   TTS_MODEL        (default tts-1)             … OpenAI TTS使用時の音声合成モデル
@@ -62,7 +62,8 @@ const DAILY_BRIEF_MIRROR_PREFIX = process.env.DAILY_BRIEF_MIRROR_PREFIX || 'dail
 const LLM_PROVIDER = process.env.LLM_PROVIDER || 'anthropic';
 const PODCAST_MODEL = process.env.PODCAST_MODEL || 'claude-sonnet-5';
 const PODCAST_FALLBACK_MODEL = process.env.PODCAST_FALLBACK_MODEL || '';
-const ANTHROPIC_EFFORT = process.env.ANTHROPIC_EFFORT || 'medium';
+// 初回で詳細なブリーフを完結させるため、Claude は十分な検討量を既定にする。
+const ANTHROPIC_EFFORT = process.env.ANTHROPIC_EFFORT || 'high';
 const PODCAST_REASONING_EFFORT = process.env.PODCAST_REASONING_EFFORT || 'medium';
 const PODCAST_TEMPERATURE = Number(process.env.PODCAST_TEMPERATURE || 0.4);
 const PODCAST_AUDIO_ENGINE = process.env.PODCAST_AUDIO_ENGINE || 'aivis';
@@ -318,7 +319,9 @@ function countAudiologyAppointments(appts) {
 }
 
 function minimumSummaryChars(appts) {
-  return 260 + (countNonAudiologyAppointments(appts) * 650) + (countAudiologyAppointments(appts) * 80);
+  // 内容要件(病歴6文・確認項目5件)を維持しつつ、表現差だけで不必要な再生成に
+  // 入らないよう、初回出力の実用的な下限に合わせる。
+  return 220 + (countNonAudiologyAppointments(appts) * 560) + (countAudiologyAppointments(appts) * 60);
 }
 
 function minimumDialogueChars() {
@@ -597,6 +600,13 @@ async function generateBrief(openai, appts, ymd) {
 - 対象日の各予約を省略せず、全件を個別に扱うこと。
 - summaryMarkdown 全体は最低でも約${summaryMinChars}文字以上を目安にし、短すぎる場合は自分で追記してから返すこと。
 
+# 初回で完結させる分量設計(必須)
+- 一般論は省いてよいが、患者ごとの具体的な病歴・時系列・確認項目は短縮しないこと。
+- 非Audiology予約は、summaryMarkdown で患者ごとにおおむね600文字以上を使う。見出し、claimまとめ、病歴要約、確認項目を別々に書くこと。
+- podcastDialogue は、全体で約${dialogueTargetChars}文字を目標にする。非Audiology予約には導入・締めを除いて十分な分量を配分し、各症例を途中で切り上げないこと。
+- 非Audiology予約ごとに A/B の発話を最低16ターン(8往復)入れ、病歴、現在症状、当日の確認点をそれぞれ別の発話で扱うこと。
+- JSONを組み立てる前に内部で患者ごとの分量配分を決め、短く要約して終わらせないこと。内部の計画や文字数計算は出力しないこと。
+
 # 出力前セルフチェック(必須)
 JSONを返す直前に、次の不足が1つでもあれば本文を自分で補ってから返すこと。
 - summaryMarkdown が最低約${summaryMinChars}文字に届かない。
@@ -659,6 +669,7 @@ ${JSON.stringify(appts, null, 2)}
 - 非Audiology ${nonAudiologyCount}件は全件とも省略せず、brief では各予約ごとに claimまとめ、病歴の時系列、現在症状、今回の焦点、確認項目を必ず分けて書くこと。
 - summaryMarkdown は最低約${summaryMinChars}文字以上を目安にすること。
 - podcastDialogue は最低約${dialogueMinChars}文字以上、理想は約${dialogueTargetChars}文字以上にすること。
+- 非Audiology予約ごとに summary ではおおむね600文字以上、podcast では最低16ターンを配分すること。
 - 各予約の語り出しで年齢・性別を述べること。
 - notes の病歴を時系列の文章で具体的に要約し、claim ごとの IMO を claim まとめに反映すること。
 - 初回出力から再生成不要な完成度にすること。短すぎる・浅すぎる・項目不足があれば、返答前に自分で追記して基準を満たすこと。
@@ -707,6 +718,7 @@ JSON以外は出力しない。`;
         parsed.podcastDialogue = await generatePodcastDialogueFallback(openai, appts, ymd, parsed.summaryMarkdown, modelAttempt.model);
       }
       if (!isBriefTooThin(parsed.summaryMarkdown, parsed.podcastDialogue, appts)) {
+        log(`ブリーフ生成完了: summary=${String(parsed.summaryMarkdown).length}/${summaryMinChars} chars, dialogue=${dialogueCharCount(parsed.podcastDialogue)}/${dialogueMinChars} chars`);
         return parsed;
       }
       log(`出力が簡素すぎたため再生成します... model=${modelAttempt.model}, summary=${String(parsed.summaryMarkdown || '').length} chars, dialogue=${dialogueCharCount(parsed.podcastDialogue)} chars`);
