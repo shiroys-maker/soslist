@@ -3,18 +3,46 @@ import Foundation
 import WebKit
 
 private let appName = "SOSList Local"
+private let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
 private let qtcServerBaseURL = URL(string: "http://127.0.0.1:19876/")!
 private let qtcHealthCheckURL = qtcServerBaseURL.appendingPathComponent("audiogram.html")
-private let qtcServerScript = "/Users/shungohiroyasu/bin/sospdf_server.py"
-private let qtcPython = "/Users/shungohiroyasu/miniconda3/bin/python3"
-private let qtcImportsBaseDir = "/Users/shungohiroyasu/Documents/QTC_server/cd-imports"
-private let vaRecordsBaseDir = "/Users/shungohiroyasu/Library/CloudStorage/Dropbox/VA/VA Records"
+private let qtcServerScript = "\(homeDir)/bin/sospdf_server.py"
+private let qtcPython = "\(homeDir)/miniconda3/bin/python3"
+private let qtcImportsBaseDir = "\(homeDir)/Documents/QTC_server/cd-imports"
+private let vaRecordsBaseDir = "\(homeDir)/Library/CloudStorage/Dropbox/VA/VA Records"
 private let cdMonitoringDefaultsKey = "SOSListLocalCDMonitoringEnabled"
 private let dailyBriefBaseURL = URL(string: "http://127.0.0.1:8790/")!
-private let dailyBriefDir = "/Users/shungohiroyasu/Documents/GitHub/soslist/daily-brief"
-private let dailyBriefNodePath = "/Users/shungohiroyasu/.nvm/versions/node/v22.14.0/bin/node"
+private let dailyBriefDir = "\(homeDir)/Documents/GitHub/soslist/daily-brief"
+private let dailyBriefNodePath = resolveNodePath()
 private let dailyBriefLogPath = "/tmp/soslist-daily-brief.log"
 private let dailyBriefGeneratorScript = "generate-brief.js"
+
+// node の実行パスを解決する。nvm の最新バージョン → よくあるインストール先の順。
+// （特定バージョンをハードコードすると nvm の更新で静かに壊れるため）
+private func resolveNodePath() -> String {
+    let fm = FileManager.default
+    let nvmVersionsDir = "\(homeDir)/.nvm/versions/node"
+    if let versions = try? fm.contentsOfDirectory(atPath: nvmVersionsDir), !versions.isEmpty {
+        // "v22.14.0" 形式を数値で降順ソートして最新を選ぶ
+        let sorted = versions.sorted { a, b in
+            let pa = a.dropFirst().split(separator: ".").compactMap { Int($0) }
+            let pb = b.dropFirst().split(separator: ".").compactMap { Int($0) }
+            return pa.lexicographicallyPrecedes(pb) == false
+        }
+        for version in sorted {
+            let candidate = "\(nvmVersionsDir)/\(version)/bin/node"
+            if fm.isExecutableFile(atPath: candidate) {
+                return candidate
+            }
+        }
+    }
+    for candidate in ["/opt/homebrew/bin/node", "/usr/local/bin/node"] {
+        if fm.isExecutableFile(atPath: candidate) {
+            return candidate
+        }
+    }
+    return "/usr/local/bin/node"
+}
 
 private enum PopupKind {
     case details
@@ -38,6 +66,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private var webView: WKWebView!
     private var popupWindows: [ObjectIdentifier: NSWindow] = [:]
     private var popupKinds: [ObjectIdentifier: PopupKind] = [:]
+    // details保存の応答を返す先（requestId → 詳細ウィンドウのWebView）
+    private var pendingDetailSaveWebViews: [String: WKWebView] = [:]
     private var cdMonitorTimer: Timer?
     private let cdMonitorQueue = DispatchQueue(label: "jp.niraissc.soslistlocal.cdmonitor", qos: .utility)
     private var processedCDVolumes: Set<String> = []
@@ -96,6 +126,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                 return
             }
             closePopupWindow(for: sourceWebView)
+            return
+        }
+
+        // 詳細ウィンドウ→メインWebViewへの保存リレー
+        // （独立したWKWebView間ではlocalStorageのstorageイベントが届かないため）
+        if message.name == "saveDetails" {
+            guard
+                let payload = message.body as? [String: Any],
+                let requestId = payload["requestId"] as? String
+            else {
+                return
+            }
+            if let sourceWebView = message.webView {
+                pendingDetailSaveWebViews[requestId] = sourceWebView
+            }
+            relayJSON(payload, toFunction: "window.__sosApplyDetailsSave", in: webView)
+            return
+        }
+
+        // メインWebView→詳細ウィンドウへの保存結果リレー
+        if message.name == "detailsSaveResult" {
+            guard
+                let payload = message.body as? [String: Any],
+                let requestId = payload["requestId"] as? String
+            else {
+                return
+            }
+            let target = pendingDetailSaveWebViews.removeValue(forKey: requestId)
+            relayJSON(payload, toFunction: "window.__sosDetailSaveResult", in: target)
+            return
+        }
+
+        // 詳細ウィンドウからの紹介状オープン要求をメインWebViewへリレー
+        if message.name == "openReferralFromDetails" {
+            guard let payload = message.body as? [String: Any] else {
+                return
+            }
+            NSApp.activate(ignoringOtherApps: true)
+            window.makeKeyAndOrderFront(nil)
+            relayJSON(payload, toFunction: "window.__sosOpenReferralFromDetails", in: webView)
             return
         }
 
@@ -326,6 +396,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         configuration.userContentController.add(self, name: "openSummaryWindow")
         configuration.userContentController.add(self, name: "startSummaryGeneration")
         configuration.userContentController.add(self, name: "setCDMonitoringEnabled")
+        configuration.userContentController.add(self, name: "saveDetails")
+        configuration.userContentController.add(self, name: "detailsSaveResult")
+        configuration.userContentController.add(self, name: "openReferralFromDetails")
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = self
         webView.uiDelegate = self
@@ -375,6 +448,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     ) {
         let popupWebView = makePopupWindow(title: title, detailsPayload: detailsPayload, kind: kind)
         loadRequest(URLRequest(url: url), into: popupWebView)
+    }
+
+    // payloadをJSONにして指定WebViewのグローバル関数へ渡す
+    private func relayJSON(_ payload: [String: Any], toFunction functionName: String, in targetWebView: WKWebView?) {
+        guard
+            let targetWebView,
+            JSONSerialization.isValidJSONObject(payload),
+            let jsonData = try? JSONSerialization.data(withJSONObject: payload, options: []),
+            let jsonString = String(data: jsonData, encoding: .utf8)
+        else {
+            return
+        }
+        let script = "if (typeof \(functionName) === 'function') { \(functionName)(\(jsonString)); }"
+        targetWebView.evaluateJavaScript(script, completionHandler: nil)
     }
 
     private func injectDetailsPayload(_ payload: [String: Any], into configuration: WKWebViewConfiguration) {

@@ -593,6 +593,43 @@ function handleDetailSaveRequest(rawValue) {
         });
 }
 
+// ネイティブアプリ経由の保存リレー（WKWebView間はstorageイベントが届かないため、
+// details → saveDetails(native) → __sosApplyDetailsSave(main) → detailsSaveResult(native) → details）
+window.__sosApplyDetailsSave = function(request) {
+    if (!request?.requestId || handledDetailSaveRequests.has(request.requestId)) {
+        return;
+    }
+    handledDetailSaveRequests.add(request.requestId);
+
+    const resultHandler = window.webkit?.messageHandlers?.detailsSaveResult;
+    const reply = (status, message) => {
+        if (resultHandler) {
+            resultHandler.postMessage({ requestId: request.requestId, status, message });
+        }
+    };
+
+    db.collection('appointments').doc(request.docId).update({
+        notes: request.notes || '',
+        referenceUrl: request.referenceUrl || ''
+    })
+        .then(() => reply('success', '保存しました。'))
+        .catch((error) => {
+            console.error('details保存エラー:', error);
+            reply('error', '保存に失敗しました。');
+        });
+};
+
+// ネイティブアプリ経由の紹介状オープン要求
+window.__sosOpenReferralFromDetails = function(request) {
+    if (!request?.requestId || handledDetailReferralRequests.has(request.requestId)) {
+        return;
+    }
+    handledDetailReferralRequests.add(request.requestId);
+    if (request.docId && request.destKey) {
+        openShokaijyoModal(request.docId, request.destKey);
+    }
+};
+
 function handleDetailReferralOpenRequest(rawValue) {
     let request;
     try {

@@ -177,12 +177,20 @@ function saveNotes(targetDocId, options = {}) {
     statusText.textContent = closeAfterSave ? '保存して閉じています...' : '保存しています...';
 
     activeSaveRequestId = `detail-save-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    localStorage.setItem(DETAIL_SAVE_REQUEST_KEY, JSON.stringify({
+    const savePayload = {
         requestId: activeSaveRequestId,
         docId: targetDocId,
         notes: notesTextarea.value,
         referenceUrl: referenceUrlInput ? referenceUrlInput.value.trim() : ''
-    }));
+    };
+
+    // ネイティブアプリではWKWebView間にstorageイベントが届かないため、ブリッジ経由で保存する
+    const nativeSaveHandler = window.webkit?.messageHandlers?.saveDetails;
+    if (nativeSaveHandler) {
+        nativeSaveHandler.postMessage(savePayload);
+    } else {
+        localStorage.setItem(DETAIL_SAVE_REQUEST_KEY, JSON.stringify(savePayload));
+    }
 
     window.setTimeout(() => {
         if (!activeSaveRequestId) {
@@ -201,6 +209,32 @@ function saveNotes(targetDocId, options = {}) {
     }, 5000);
 }
 
+function applySaveResponse(response) {
+    const saveButton = document.getElementById('saveNotesButton');
+    const statusText = document.getElementById('statusText');
+    const originalLabel = '保存';
+
+    statusText.textContent = response?.message || '';
+    if (response?.status !== 'success') {
+        window.alert('メモの保存に失敗しました。');
+    } else if (pendingCloseAfterSave) {
+        closeDetailsWindowImmediately();
+    }
+
+    saveButton.disabled = false;
+    saveButton.textContent = originalLabel;
+    activeSaveRequestId = null;
+    pendingCloseAfterSave = false;
+}
+
+// ネイティブアプリからの保存結果（saveDetailsブリッジの応答）
+window.__sosDetailSaveResult = function(response) {
+    if (!activeSaveRequestId || response?.requestId !== activeSaveRequestId) {
+        return;
+    }
+    applySaveResponse(response);
+};
+
 function handleStorageEvent(event) {
     if (!activeSaveRequestId) {
         return;
@@ -211,29 +245,14 @@ function handleStorageEvent(event) {
         return;
     }
 
-    const saveButton = document.getElementById('saveNotesButton');
-    const statusText = document.getElementById('statusText');
-    const originalLabel = '保存';
-
+    let response = null;
     try {
-        const response = JSON.parse(event.newValue);
-        statusText.textContent = response.message || '';
-        if (response.status !== 'success') {
-            window.alert('メモの保存に失敗しました。');
-        } else if (pendingCloseAfterSave) {
-            closeDetailsWindowImmediately();
-        }
+        response = JSON.parse(event.newValue);
     } catch (error) {
         console.error(error);
-        statusText.textContent = '保存に失敗しました。';
-        window.alert('メモの保存に失敗しました。');
     }
-
-    saveButton.disabled = false;
-    saveButton.textContent = originalLabel;
     localStorage.removeItem(expectedKey);
-    activeSaveRequestId = null;
-    pendingCloseAfterSave = false;
+    applySaveResponse(response);
 }
 
 function openReferralSheet(targetDocId, destKey) {
@@ -241,15 +260,24 @@ function openReferralSheet(targetDocId, destKey) {
         return;
     }
 
+    const request = {
+        requestId: `detail-referral-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        docId: targetDocId,
+        destKey
+    };
+
+    // ネイティブアプリではブリッジ経由でメインWebViewに紹介状を開かせる
+    const nativeReferralHandler = window.webkit?.messageHandlers?.openReferralFromDetails;
+    if (nativeReferralHandler) {
+        nativeReferralHandler.postMessage(request);
+        return;
+    }
+
     if (window.webkit?.messageHandlers?.focusMainWindow) {
         window.webkit.messageHandlers.focusMainWindow.postMessage(destKey);
     }
 
-    localStorage.setItem(DETAIL_REFERRAL_OPEN_REQUEST_KEY, JSON.stringify({
-        requestId: `detail-referral-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        docId: targetDocId,
-        destKey
-    }));
+    localStorage.setItem(DETAIL_REFERRAL_OPEN_REQUEST_KEY, JSON.stringify(request));
 }
 
 function closeDetailsWindow() {
