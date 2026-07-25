@@ -388,11 +388,10 @@ auth.onAuthStateChanged(user => {
             .then(querySnapshot => {
                 if (!querySnapshot.empty) {
                     const lastAppointment = querySnapshot.docs[0].data();
-                    const dateObj = lastAppointment.appointmentDateTime.toDate();
-                    const year = dateObj.getUTCFullYear();
-                    const month = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
-                    const day = String(dateObj.getUTCDate()).padStart(2, '0');
-                    dateFilter.value = `${year}-${month}-${day}`;
+                    const correctedDateObj = getCorrectedAppointmentDate(lastAppointment);
+                    dateFilter.value = correctedDateObj
+                        ? formatDateInTokyo(correctedDateObj)
+                        : formatDateInputValue(today);
                 } else {
                     // No past appointments, use today's date
                     const year = today.getFullYear();
@@ -634,30 +633,6 @@ function resetLogoutTimer() {
     startLogoutTimer();
 }
 
-function formatDateInputValue(dateObj) {
-    const year = dateObj.getFullYear();
-    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
-    const day = String(dateObj.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-}
-
-function normalizeAppointmentDateForDisplay(appointment) {
-    if (!appointment?.appointmentDateTime) {
-        return null;
-    }
-
-    const dateObj = appointment.appointmentDateTime.toDate();
-    const normalizedDateObj = new Date(dateObj);
-    const transitionTimestamp = new Date('2025-10-26T00:00:00+09:00').getTime();
-    const processedAtTimestamp = appointment.processedAt ? appointment.processedAt.toDate().getTime() : 0;
-
-    if (processedAtTimestamp > 0 && processedAtTimestamp < transitionTimestamp) {
-        normalizedDateObj.setHours(normalizedDateObj.getHours() - 9);
-    }
-
-    return normalizedDateObj;
-}
-
 async function jumpToAdjacentReservationDate(direction) {
     if (!dateFilter.value) {
         return;
@@ -699,12 +674,12 @@ async function findAdjacentReservationDate(baseYmd, direction) {
     }
 
     const targetAppointment = querySnapshot.docs[0].data();
-    const targetDate = normalizeAppointmentDateForDisplay(targetAppointment);
+    const targetDate = getCorrectedAppointmentDate(targetAppointment);
     if (!targetDate) {
         return null;
     }
 
-    return formatDateInputValue(targetDate);
+    return formatDateInTokyo(targetDate);
 }
 
 async function jumpToAdjacentSummaryReservationDate(direction) {
@@ -738,28 +713,13 @@ function setupRealtimeListener() {
           querySnapshot.forEach(doc => {
               appointments.push({ id: doc.id, ...doc.data() });
           });
-          // ソート前に各アポイントメントの表示用時間を計算・付与する
+          // ソート前に各アポイントメントの補正済み日時を計算・付与する
           appointments.forEach(appointment => {
-              if (appointment.appointmentDateTime) {
-                  let dateObj = appointment.appointmentDateTime.toDate();
-                  const transitionTimestamp = new Date('2025-10-26T00:00:00+09:00').getTime();
-                  const processedAtTimestamp = appointment.processedAt ? appointment.processedAt.toDate().getTime() : 0;
-                  
-                  // 古いデータと新しいデータで比較可能な「補正済み時間」を作成
-                  let normalizedDateObj = new Date(dateObj);
-                  if (processedAtTimestamp > 0 && processedAtTimestamp < transitionTimestamp) {
-                      // 古いデータ: UTCから9時間引いてJST表示用に調整
-                      normalizedDateObj.setHours(normalizedDateObj.getHours() - 9);
-                  }
-                  // 新しいデータはそのまま（既にJSTで保存されている）
-                  
-                  // ソート用のミリ秒値を付与
-                  appointment._sortTimeMillis = normalizedDateObj.getTime();
-              } else {
-                  appointment._sortTimeMillis = 0;
-              }
+              const correctedDateObj = getCorrectedAppointmentDate(appointment);
+              appointment._correctedDateObj = correctedDateObj;
+              appointment._sortTimeMillis = correctedDateObj ? correctedDateObj.getTime() : 0;
           });
-          
+
           // 補正済みの時間でソート
           appointments.sort((a, b) => {
               return a._sortTimeMillis - b._sortTimeMillis;
@@ -770,11 +730,11 @@ function setupRealtimeListener() {
           appointments.forEach(appointment => {
               const docId = appointment.id;
               const data = appointment;
+              const correctedDateObj = appointment._correctedDateObj;
               let rowClass = '';
               let currentDateStr = '';
-              if (data.appointmentDateTime) {
-                  const dateObj = data.appointmentDateTime.toDate();
-                  currentDateStr = `${dateObj.getUTCFullYear()}-${dateObj.getUTCMonth()}-${dateObj.getUTCDate()}`;
+              if (correctedDateObj) {
+                  currentDateStr = formatDateInTokyo(correctedDateObj);
                   if (previousDateStr && currentDateStr !== previousDateStr) {
                       rowClass = 'date-boundary';
                   }
@@ -782,25 +742,11 @@ function setupRealtimeListener() {
               const isShown = data.isShown === true;
               const checkmark = isShown ? '✅' : '';
               let displayDate = '日付なし';
-              if (data.appointmentDateTime) {
-                  let dateObj = data.appointmentDateTime.toDate();
-
-          // 日時調整のロジック
-          // - 10/26より前のデータ: 元々UTC保存のため9時間引いてJST表示
-          // - 10/26以降のデータ: 既にJST保存になっているため調整不要
-          const transitionTimestamp = new Date('2025-10-26T00:00:00+09:00').getTime();
-          const processedAtTimestamp = data.processedAt ? data.processedAt.toDate().getTime() : 0;
-
-          if (processedAtTimestamp > 0 && processedAtTimestamp < transitionTimestamp) {
-              // 古いデータ(10/26より前): UTCから9時間引いてJST表示
-              dateObj.setHours(dateObj.getHours() - 9);
-          }
-          // 新しいデータ(10/26以降): そのまま表示(既にJSTで保存されている)
-
+              if (correctedDateObj) {
                   const dateOptions = { month: '2-digit', day: '2-digit', weekday: 'short', timeZone: 'Asia/Tokyo' };
                   const timeOptions = { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Tokyo' };
-                  const datePart = new Intl.DateTimeFormat('ja-JP', dateOptions).format(dateObj);
-                  const timePart = new Intl.DateTimeFormat('ja-JP', timeOptions).format(dateObj);
+                  const datePart = new Intl.DateTimeFormat('ja-JP', dateOptions).format(correctedDateObj);
+                  const timePart = new Intl.DateTimeFormat('ja-JP', timeOptions).format(correctedDateObj);
                   displayDate = `${datePart}<br>${timePart}`;
               }
               const displayServicesText = (data.services || []).join(', ').toLowerCase().includes("audiologist") ? "Audiology" : (data.services || []).join(', ');
@@ -1058,7 +1004,7 @@ function nameMatches(storedName, searchTerm) {
 function handleSearchResults(docs, searchTerm) {
     if (docs.length === 1) {
         const doc = docs[0];
-        jumpToDate(doc.data().appointmentDateTime);
+        jumpToDate(doc.data());
         alert(`「${searchTerm}」の予約日にジャンプしました。`);
         return;
     }
@@ -1066,18 +1012,8 @@ function handleSearchResults(docs, searchTerm) {
     let resultsHTML = '';
     docs.forEach(doc => {
         const data = doc.data();
-        const dateObj = data.appointmentDateTime.toDate();
-
-        let correctedDateObj = dateObj;
-        const transitionTimestamp = new Date('2025-10-26T00:00:00+09:00').getTime();
-        const processedAtTimestamp = data.processedAt ? data.processedAt.toDate().getTime() : 0;
-        if (processedAtTimestamp > 0 && processedAtTimestamp < transitionTimestamp) {
-            correctedDateObj = new Date(dateObj.getTime());
-            correctedDateObj.setHours(correctedDateObj.getHours() - 9);
-        }
-
-        const jstOptions = { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' };
-        const targetDate = new Intl.DateTimeFormat('en-CA', jstOptions).format(correctedDateObj);
+        const correctedDateObj = getCorrectedAppointmentDate(data);
+        const targetDate = correctedDateObj ? formatDateInTokyo(correctedDateObj) : '';
 
         resultsHTML += `<div class="result-item" data-date="${targetDate}"><span>${escapeHtml(data.claimantName || '')}</span><span>${targetDate}</span></div>`;
     });
@@ -1086,28 +1022,13 @@ function handleSearchResults(docs, searchTerm) {
     document.body.classList.add('modal-open');
 }
 
-function jumpToDate(timestamp) {
-    if (!timestamp) {
+function jumpToDate(data) {
+    const correctedDateObj = getCorrectedAppointmentDate(data);
+    if (!correctedDateObj) {
         alert('該当の予約には日付が設定されていません。');
         return;
     }
-    const dateObj = timestamp.toDate();
-    
-    // 日時調整のロジック - 表示関数と同じロジックを適用
-    // - 10/26より前のデータ: 元々UTC保存のため9時間引いてJST表示
-    // - 10/26以降のデータ: 既にJST保存になっているため調整不要
-    const transitionTimestamp = new Date('2025-10-26T00:00:00+09:00').getTime();
-    const processedAtTimestamp = timestamp.seconds * 1000; // タイムスタンプを秒からミリ秒に変換
-    if (processedAtTimestamp > 0 && processedAtTimestamp < transitionTimestamp) {
-        dateObj.setHours(dateObj.getHours() - 9);
-    }
-    // 10/26以降のデータはそのまま使用（すでにJSTで保存されている）
-    
-    // 日本時間での日付を取得（YYYY-MM-DD形式）
-    const jstOptions = { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' };
-    const targetDate = new Intl.DateTimeFormat('en-CA', jstOptions).format(dateObj);
-    
-    dateFilter.value = targetDate;
+    dateFilter.value = formatDateInTokyo(correctedDateObj);
     dateFilter.dispatchEvent(new Event('change'));
 }
 
@@ -1220,20 +1141,9 @@ function printInvoice() {
               const data = doc.data();
               if (!data.appointmentDateTime) return;
               
-              let dateObj = data.appointmentDateTime.toDate();
-              
-              // 日時調整のロジック - 表示関数と同じロジックを適用
-              const transitionTimestamp = new Date('2025-10-26T00:00:00+09:00').getTime();
-              const processedAtTimestamp = data.processedAt ? data.processedAt.toDate().getTime() : 0;
-              if (processedAtTimestamp > 0 && processedAtTimestamp < transitionTimestamp) {
-                  // 古いデータ(10/26より前): UTCから9時間引いてJST表示
-                  dateObj.setHours(dateObj.getHours() - 9);
-              }
-              // 新しいデータ(10/26以降): そのまま表示(既にJSTで保存されている)
-              
-              // 日本時間での日付を取得（YYYY-MM-DD形式）
-              const jstOptions = { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' };
-              const jstDateStr = new Intl.DateTimeFormat('en-CA', jstOptions).format(dateObj);
+              const dateObj = getCorrectedAppointmentDate(data);
+              if (!dateObj) return;
+              const jstDateStr = formatDateInTokyo(dateObj);
               
               // fromDateStr以上、toDateStr以下の日付のみを対象にする（時刻は考慮しない）
               if (jstDateStr >= fromDateStr && jstDateStr <= toDateStr) {
