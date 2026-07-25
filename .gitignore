@@ -22,3 +22,6 @@ daily-brief/inbox/
 
 # レガシー生成物
 summary-viewer.html
+
+# openai-processor の dead-letter ログ
+openai-processor/failed.log

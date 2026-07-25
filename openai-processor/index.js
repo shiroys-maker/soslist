@@ -1,26 +1,70 @@
 const chokidar = require('chokidar');
 const path = require('path');
+const os = require('os');
 const crypto = require('crypto');
+const fsSync = require('fs');
 const fs = require('fs').promises;
 const admin = require('firebase-admin');
 const OpenAI = require('openai');
 const pdf = require("pdf-parse");
 
+// --- .env 読み込み（openai-processor/.env → daily-brief/.env の順、既存の環境変数を優先） ---
+const DAILY_BRIEF_DIR = path.join(__dirname, '..', 'daily-brief');
+
+function loadDotEnv(filePath) {
+  if (!fsSync.existsSync(filePath)) return;
+  const content = fsSync.readFileSync(filePath, 'utf8');
+  for (const line of content.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const match = trimmed.match(/^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$/);
+    if (!match) continue;
+    const key = match[1];
+    if (process.env[key]) continue;
+    let value = match[2].trim();
+    if ((value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    process.env[key] = value;
+  }
+}
+
+function expandHome(filePath) {
+  if (!filePath) return filePath;
+  if (filePath === '~') return os.homedir();
+  if (filePath.startsWith('~/')) return path.join(os.homedir(), filePath.slice(2));
+  return filePath;
+}
+
+loadDotEnv(path.join(__dirname, '.env'));
+loadDotEnv(path.join(DAILY_BRIEF_DIR, '.env'));
+
 // --- 設定項目 ---
-// ★★★ あなたが監視したいフォルダのパスに変更してください ★★★
-const WATCH_FOLDER = process.env.SOSPDF_WATCH_FOLDER || '/Users/shungohiroyasu/Library/CloudStorage/Dropbox/VA/SOSPDF';
-// ★★★ FirebaseプロジェクトのデフォルトStorageバケット名 ★★★
+const WATCH_FOLDER = process.env.SOSPDF_WATCH_FOLDER ||
+    path.join(os.homedir(), 'Library/CloudStorage/Dropbox/VA/SOSPDF');
 const BUCKET_NAME = 'sos-list-4d150.firebasestorage.app';
-// ★★★ OpenAI APIキーを環境変数から読み込み ★★★
 const API_KEY = process.env.OPENAI_API_KEY;
+// 抽出やアップロードに失敗したファイルの記録先（dead-letter）
+const FAILED_LOG = path.join(__dirname, 'failed.log');
+const MAX_ATTEMPTS = 3;
 // --- 設定項目ここまで ---
 
 if (!API_KEY) {
-  console.error("エラー: 環境変数 'OPENAI_API_KEY' が設定されていません。");
+  console.error("エラー: 環境変数 'OPENAI_API_KEY' が設定されていません（openai-processor/.env でも指定可）。");
   process.exit(1);
 }
 
-// Firebase Admin SDKを初期化
+// Firebase Admin SDKを初期化（GOOGLE_APPLICATION_CREDENTIALS があれば ~ を展開して使用）
+const gac = expandHome(process.env.GOOGLE_APPLICATION_CREDENTIALS);
+if (gac) {
+  if (fsSync.existsSync(path.resolve(gac))) {
+    process.env.GOOGLE_APPLICATION_CREDENTIALS = path.resolve(gac);
+  } else {
+    console.warn(`GOOGLE_APPLICATION_CREDENTIALS のファイルが見つかりません: ${gac}`);
+    delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  }
+}
 admin.initializeApp({
   storageBucket: BUCKET_NAME,
 });
@@ -43,10 +87,58 @@ const watcher = chokidar.watch(WATCH_FOLDER, {
     }
 });
 
+// 指数バックオフ付きリトライ（1s → 2s → 4s）
+async function withRetry(label, fn) {
+    let lastError;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        try {
+            return await fn();
+        } catch (error) {
+            lastError = error;
+            if (attempt < MAX_ATTEMPTS) {
+                const delayMs = 1000 * 2 ** (attempt - 1);
+                console.warn(`${label} 失敗 (${attempt}/${MAX_ATTEMPTS})、${delayMs}ms後に再試行: ${error.message}`);
+                await new Promise(resolve => setTimeout(resolve, delayMs));
+            }
+        }
+    }
+    throw lastError;
+}
+
+// 最終的に処理できなかったファイルをJSON行で記録し、後から再処理できるようにする
+async function recordFailure(filePath, eventType, error) {
+    const entry = {
+        at: new Date().toISOString(),
+        file: filePath,
+        event: eventType,
+        error: error.message,
+    };
+    try {
+        await fs.appendFile(FAILED_LOG, JSON.stringify(entry) + '\n');
+    } catch (logError) {
+        console.error('failed.log への書き込みに失敗:', logError);
+    }
+}
+
+function validateExtractedData(extracted, filePath) {
+    const problems = [];
+    if (!extracted.claimantName) problems.push('claimantName が空');
+    if (!extracted.contractNumber) problems.push('contractNumber が空');
+    if (!extracted.appointmentDate) problems.push('appointmentDate が空');
+    if (problems.length > 0) {
+        throw new Error(`抽出結果が不完全 (${problems.join(', ')}): ${filePath}`);
+    }
+}
+
 async function extractAppointmentData(filePath, destination) {
     const fileBuffer = await fs.readFile(filePath);
     const data = await pdf(fileBuffer);
     const pdfText = data.text;
+
+    // スキャン画像のみのPDF等はテキストが空になる。APIを呼ばずに失敗として記録する
+    if (!pdfText || pdfText.trim().length === 0) {
+        throw new Error(`PDFからテキストを抽出できません（スキャン画像のみ？）: ${filePath}`);
+    }
 
     const prompt = `
           以下のテキストは医療サービスの請求書PDFから抽出したものです。
@@ -68,14 +160,15 @@ async function extractAppointmentData(filePath, destination) {
           ---
       `;
 
-    const completion = await openai.chat.completions.create({
+    const completion = await withRetry('OpenAI抽出', () => openai.chat.completions.create({
         model: "gpt-4o",
         messages: [{ role: "user", content: prompt }],
         response_format: { type: "json_object" },
-    });
+    }));
 
     const responseText = completion.choices[0].message.content;
     const extractedData = JSON.parse(responseText);
+    validateExtractedData(extractedData, filePath);
 
     const excludedPhoneNumbers = ["+819045242828", "09045242828"];
     const validPhoneNumbers = (extractedData.japanCellPhones || []).filter(
@@ -91,24 +184,29 @@ async function extractAppointmentData(filePath, destination) {
         dateString += "+09:00";
     }
 
+    const appointmentDateTime = new Date(dateString);
+    if (Number.isNaN(appointmentDateTime.getTime())) {
+        throw new Error(`appointmentDate を日付として解釈できません: "${extractedData.appointmentDate}" (${filePath})`);
+    }
+
     return {
       ...extractedData,
       japanCellPhone: finalPhoneNumber,
-      appointmentDateTime: new Date(dateString),
+      appointmentDateTime,
       originalFileName: destination,
       processedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
 }
 
 async function uploadAndVerify(filePath, destination) {
-    await bucket.upload(filePath, {
+    await withRetry('Storageアップロード', () => bucket.upload(filePath, {
         destination,
         metadata: {
           contentType: 'application/pdf',
           cacheControl: 'no-store, max-age=0',
           metadata: { firebaseStorageDownloadTokens: crypto.randomUUID() },
         },
-    });
+    }));
 
     const [uploaded] = await bucket.file(destination).exists();
     if (!uploaded) {
@@ -167,8 +265,14 @@ async function processPdf(filePath, eventType) {
 
     } catch (error) {
         console.error(`処理中にエラーが発生しました: ${filePath}`, error);
+        await recordFailure(filePath, eventType, error);
     }
 }
 
 watcher.on('add', (filePath) => processPdf(filePath, 'add'));
 watcher.on('change', (filePath) => processPdf(filePath, 'change'));
+watcher.on('error', (error) => console.error('watcherエラー:', error));
+
+process.on('unhandledRejection', (reason) => {
+    console.error('未処理のPromise拒否:', reason);
+});

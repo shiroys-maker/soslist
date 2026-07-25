@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>jp.niraissc.soslist.openai-processor</string>
+
+    <!-- node のパスは環境に合わせて変更する（`which node` で確認。nvmでnodeを更新したらここも更新） -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/shungohiroyasu/.nvm/versions/node/v22.14.0/bin/node</string>
+        <string>/Users/shungohiroyasu/Documents/GitHub/soslist/openai-processor/index.js</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/shungohiroyasu/Documents/GitHub/soslist/openai-processor</string>
+
+    <!-- APIキー等は openai-processor/.env から読み込まれる -->
+
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+
+    <key>StandardOutPath</key>
+    <string>/Users/shungohiroyasu/Library/Logs/soslist/openai-processor.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/shungohiroyasu/Library/Logs/soslist/openai-processor.error.log</string>
+</dict>
+</plist>

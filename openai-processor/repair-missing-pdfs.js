@@ -3,6 +3,7 @@
 const fs = require('fs');
 const fsp = fs.promises;
 const path = require('path');
+const crypto = require('crypto');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const DAILY_BRIEF_DIR = path.join(PROJECT_ROOT, 'daily-brief');
@@ -277,6 +278,8 @@ async function main() {
           destination: storagePath,
           metadata: {
             contentType: 'application/pdf',
+            cacheControl: 'no-store, max-age=0',
+            metadata: { firebaseStorageDownloadTokens: crypto.randomUUID() },
           },
         });
         results.uploaded += 1;
