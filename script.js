@@ -101,7 +101,6 @@ const MOBILE_CONTROLS_OPEN_KEY = 'soslist-mobile-controls-open';
 const MOBILE_CARD_ACTIONABLE_SELECTOR = 'button, a, .name-cell, .show-toggle-cell, .contract-cell, .phone-cell, .visitdate-cell, .received-cell, .completed-cell, .referral-dest';
 
 // --- 紹介先 定数 ---
-// CLAUDE_API_KEY は config.js で定義（.gitignore済み）
 const REFERRAL_DISPLAY = { ASBO: 'aSBo', KIN: 'KINSP', ANSHIN: 'ANSIN' };
 const REFERRAL_FULL = {
     ASBO:   { name: 'aSBoメディカルクリニック',     doctor: '梁先生、望月 先生' },
@@ -1512,104 +1511,6 @@ function determineReferralDests(services, classification) {
     return dests.slice(0, 3);
 }
 
-// ===== AI 検査分類 (shokaijo-sakusei.html と同等) =====
-async function classifyServicesWithAI(services) {
-    // ()内を除去してからAIに渡す（classifyServicesと同じロジック）
-    const joined = (services || []).join(',');
-    const stripped = joined.replace(/\([^)]*\)/g, '');
-    const arr = stripped.split(',').map(s => s.trim()).filter(s => s.length > 0);
-    if (arr.length === 0) return { ortho_xrays_jp: [], has_echo: false, has_chest_xray: false, has_nasal: false, has_facial: false, has_ecg: false };
-
-    const prompt = `以下は米国退役軍人の健康診断で依頼された検査サービスの一覧です（英語）。
-各項目を分類して、JSON形式で返してください。
-
-サービス一覧:
-${arr.map((s, i) => `${i + 1}. ${s}`).join('\n')}
-
-返却するJSONの形式:
-{
-  "has_chest_xray": true/false,
-  "has_nasal": true/false,
-  "has_facial": true/false,
-  "has_echo": true/false,
-  "has_ecg": true/false,
-  "ortho_xrays_jp": []
-}
-★has_nasal: 鼻骨・副鼻腔レントゲン（Nasal bone, Sinus など）
-★has_facial: 顔面骨・頭蓋骨レントゲン（Facial bone, Skull, Mandible, Orbit, Zygoma など）。has_nasalとは別にカウント。
-★ortho_xrays_jp: 整形外科レントゲンのみ（四肢・脊椎など）。部位名を日本語で（例:"右膝関節レントゲン2方向"）。胸部・鼻骨・顔面骨・頭蓋骨は除く。
-
-JSONのみ返してください。`;
-
-    try {
-        const res = await fetch("https://api.anthropic.com/v1/messages", {
-            method: "POST",
-            headers: {
-                "x-api-key": CLAUDE_API_KEY,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-                "anthropic-dangerous-direct-browser-access": "true"
-            },
-            body: JSON.stringify({
-                model: "claude-haiku-4-5-20251001",
-                max_tokens: 512,
-                messages: [{ role: "user", content: prompt }]
-            })
-        });
-        const data = await res.json();
-        const text = data.content?.[0]?.text?.trim() || '{}';
-        const json = JSON.parse(text.replace(/^```json\n?|```$/g, ''));
-        return {
-            ortho_xrays_jp: json.ortho_xrays_jp || [],
-            has_echo:       !!json.has_echo,
-            has_chest_xray: !!json.has_chest_xray,
-            has_nasal:      !!json.has_nasal,
-            has_facial:     !!json.has_facial,
-            has_ecg:        !!json.has_ecg
-        };
-    } catch (e) {
-        console.error('AI分類エラー:', e);
-        return {
-            ortho_xrays_jp: [],
-            has_echo:       arr.some(s => /echo/i.test(s)),
-            has_chest_xray: arr.some(s => /chest/i.test(s)),
-            has_nasal:      arr.some(s => /nasal/i.test(s)),
-            has_facial:     arr.some(s => /FACIAL|SKULL|CRANIAL|MANDIBLE|MAXILLA|ORBIT|ZYGOMA/i.test(s)),
-            has_ecg:        arr.some(s => /ecg|ekg/i.test(s))
-        };
-    }
-}
-
-// ===== カタカナ変換 =====
-async function convertToKatakana(nameEn) {
-    if (!nameEn) return '';
-    try {
-        const res = await fetch("https://api.anthropic.com/v1/messages", {
-            method: "POST",
-            headers: {
-                "x-api-key": CLAUDE_API_KEY,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-                "anthropic-dangerous-direct-browser-access": "true"
-            },
-            body: JSON.stringify({
-                model: "claude-haiku-4-5-20251001",
-                max_tokens: 100,
-                messages: [{ role: "user", content: `"${nameEn}"を日本語のカタカナに変換してください。カタカナのみ返してください。` }]
-            })
-        });
-        const data = await res.json();
-        if (data.error) {
-            console.error('カタカナ変換APIエラー:', data.error);
-            return '';
-        }
-        return data.content?.[0]?.text?.trim() || '';
-    } catch (e) {
-        console.error('カタカナ変換エラー:', e);
-        return '';
-    }
-}
-
 // ===== 紹介状モーダル =====
 function escapeHtml(str) {
     return String(str)
@@ -1757,9 +1658,6 @@ function openShokaijyoModal(docId, destKey) {
         const data = doc.data();
         const saved = data.referrals && data.referrals[destKey];
 
-        const needsAIClassification = !saved || !saved.purpose;
-        const needsKana = !saved || !saved.name_kana;
-
         // モーダルを即座に表示（保存済みデータがあればそのまま、なければ正規表現でデフォルト表示）
         shokaijyoModalTitle.textContent = `紹介状 — ${REFERRAL_FULL[destKey].name}`;
         shokaijyoSheetContainer.innerHTML = buildSheetHTML(data, destKey, saved || null, null, SHOKAIJO_EDITABLE);
@@ -1770,55 +1668,6 @@ function openShokaijyoModal(docId, destKey) {
         document.body.classList.add('modal-open');
         saveShokaijyoBtn.style.display = SHOKAIJO_EDITABLE ? '' : 'none';
         printShokaijyoBtn.style.display = '';
-        if (!SHOKAIJO_EDITABLE) return;
-
-        // 英語名の組み立て
-        const nameParts = (data.claimantName || '').split(',').map(s => s.trim());
-        const nameEn = nameParts.length === 2
-            ? nameParts[1].charAt(0).toUpperCase() + nameParts[1].slice(1).toLowerCase() + ' ' +
-              nameParts[0].charAt(0).toUpperCase() + nameParts[0].slice(1).toLowerCase()
-            : (data.claimantName || '');
-
-        // カタカナ変換（独立して実行・結果が来たらその時点で反映）
-        if (needsKana && nameEn) {
-            const kanaInput = shokaijyoSheetContainer.querySelector('[name="name_kana"]');
-            if (kanaInput) kanaInput.value = '変換中...';
-            convertToKatakana(nameEn).then(kana => {
-                if (shokaijyoEditingDocId !== docId) return;
-                const inp = shokaijyoSheetContainer.querySelector('[name="name_kana"]');
-                if (inp) inp.value = kana || '';
-            }).catch(() => {
-                if (shokaijyoEditingDocId !== docId) return;
-                const inp = shokaijyoSheetContainer.querySelector('[name="name_kana"]');
-                if (inp) inp.value = '';
-            });
-        }
-
-        // AI検査分類（独立して実行・結果が来たら紹介目的を更新）
-        if (needsAIClassification) {
-            classifyServicesWithAI(data.services || []).then(classification => {
-                if (shokaijyoEditingDocId !== docId) return;
-                const purposeField = shokaijyoSheetContainer.querySelector('[name="purpose"]');
-                if (!purposeField) return;
-                const items = [];
-                if (destKey === 'ASBO') {
-                    if (classification.has_nasal)      items.push('鼻骨レントゲン(3方向)');
-                    if (classification.has_facial)     items.push('顔面骨・頭蓋骨レントゲン');
-                    if (classification.has_chest_xray) items.push('胸部レントゲン2方向');
-                    if (classification.has_ecg)        items.push('心電図');
-                } else if (destKey === 'KIN') {
-                    const ortho = classification.ortho_xrays_jp && classification.ortho_xrays_jp.length > 0
-                        ? classification.ortho_xrays_jp : ['整形外科レントゲン'];
-                    items.push(...ortho);
-                    if (classification.has_chest_xray) items.push('胸部レントゲン2方向');
-                } else {
-                    if (classification.has_echo)       items.push('心エコー検査');
-                    if (classification.has_chest_xray) items.push('胸部レントゲン2方向');
-                    if (classification.has_ecg)        items.push('心電図');
-                }
-                if (items.length > 0) purposeField.value = items.join('、') + 'の依頼';
-            }).catch(err => console.error('AI分類エラー:', err));
-        }
     });
 }
 

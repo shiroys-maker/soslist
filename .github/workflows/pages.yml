@@ -33,11 +33,6 @@ jobs:
           cp style.css site/
           cp CNAME site/
           cp stamp.png site/
-          if [ -f config.js ]; then
-            cp config.js site/
-          else
-            printf 'const CLAUDE_API_KEY = "";\n' > site/config.js
-          fi
           touch site/.nojekyll
 
       - name: Upload artifact
