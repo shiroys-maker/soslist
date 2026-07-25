@@ -28,12 +28,6 @@ const hourSelect = document.getElementById('hourSelect');
 const minuteSelect = document.getElementById('minuteSelect');
 const confirmEditBtn = document.getElementById('confirmEdit');
 const cancelEditBtn = document.getElementById('cancelEdit');
-// 詳細表示モーダル
-const detailsModal = document.getElementById('detailsModal');
-const detailsContentContainer = document.getElementById('details-content-container');
-const notesTextarea = document.getElementById('notesTextarea');
-const saveNotesButton = document.getElementById('saveNotesButton');
-const closeDetailsModalButton = document.getElementById('closeDetailsModalButton');
 // Invoice印刷用
 const invoiceYearSelect = document.getElementById('invoiceYearSelect');
 const invoiceMonthSelect = document.getElementById('invoiceMonthSelect');
@@ -97,15 +91,6 @@ const handledDetailSaveRequests = new Set();
 const handledDetailReferralRequests = new Set();
 const pendingDeleteButtons = new Map();
 
-// 子ウィンドウからのノート更新を処理する関数 
-window.updateAppointmentNote = updateAppointmentNote;
-window.saveAppointmentNote = function saveAppointmentNote(docId, newNote) {
-    return db.collection('appointments').doc(docId).update({
-        notes: newNote
-    });
-};
-
-// 年選択のプルダウンを動的に生成
 function syncCDMonitorSettingWithNative() {
     const nativeHandler = window.webkit?.messageHandlers?.setCDMonitoringEnabled;
     if (nativeHandler) {
@@ -431,8 +416,6 @@ confirmEditBtn.addEventListener('click', () => {
 });
 
 cancelEditBtn.addEventListener('click', closeEditModal);
-saveNotesButton.addEventListener('click', saveNotes);
-closeDetailsModalButton.addEventListener('click', closeDetailsModal);
 printInvoiceButton.addEventListener('click', printInvoice);
 summaryPrevDateButton?.addEventListener('click', () => jumpToAdjacentSummaryReservationDate(-1));
 summaryNextDateButton?.addEventListener('click', () => jumpToAdjacentSummaryReservationDate(1));

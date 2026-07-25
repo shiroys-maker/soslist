@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SOS Appointment Viewer Local</title>
     <link rel="stylesheet" href="style.css">
-    <link rel="manifest" href="manifest.webmanifest">
     <meta name="theme-color" content="#5b2b74">
     <style>
         /* メインアプリを最初は非表示にする */
@@ -136,20 +135,6 @@
       </div>
     </div>
     
-    <div id="detailsModal" class="modal">
-      <div class="modal-content">
-        <h3>予約詳細</h3>
-        <div id="details-content-container">
-            </div>
-        <label for="notesTextarea">メモ (所見など):</label>
-        <textarea id="notesTextarea" placeholder="1500文字程度まで入力可能..."></textarea>
-        <div class="modal-actions">
-            <button id="saveNotesButton">メモを保存</button>
-            <button id="closeDetailsModalButton">閉じる</button>
-        </div>
-      </div>
-    </div>
-    
     <div id="searchResultsModal" class="modal">
       <div class="modal-content">
         <h3>検索結果</h3>
@@ -220,17 +205,6 @@
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-storage-compat.js"></script>
-    <script>
-        const isNativeLocalApp = !!window.webkit?.messageHandlers;
-        if (!isNativeLocalApp && 'serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/local/sw.js').catch(error => {
-                    console.error('Service worker registration failed:', error);
-                });
-            });
-        }
-    </script>
-    
     <script src="../shared/core.js?v=20260725a"></script>
     <script src="script.js?v=20260725a"></script>
 

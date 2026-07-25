@@ -355,8 +355,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         <body>
           <div class="card">
             <h1>\(appName)</h1>
-            <p><code>http://localhost:8787/local/index.html</code> に接続できませんでした。</p>
-            <p>ローカルサーバーを起動してから、このアプリを開き直してください。</p>
+            <p>ページの読み込みに失敗しました。</p>
+            <p>アプリを再ビルドして入れ直してください（build_and_run.sh --install）。</p>
             <code>\(error.localizedDescription)</code>
           </div>
         </body>
@@ -815,35 +815,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         DispatchQueue.main.async {
             self.openSummaryWindow(url: url, title: "Summery \(ymd)")
         }
-    }
-
-    private func runDailyBriefCommand(arguments: [String]) throws -> String {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: dailyBriefNodePath)
-        process.arguments = arguments
-        process.currentDirectoryURL = URL(fileURLWithPath: dailyBriefDir, isDirectory: true)
-        process.environment = makeDailyBriefEnvironment()
-
-        let stdoutPipe = Pipe()
-        let stderrPipe = Pipe()
-        process.standardOutput = stdoutPipe
-        process.standardError = stderrPipe
-
-        try process.run()
-        process.waitUntilExit()
-
-        let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-        let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-        let stdout = String(data: stdoutData, encoding: .utf8) ?? ""
-        let stderr = String(data: stderrData, encoding: .utf8) ?? ""
-
-        if process.terminationStatus != 0 {
-            throw NSError(domain: appName, code: Int(process.terminationStatus), userInfo: [
-                NSLocalizedDescriptionKey: stderr.isEmpty ? stdout : stderr
-            ])
-        }
-
-        return stdout
     }
 
     private func runAutomaticSummaryGeneration(for ymd: String) throws {

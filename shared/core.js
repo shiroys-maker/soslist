@@ -40,13 +40,6 @@ const SHOKAIJO_SENDER = {
     doctor: '廣安 俊吾'
 };
 
-function updateAppointmentNote(docId, newNote) {
-  // 予約リストが表示されている場合は再読み込みする
-  if (unsubscribe) {
-    setupRealtimeListener();
-  }
-}
-
 function generateYearOptions() {
     const currentYear = new Date().getFullYear();
     

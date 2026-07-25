@@ -421,17 +421,6 @@ mobileAppointmentsList?.addEventListener('click', (e) => {
     handleAppointmentInteraction(interactiveTarget, docId);
 });
 
-// ダブルクリックで削除を実行
-tableBody.addEventListener('dblclick', (e) => {
-    const target = e.target;
-    const tr = target.closest('tr');
-    if (!tr) return;
-
-    const docId = tr.dataset.id;
-    if (!docId) return;
-
-});
-
 confirmEditBtn.addEventListener('click', () => {
     if (!dateSelect.value || !hourSelect.value || !minuteSelect.value || !editingDateTimeDocId) return;
     const timeValue = `${hourSelect.value}:${minuteSelect.value}`;

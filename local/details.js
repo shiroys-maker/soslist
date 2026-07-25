@@ -280,10 +280,6 @@ function openReferralSheet(targetDocId, destKey) {
     localStorage.setItem(DETAIL_REFERRAL_OPEN_REQUEST_KEY, JSON.stringify(request));
 }
 
-function closeDetailsWindow() {
-    saveNotes(docId || '', { closeAfterSave: true });
-}
-
 function closeDetailsWindowImmediately() {
     if (window.webkit?.messageHandlers?.closeDetailsWindow) {
         window.webkit.messageHandlers.closeDetailsWindow.postMessage(docId || '');
@@ -401,27 +397,6 @@ function formatAppointmentDateTime(timestampMs) {
     const timeOptions = { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Tokyo' };
 
     return `${new Intl.DateTimeFormat('ja-JP', dateOptions).format(date)} ${new Intl.DateTimeFormat('ja-JP', timeOptions).format(date)}`;
-}
-
-function calculateAgeLabel(dateOfBirth) {
-    if (!dateOfBirth) {
-        return '';
-    }
-
-    const birthDate = new Date(dateOfBirth);
-    if (Number.isNaN(birthDate.getTime())) {
-        return '';
-    }
-
-    const today = new Date();
-    let age = today.getFullYear() - birthDate.getFullYear();
-    const monthDiff = today.getMonth() - birthDate.getMonth();
-
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-        age -= 1;
-    }
-
-    return `${age}歳`;
 }
 
 function escapeHtml(value) {
