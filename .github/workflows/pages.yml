@@ -27,9 +27,10 @@ jobs:
 
       - name: Prepare site
         run: |
-          mkdir -p site
+          mkdir -p site site/shared
           cp index.html site/
           cp script.js site/
+          cp shared/core.js site/shared/
           cp style.css site/
           cp CNAME site/
           cp stamp.png site/
