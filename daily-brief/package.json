@@ -8,7 +8,8 @@
     "serve": "node server.js",
     "start": "node generate-brief.js",
     "sample": "node generate-brief.js --sample",
-    "no-audio": "node generate-brief.js --no-audio"
+    "no-audio": "node generate-brief.js --no-audio",
+    "sync-audio": "bash -lc 'source .env && node generate-brief.js --sync-audio'"
   },
   "dependencies": {
     "firebase-admin": "^12.0.0",

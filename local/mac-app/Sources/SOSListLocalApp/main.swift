@@ -935,6 +935,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             if raw.contains("MP3出力:") {
                 return "mp3 を保存しています..."
             }
+            if raw.contains("Firebase Storage 音声アップロード:") {
+                return "web再生用の mp3 を Firebase Storage へアップロードしています..."
+            }
+            if raw.contains("Firebase Storage 音声削除") {
+                return "古い web再生用 mp3 を整理しています..."
+            }
             if raw.contains("完了。") {
                 return "Firestore へ保存しています..."
             }

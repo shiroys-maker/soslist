@@ -187,12 +187,29 @@ function renderMarkdownToHtml(markdown) {
     }).join('\n');
 }
 
-function openSummaryModal(ymd, summaryMarkdown) {
+function openSummaryModal(ymd, summaryMarkdown, audioUrl = null) {
     summaryModalTitle.textContent = 'Summary';
     summaryModalMeta.textContent = ymd;
     summaryModalBody.innerHTML = summaryMarkdown
         ? renderMarkdownToHtml(summaryMarkdown)
         : '<p>サマリーは未作成です。</p>';
+
+    if (audioUrl) {
+        const playerSection = document.createElement('section');
+        playerSection.className = 'summary-audio-player';
+
+        const label = document.createElement('div');
+        label.className = 'summary-audio-label';
+        label.textContent = 'Summary 音声';
+
+        const player = document.createElement('audio');
+        player.controls = true;
+        player.preload = 'metadata';
+        player.src = audioUrl;
+
+        playerSection.append(label, player);
+        summaryModalBody.prepend(playerSection);
+    }
     summaryModal.style.display = 'flex';
     document.body.classList.add('modal-open');
 }
@@ -211,20 +228,31 @@ async function showSummary() {
     }
 
     const targetDate = summaryDateInput.value;
-    const summaryMarkdown = await fetchSummaryMarkdown(targetDate);
-    openSummaryModal(targetDate, summaryMarkdown);
+    const summary = await fetchSummary(targetDate);
+    let audioUrl = null;
+    if (summary.audioStoragePath) {
+        try {
+            audioUrl = await storage.ref(summary.audioStoragePath).getDownloadURL();
+        } catch (error) {
+            console.warn('Summary 音声の取得に失敗しました:', error.code, error.message);
+        }
+    }
+    openSummaryModal(targetDate, summary.summaryMarkdown, audioUrl);
 }
 
-async function fetchSummaryMarkdown(targetDate) {
+async function fetchSummary(targetDate) {
     const mirrorSnapshot = await db
         .collection('appointments')
         .doc(`${SUMMARY_MIRROR_DOC_PREFIX}${targetDate}`)
         .get();
     if (mirrorSnapshot.exists) {
         const mirrorData = mirrorSnapshot.data() || {};
-        return mirrorData.summaryMarkdown || '';
+        return {
+            summaryMarkdown: mirrorData.summaryMarkdown || '',
+            audioStoragePath: mirrorData.audioStoragePath || '',
+        };
     }
-    return '';
+    return { summaryMarkdown: '', audioStoragePath: '' };
 }
 
 // --- ログイン状態の監視 ---

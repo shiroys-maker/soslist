@@ -35,6 +35,7 @@
  *   AIVIS_STYLE_ID_B  (default 1388823424)       … 専門役: 凛音エル / ノーマル
  *   PODCAST_MINUTES  (default 12)                … 目標尺(分)
  *   OUTPUT_DIR       (default ./output)          … 出力先
+ *   FIREBASE_STORAGE_BUCKET (default sos-list-4d150.firebasestorage.app) … Web再生用MP3の保存先
  */
 
 'use strict';
@@ -50,6 +51,7 @@ const flags = {
   noAudio: args.includes('--no-audio'),
   dumpPrompt: args.includes('--dump-prompt'),
   finalizeManual: args.includes('--finalize-manual'),
+  syncAudio: args.includes('--sync-audio'),
   date: null,
 };
 const dateIdx = args.indexOf('--date');
@@ -59,6 +61,9 @@ const OUTPUT_DIR = process.env.OUTPUT_DIR
   ? path.resolve(process.env.OUTPUT_DIR)
   : path.join(__dirname, 'output');
 const DAILY_BRIEF_MIRROR_PREFIX = process.env.DAILY_BRIEF_MIRROR_PREFIX || 'dailyBrief_';
+const FIREBASE_STORAGE_BUCKET = process.env.FIREBASE_STORAGE_BUCKET || 'sos-list-4d150.firebasestorage.app';
+const PODCAST_STORAGE_PREFIX = 'daily-brief';
+const PODCAST_STORAGE_KEEP_DAYS = 2;
 const LLM_PROVIDER = process.env.LLM_PROVIDER || 'anthropic';
 const PODCAST_MODEL = process.env.PODCAST_MODEL || 'claude-sonnet-5';
 const PODCAST_FALLBACK_MODEL = process.env.PODCAST_FALLBACK_MODEL || '';
@@ -178,14 +183,15 @@ async function fetchAppointments(range) {
   return list;
 }
 
-function getFirestore() {
+function getFirebaseAdmin() {
   const admin = require('firebase-admin');
 
   if (!admin.apps.length) {
+    const options = { storageBucket: FIREBASE_STORAGE_BUCKET };
     const saPath = process.env.SERVICE_ACCOUNT_PATH;
     if (saPath && fs.existsSync(path.resolve(saPath))) {
       const serviceAccount = require(path.resolve(saPath));
-      admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+      options.credential = admin.credential.cert(serviceAccount);
     } else {
       const gac = process.env.GOOGLE_APPLICATION_CREDENTIALS;
       if (gac && !fs.existsSync(gac)) {
@@ -193,11 +199,19 @@ function getFirestore() {
             ` gcloud ADC でのログインを試みます。`);
         delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
       }
-      admin.initializeApp();
     }
+    admin.initializeApp(options);
   }
 
-  return admin.firestore();
+  return admin;
+}
+
+function getFirestore() {
+  return getFirebaseAdmin().firestore();
+}
+
+function getStorageBucket() {
+  return getFirebaseAdmin().storage().bucket(FIREBASE_STORAGE_BUCKET);
 }
 
 function findExistingAudioFile(outDir) {
@@ -244,7 +258,7 @@ async function saveBriefToFirestore(result) {
     throw new Error('Firestore に保存するブリーフ情報が不足しています。');
   }
 
-  const admin = require('firebase-admin');
+  const admin = getFirebaseAdmin();
   const db = getFirestore();
   const payload = {
     ymd: result.ymd,
@@ -252,6 +266,7 @@ async function saveBriefToFirestore(result) {
     appointmentCount: Number.isFinite(result.count) ? result.count : null,
     hasAudio: Boolean(result.audioFile),
     audioFilename: result.audioFile ? path.basename(result.audioFile) : null,
+    audioStoragePath: result.audioStoragePath || null,
     outDir: result.outDir || null,
     mdPath: result.mdPath || null,
     source: 'daily-brief-local',
@@ -265,9 +280,101 @@ async function saveBriefToFirestore(result) {
     appointmentCount: payload.appointmentCount,
     hasAudio: payload.hasAudio,
     audioFilename: payload.audioFilename,
+    audioStoragePath: payload.audioStoragePath,
     source: payload.source,
     updatedAt: payload.updatedAt,
   }, { merge: true });
+}
+
+function podcastStoragePath(ymd) {
+  return `${PODCAST_STORAGE_PREFIX}/${ymd}/podcast.mp3`;
+}
+
+function isPodcastStorageFile(name) {
+  const match = String(name || '').match(new RegExp(`^${PODCAST_STORAGE_PREFIX}/(\\d{4}-\\d{2}-\\d{2})/podcast\\.mp3$`));
+  return match ? match[1] : null;
+}
+
+async function uploadPodcastToStorage(ymd, audioFile) {
+  if (!audioFile || path.extname(audioFile).toLowerCase() !== '.mp3') {
+    log('MP3がないため Firebase Storage への音声アップロードをスキップします。');
+    return null;
+  }
+
+  const destination = podcastStoragePath(ymd);
+  const bucket = getStorageBucket();
+  await bucket.upload(audioFile, {
+    destination,
+    resumable: false,
+    metadata: {
+      contentType: 'audio/mpeg',
+      cacheControl: 'private, max-age=3600',
+    },
+  });
+  log(`Firebase Storage 音声アップロード: gs://${bucket.name}/${destination}`);
+  return destination;
+}
+
+async function pruneStoredPodcasts() {
+  const bucket = getStorageBucket();
+  const [files] = await bucket.getFiles({ prefix: `${PODCAST_STORAGE_PREFIX}/` });
+  const datedFiles = files
+    .map((file) => ({ file, ymd: isPodcastStorageFile(file.name) }))
+    .filter((entry) => entry.ymd)
+    .sort((a, b) => b.ymd.localeCompare(a.ymd));
+
+  const staleFiles = datedFiles.slice(PODCAST_STORAGE_KEEP_DAYS);
+  for (const { file, ymd } of staleFiles) {
+    await file.delete();
+    log(`Firebase Storage 音声削除(保持件数=${PODCAST_STORAGE_KEEP_DAYS}): ${ymd}`);
+  }
+  return datedFiles.slice(0, PODCAST_STORAGE_KEEP_DAYS).map((entry) => entry.ymd);
+}
+
+async function uploadPodcastAndPrune(ymd, audioFile) {
+  const storagePath = await uploadPodcastToStorage(ymd, audioFile);
+  if (!storagePath) return null;
+  await pruneStoredPodcasts();
+  return storagePath;
+}
+
+function latestLocalPodcastFiles() {
+  if (!fs.existsSync(OUTPUT_DIR)) return [];
+  return fs.readdirSync(OUTPUT_DIR, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && /^\d{4}-\d{2}-\d{2}$/.test(entry.name))
+    .map((entry) => ({
+      ymd: entry.name,
+      audioFile: path.join(OUTPUT_DIR, entry.name, 'podcast.mp3'),
+    }))
+    .filter((entry) => fs.existsSync(entry.audioFile))
+    .sort((a, b) => b.ymd.localeCompare(a.ymd))
+    .slice(0, PODCAST_STORAGE_KEEP_DAYS);
+}
+
+async function syncLatestPodcastAudio() {
+  const podcasts = latestLocalPodcastFiles();
+  if (!podcasts.length) {
+    log('同期対象の podcast.mp3 はありません。');
+    return { uploaded: [], retained: [] };
+  }
+
+  const admin = getFirebaseAdmin();
+  const db = getFirestore();
+  const uploaded = [];
+  for (const { ymd, audioFile } of podcasts) {
+    const audioStoragePath = await uploadPodcastToStorage(ymd, audioFile);
+    await db.collection('appointments').doc(`${DAILY_BRIEF_MIRROR_PREFIX}${ymd}`).set({
+      docType: 'dailyBrief',
+      dailyBriefDate: ymd,
+      hasAudio: true,
+      audioFilename: 'podcast.mp3',
+      audioStoragePath,
+      audioUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    uploaded.push({ ymd, audioStoragePath });
+  }
+  const retained = await pruneStoredPodcasts();
+  return { uploaded, retained };
 }
 
 function sampleAppointments() {
@@ -1259,6 +1366,7 @@ async function finalizeManualImport(opts = {}) {
     summaryMarkdown,
     audioFile,
   };
+  result.audioStoragePath = await uploadPodcastAndPrune(result.ymd, result.audioFile);
   log('Firestore 保存中...');
   await saveBriefToFirestore(result);
   log('完了。');
@@ -1333,6 +1441,7 @@ async function run(opts = {}) {
     summaryMarkdown: brief.summaryMarkdown,
     audioFile, // 絶対パス(.mp3 優先、無ければ .wav)
   };
+  result.audioStoragePath = await uploadPodcastAndPrune(result.ymd, result.audioFile);
   log('Firestore 保存中...');
   await saveBriefToFirestore(result);
   log('完了。');
@@ -1343,6 +1452,7 @@ module.exports = {
   run,
   getExistingBriefResult,
   saveBriefToFirestore,
+  syncLatestPodcastAudio,
   collectGenerationInputs,
   finalizeManualImport,
 };
@@ -1364,6 +1474,12 @@ if (require.main === module) {
         summaryMarkdown: result.summaryMarkdown,
         audioFile: result.audioFile,
       }, null, 2));
+      return;
+    }
+
+    if (flags.syncAudio) {
+      const result = await syncLatestPodcastAudio();
+      process.stdout.write(JSON.stringify(result, null, 2));
       return;
     }
 

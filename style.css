@@ -324,6 +324,25 @@ button:active {
     line-height: 1.75;
 }
 
+.summary-audio-player {
+    margin: 0 0 20px;
+    padding: 14px 16px;
+    border: 1px solid #ddd6fe;
+    border-radius: 10px;
+    background: #faf9ff;
+}
+
+.summary-audio-label {
+    margin-bottom: 8px;
+    color: #4c1d95;
+    font-weight: 700;
+}
+
+.summary-audio-player audio {
+    display: block;
+    width: 100%;
+}
+
 .summary-modal-body h1,
 .summary-modal-body h2,
 .summary-modal-body h3 {
