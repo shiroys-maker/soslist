@@ -1,0 +1,7 @@
+# 秘密情報・生成物・依存はGit管理外
+.env
+node_modules/
+output/
+logs/
+*.wav
+*.mp3

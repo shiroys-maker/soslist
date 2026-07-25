@@ -1,0 +1,17 @@
+{
+  "name": "soslist-daily-brief",
+  "version": "1.0.0",
+  "private": true,
+  "description": "翌日のVA検査予約を要約し、二人対話のポッドキャスト音声を生成する定時タスク",
+  "main": "generate-brief.js",
+  "scripts": {
+    "serve": "node server.js",
+    "start": "node generate-brief.js",
+    "sample": "node generate-brief.js --sample",
+    "no-audio": "node generate-brief.js --no-audio"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.0.0",
+    "openai": "^4.52.0"
+  }
+}

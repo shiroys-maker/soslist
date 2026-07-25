@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SOS Appointment Viewer Local</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.webmanifest">
+    <meta name="theme-color" content="#5b2b74">
+    <style>
+        /* メインアプリを最初は非表示にする */
+        #main-app-container { display: none; }
+        /* 日付セルにカーソルを合わせるとクリック可能に見せる */
+        .date-cell:hover { cursor: pointer; background-color: #f0f8ff; }
+        /* 検査内容セルにカーソルを合わせるとクリック可能に見せる */
+        .services-cell:hover { cursor: pointer; text-decoration: underline; }
+    </style>
+</head>
+<body>
+
+    <div id="login-container">
+        <h1>Login</h1>
+        <input type="email" id="loginEmail" placeholder="Email" value="sos@niraissc.jp">
+        <input type="password" id="loginPassword" placeholder="Password">
+        <button id="loginButton">ログイン</button>
+        <p id="loginError" style="color: red;"></p>
+    </div>
+
+    <div id="main-app-container">
+        <h1>
+            Nirai Seaside Clinic Appointments (Local)
+            <div id="auth-status">
+                <p>ログイン中: <span id="userEmail"></span></p>
+                <button id="logoutButton">ログアウト</button>
+            </div>
+        </h1>
+
+        <div class="header-spacer"></div>
+
+        <div class="filter-section">
+            <div class="search-area">
+                <label for="searchInput">契約番号 / 氏名で検索：</label>
+                <input type="text" id="searchInput" placeholder="例: 7026... または 山田">
+                <button id="searchButton">検索</button>
+            </div>
+            <div class="date-filter-area">
+                <label for="dateFilter">表示する予約の開始日：</label>
+                <button type="button" id="prevDateButton" class="date-nav-button" aria-label="1日前">&#9664;</button>
+                <input type="date" id="dateFilter">
+                <button type="button" id="nextDateButton" class="date-nav-button" aria-label="1日後">&#9654;</button>
+            </div>            
+            <div class="invoice-area">
+                <h2>Invoice印刷</h2>
+                <div class="invoice-controls">
+                    <select id="invoiceYearSelect">
+                        <!-- 年のオプションはJSで動的生成 -->
+                    </select>
+                    <select id="invoiceMonthSelect">
+                        <option value="01">1月</option>
+                        <option value="02">2月</option>
+                        <option value="03">3月</option>
+                        <option value="04">4月</option>
+                        <option value="05">5月</option>
+                        <option value="06">6月</option>
+                        <option value="07">7月</option>
+                        <option value="08">8月</option>
+                        <option value="09">9月</option>
+                        <option value="10">10月</option>
+                        <option value="11">11月</option>
+                        <option value="12">12月</option>
+                    </select>
+                    <button id="printInvoiceButton">印刷</button>
+                    <button type="button" id="cdMonitorToggleButton" class="cd-monitor-button" aria-pressed="false" title="aSBo CD監視">CD</button>
+                </div>
+            </div>
+            <div class="summary-area">
+                <h2>Summery</h2>
+                <div class="summary-controls">
+                    <button type="button" id="summaryPrevDateButton" class="date-nav-button" aria-label="1日前">&#9664;</button>
+                    <input type="date" id="summaryDateInput">
+                    <button type="button" id="summaryNextDateButton" class="date-nav-button" aria-label="1日後">&#9654;</button>
+                    <button type="button" id="generateSummaryButton">作成</button>
+                    <button type="button" id="showSummaryButton">表示</button>
+                </div>
+                <div id="summaryStatus" class="summary-status" aria-live="polite"></div>
+            </div>
+    </div>
+        <div class="data-section">
+            <table id="appointmentsTable">
+                <thead>
+                    <tr>
+                        <th class="col-show">来</th>
+                        <th class="col-date">予約日時</th>
+                        <th class="col-name">氏名</th>
+                        <th class="col-age">歳</th>
+                        <th class="col-contract">契約番号</th>
+                        <th class="col-phone">電話番号</th>
+                        <th class="col-services">検査内容</th>
+                        <th class="col-referral">紹介先</th>
+                        <th class="col-visitdate">受診日</th>
+                        <th class="col-received">受</th>
+                        <th class="col-completed">済</th>
+                        <th class="col-actions">操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="editModal" class="modal">
+      <div class="modal-content">
+        <h3>予約日時の変更</h3>
+        <label for="dateSelect">日付：</label>
+        <input type="date" id="dateSelect"><br><br>
+        <label>時間：</label>
+        <select id="hourSelect">
+          <option value="09">09</option>
+          <option value="10">10</option>
+          <option value="11">11</option>
+          <option value="13">13</option>
+          <option value="14">14</option>
+          <option value="15">15</option>
+          <option value="16">16</option>
+        </select>
+        <span style="margin: 0 4px;">:</span>
+        <select id="minuteSelect">
+          <option value="00">00</option>
+          <option value="15">15</option>
+          <option value="30">30</option>
+          <option value="45">45</option>
+        </select><br><br>
+        <button id="confirmEdit">更新</button>
+        <button id="cancelEdit">キャンセル</button>
+      </div>
+    </div>
+    
+    <div id="detailsModal" class="modal">
+      <div class="modal-content">
+        <h3>予約詳細</h3>
+        <div id="details-content-container">
+            </div>
+        <label for="notesTextarea">メモ (所見など):</label>
+        <textarea id="notesTextarea" placeholder="1500文字程度まで入力可能..."></textarea>
+        <div class="modal-actions">
+            <button id="saveNotesButton">メモを保存</button>
+            <button id="closeDetailsModalButton">閉じる</button>
+        </div>
+      </div>
+    </div>
+    
+    <div id="searchResultsModal" class="modal">
+      <div class="modal-content">
+        <h3>検索結果</h3>
+        <p>該当する予約が複数見つかりました。ジャンプしたい予約を選択してください。</p>
+        <div id="searchResultsList">
+            </div>
+        <br>
+        <div class="modal-actions">
+            <button id="closeSearchResultsButton">閉じる</button>
+        </div>
+      </div>
+    </div>
+    
+    <div id="editServicesModal" class="modal">
+        <div class="modal-content">
+          <h3>検査内容の編集</h3>
+          <label for="servicesTextarea">検査内容 (カンマ区切りで入力):</label>
+          <textarea id="servicesTextarea" rows="5" style="width: 100%; box-sizing: border-box; margin-top: 5px;"></textarea>
+          <br><br>
+          <div class="modal-actions" style="text-align: right;">
+            <button id="confirmServicesEdit">更新</button>
+            <button id="cancelServicesEdit">キャンセル</button>
+          </div>
+        </div>
+    </div>
+
+    <div id="editPhoneModal" class="modal">
+        <div class="modal-content">
+          <h3>電話番号の編集</h3>
+          <label for="phoneInput">電話番号:</label>
+          <input type="tel" id="phoneInput" style="width: 100%; box-sizing: border-box; margin-top: 5px;">
+          <br><br>
+          <div class="modal-actions" style="text-align: right;">
+            <button id="confirmPhoneEdit">更新</button>
+            <button id="cancelPhoneEdit">キャンセル</button>
+          </div>
+        </div>
+    </div>
+
+    <div id="shokaijyoModal" class="modal">
+      <div class="modal-content shokaijyo-modal-content">
+        <h3 id="shokaijyoModalTitle">紹介状</h3>
+        <div id="shokaijyoSheetContainer" class="shokaijyo-sheet-container"></div>
+        <div class="modal-actions" style="text-align: right; margin-top: 8px;">
+          <button id="saveShokaijyoBtn">保存</button>
+          <button id="printShokaijyoBtn">印刷</button>
+          <button id="closeShokaijyoBtn">閉じる</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="visitDateModal" class="modal">
+      <div class="modal-content" style="width: 280px;">
+        <h3>受診日の入力</h3>
+        <label for="visitDateInput">日付</label>
+        <input type="date" id="visitDateInput" style="width: 100%; box-sizing: border-box; margin-top: 5px;">
+        <label for="visitTimeInput" style="display:block; margin-top: 10px;">時刻</label>
+        <input type="time" id="visitTimeInput" value="09:00" step="300" style="width: 100%; box-sizing: border-box; margin-top: 5px;">
+        <div class="modal-actions" style="text-align: right; margin-top: 12px;">
+          <button id="confirmVisitDateBtn">確定</button>
+          <button id="cancelVisitDateBtn">キャンセル</button>
+        </div>
+      </div>
+    </div>
+    
+
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-storage-compat.js"></script>
+    <script>
+        const isNativeLocalApp = !!window.webkit?.messageHandlers;
+        if (!isNativeLocalApp && 'serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/local/sw.js').catch(error => {
+                    console.error('Service worker registration failed:', error);
+                });
+            });
+        }
+    </script>
+    
+    <script src="config.js?v=20260515a"></script>
+    <script src="script.js?v=20260515a"></script>
+
+</body>
+</html>

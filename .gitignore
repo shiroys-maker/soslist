@@ -1,7 +1,24 @@
+# 機密（APIキー入り設定）— example は追跡する
 config.js
-openai-processor/node_modules/
+
+# 環境変数・秘密
+.env
+
+# 依存・ビルド生成物
 node_modules/
-local/
-viewer-mac-app/
-daily-brief/
+local/mac-app/.build/
+local/mac-app/build/
+viewer-mac-app/.build/
+
+# daily-brief 生成物（daily-brief/.gitignore でも二重に除外）
+daily-brief/output/
+daily-brief/logs/
+daily-brief/inbox/
+*.mp3
+*.wav
+
+# OS
+.DS_Store
+
+# レガシー生成物
 summary-viewer.html

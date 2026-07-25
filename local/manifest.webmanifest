@@ -1,0 +1,21 @@
+{
+  "name": "SOS Appointment Viewer Local",
+  "short_name": "SOS Local",
+  "start_url": "http://127.0.0.1:8787/local/index.html",
+  "scope": "http://127.0.0.1:8787/local/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#5b2b74",
+  "icons": [
+    {
+      "src": "../stamp.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "../stamp.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
