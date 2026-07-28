@@ -249,7 +249,10 @@ async function fetchSummary(targetDate) {
         const mirrorData = mirrorSnapshot.data() || {};
         return {
             summaryMarkdown: mirrorData.summaryMarkdown || '',
-            audioStoragePath: mirrorData.audioStoragePath || '',
+            // 古いローカル生成プロセスは audioStoragePath を保存していないことがある。
+            // MP3 は日付ごとの固定パスへ保存するため、hasAudio から安全に補完する。
+            audioStoragePath: mirrorData.audioStoragePath
+                || (mirrorData.hasAudio ? `daily-brief/${targetDate}/podcast.mp3` : ''),
         };
     }
     return { summaryMarkdown: '', audioStoragePath: '' };
