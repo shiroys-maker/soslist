@@ -11,6 +11,8 @@
  *   node generate-brief.js --date 2026-06-02   # 指定日(その日)を生成
  *   node generate-brief.js --no-audio      # 音声をスキップ(テキストのみ)
  *   node generate-brief.js --sample        # Firestore非依存のサンプルで通し検証
+ *   node generate-brief.js --scheduled-context # Codex定時処理用の対象日・入力を出力
+ *   node generate-brief.js --finalize-prepared --date YYYY-MM-DD # 作成済み原稿を音声・保存処理
  *
  * 必要な環境変数:
  *   ANTHROPIC_API_KEY             … Anthropic APIキー(要約 + 台本生成)
@@ -52,7 +54,9 @@ const flags = {
   noAudio: args.includes('--no-audio'),
   dumpPrompt: args.includes('--dump-prompt'),
   finalizeManual: args.includes('--finalize-manual'),
+  finalizePrepared: args.includes('--finalize-prepared'),
   syncAudio: args.includes('--sync-audio'),
+  scheduledContext: args.includes('--scheduled-context'),
   date: null,
 };
 const dateIdx = args.indexOf('--date');
@@ -184,6 +188,27 @@ async function fetchAppointments(range) {
     });
   });
   return list;
+}
+
+/** 翌日以降で最も早い予約日のJST日付を返す。 */
+async function findNextUpcomingAppointmentDate() {
+  const tomorrow = targetDayRange().start;
+  const snap = await getFirestore()
+    .collection('appointments')
+    .where('appointmentDateTime', '>=', tomorrow)
+    .orderBy('appointmentDateTime', 'asc')
+    .limit(1)
+    .get();
+
+  if (snap.empty) return null;
+  const value = snap.docs[0].data().appointmentDateTime;
+  const date = value && typeof value.toDate === 'function'
+    ? value.toDate()
+    : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw new Error('次回予約の appointmentDateTime を日付として読めません。');
+  }
+  return ymdInJST(date);
 }
 
 function getFirebaseAdmin() {
@@ -540,6 +565,48 @@ async function collectGenerationInputs(opts = {}) {
     count: appts.length,
     appointments: appts,
     prompt: buildGeminiPrompt(appts, range.ymd),
+  };
+}
+
+/**
+ * Codex Scheduledが判断に使う定時実行コンテキスト。
+ * 文章生成はCodexに委ね、音声合成・Firestore・Storage保存は既存処理に残す。
+ */
+async function getScheduledSummaryContext() {
+  const ymd = await findNextUpcomingAppointmentDate();
+  if (!ymd) {
+    return { action: 'skip', reason: '翌日以降に予約がありません。' };
+  }
+
+  const existing = getExistingBriefResult(ymd);
+  const scriptPath = path.join(existing.outDir, 'podcast-script.txt');
+  if (existing.exists && existing.audioFile) {
+    return {
+      action: 'skip',
+      reason: `${ymd} は Summary と音声が既に作成済みです。`,
+      ymd,
+      outDir: existing.outDir,
+    };
+  }
+
+  if (existing.exists && fs.existsSync(scriptPath)) {
+    return {
+      action: 'finalize',
+      ymd,
+      outDir: existing.outDir,
+      reason: `${ymd} は原稿作成済みのため、音声・保存処理だけ実行します。`,
+    };
+  }
+
+  const inputs = await collectGenerationInputs({ date: ymd });
+  return {
+    action: 'generate',
+    ymd,
+    count: inputs.count,
+    outDir: existing.outDir,
+    briefPath: existing.mdPath,
+    scriptPath,
+    prompt: inputs.prompt,
   };
 }
 
@@ -1457,6 +1524,7 @@ module.exports = {
   saveBriefToFirestore,
   syncLatestPodcastAudio,
   collectGenerationInputs,
+  getScheduledSummaryContext,
   finalizeManualImport,
 };
 
@@ -1469,7 +1537,13 @@ if (require.main === module) {
       return;
     }
 
-    if (flags.finalizeManual) {
+    if (flags.scheduledContext) {
+      const result = await getScheduledSummaryContext();
+      process.stdout.write(JSON.stringify(result, null, 2));
+      return;
+    }
+
+    if (flags.finalizeManual || flags.finalizePrepared) {
       const result = await finalizeManualImport({ date: flags.date, noAudio: flags.noAudio });
       process.stdout.write(JSON.stringify({
         ymd: result.ymd,
