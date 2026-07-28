@@ -23,7 +23,8 @@
  *   LLM_PROVIDER     (default anthropic)        … anthropic / openai
  *   PODCAST_MODEL    (default claude-sonnet-5)  … 台本生成モデル
  *   PODCAST_FALLBACK_MODEL (default empty)      … 初回モデルで薄い時の高品質フォールバック
- *   ANTHROPIC_EFFORT (default high)             … Claude API の出力工数(low / medium / high / xhigh / max)
+ *   ANTHROPIC_EFFORT (default medium)           … Claude API の出力工数(low / medium / high / xhigh / max)
+ *   PODCAST_GENERATION_MAX_ATTEMPTS (default 1) … 同一モデルでの再生成回数。2以上は明示時のみ
  *   PODCAST_REASONING_EFFORT (default medium)   … gpt-5系 Responses API の reasoning effort
  *   PODCAST_AUDIO_ENGINE (default aivis)         … aivis / say / openai
  *   TTS_MODEL        (default tts-1)             … OpenAI TTS使用時の音声合成モデル
@@ -67,9 +68,11 @@ const PODCAST_STORAGE_KEEP_DAYS = 2;
 const LLM_PROVIDER = process.env.LLM_PROVIDER || 'anthropic';
 const PODCAST_MODEL = process.env.PODCAST_MODEL || 'claude-sonnet-5';
 const PODCAST_FALLBACK_MODEL = process.env.PODCAST_FALLBACK_MODEL || '';
-// 初回で詳細なブリーフを完結させるため、Claude は十分な検討量を既定にする。
-const ANTHROPIC_EFFORT = process.env.ANTHROPIC_EFFORT || 'high';
+// high はかなり遅く、薄い出力時の自動2回目と組み合わさると体感が悪い。
+// 初回プロンプト側を強くし、既定は medium + 1回生成に寄せる。
+const ANTHROPIC_EFFORT = process.env.ANTHROPIC_EFFORT || 'medium';
 const PODCAST_REASONING_EFFORT = process.env.PODCAST_REASONING_EFFORT || 'medium';
+const PODCAST_GENERATION_MAX_ATTEMPTS = Math.max(1, Number(process.env.PODCAST_GENERATION_MAX_ATTEMPTS || 1));
 const PODCAST_TEMPERATURE = Number(process.env.PODCAST_TEMPERATURE || 0.4);
 const PODCAST_AUDIO_ENGINE = process.env.PODCAST_AUDIO_ENGINE || 'aivis';
 // tts-1 は speed パラメータ(0.25〜4.0)に対応するため既定にしている。
@@ -785,7 +788,7 @@ JSON以外は出力しない。`;
 
   let parsed = null;
   const modelAttempts = [
-    { model: PODCAST_MODEL, maxAttempts: 2 },
+    { model: PODCAST_MODEL, maxAttempts: PODCAST_GENERATION_MAX_ATTEMPTS },
     ...(PODCAST_FALLBACK_MODEL && PODCAST_FALLBACK_MODEL !== PODCAST_MODEL
       ? [{ model: PODCAST_FALLBACK_MODEL, maxAttempts: 1 }]
       : []),
