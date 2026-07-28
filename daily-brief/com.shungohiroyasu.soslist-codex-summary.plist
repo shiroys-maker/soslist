@@ -6,8 +6,14 @@
   <string>com.shungohiroyasu.soslist-codex-summary</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/bin/zsh</string>
-    <string>/Users/shungohiroyasu/Documents/GitHub/soslist/daily-brief/run-codex-scheduled-summary.sh</string>
+    <string>/usr/bin/open</string>
+    <string>-g</string>
+    <string>-j</string>
+    <string>-n</string>
+    <string>-a</string>
+    <string>SOSList Local</string>
+    <string>--args</string>
+    <string>--run-codex-scheduled-summary</string>
   </array>
   <key>StartCalendarInterval</key>
   <dict>

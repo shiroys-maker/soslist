@@ -78,6 +78,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private var summaryGenerationProcess: Process?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        if CommandLine.arguments.contains("--run-codex-scheduled-summary") {
+            runCodexScheduledSummaryAndTerminate()
+            return
+        }
+
         webView = makeWebView()
 
         window = NSWindow(
@@ -103,6 +108,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         isCDMonitoringEnabled = UserDefaults.standard.bool(forKey: cdMonitoringDefaultsKey)
         applyCDMonitoringState(isCDMonitoringEnabled, resetProcessedVolumes: false)
         ensureDailyBriefDirectories()
+    }
+
+    private func runCodexScheduledSummaryAndTerminate() {
+        DispatchQueue.global(qos: .utility).async {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+            process.arguments = ["\(dailyBriefDir)/run-codex-scheduled-summary.sh"]
+            process.currentDirectoryURL = URL(fileURLWithPath: dailyBriefDir, isDirectory: true)
+            process.terminationHandler = { _ in
+                DispatchQueue.main.async {
+                    NSApp.terminate(nil)
+                }
+            }
+            do {
+                try process.run()
+            } catch {
+                NSLog("Failed to start scheduled Codex Summary: %@", error.localizedDescription)
+                DispatchQueue.main.async {
+                    NSApp.terminate(nil)
+                }
+            }
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
