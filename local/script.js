@@ -751,7 +751,9 @@ function openShokaijyoModal(docId, destKey) {
         shokaijyoModal.style.display = 'flex';
         document.body.classList.add('modal-open');
 
-        // カタカナ氏名は自動変換せず手入力（placeholder「カタカナ氏名」あり）
+        if (!(saved && saved.name_kana)) {
+            autofillShokaijyoKana(formatClaimantNameEn(data.claimantName));
+        }
 
         // 検査分類（正規表現ベース）で紹介目的の初期値を組み立て
         if (needsAIClassification) {

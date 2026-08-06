@@ -592,6 +592,9 @@ function openShokaijyoModal(docId, destKey) {
         document.body.classList.add('modal-open');
         saveShokaijyoBtn.style.display = SHOKAIJO_EDITABLE ? '' : 'none';
         printShokaijyoBtn.style.display = '';
+        if (SHOKAIJO_EDITABLE && !(saved && saved.name_kana)) {
+            autofillShokaijyoKana(formatClaimantNameEn(data.claimantName));
+        }
     }).catch(error => {
         console.error('紹介状モーダルの表示エラー:', error);
         alert('データの取得に失敗しました。');

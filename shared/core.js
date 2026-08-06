@@ -933,17 +933,54 @@ function shokaijyoSelectSex(el) {
     el.classList.add('selected');
 }
 
+function formatClaimantNameEn(claimantName) {
+    const nameParts = (claimantName || '').split(',').map(s => s.trim());
+    return nameParts.length === 2
+        ? nameParts[1].charAt(0).toUpperCase() + nameParts[1].slice(1).toLowerCase() + ' ' +
+          nameParts[0].charAt(0).toUpperCase() + nameParts[0].slice(1).toLowerCase()
+        : (claimantName || '');
+}
+
+function canUseLocalNameKanaAPI() {
+    const host = window.location.hostname;
+    return host === '127.0.0.1' || host === 'localhost' || window.location.protocol === 'file:';
+}
+
+async function fetchNameKana(nameEn) {
+    const normalizedName = String(nameEn || '').trim();
+    if (!normalizedName || !canUseLocalNameKanaAPI()) return '';
+
+    try {
+        const response = await fetch('http://127.0.0.1:19876/api/name-kana', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: normalizedName })
+        });
+        if (!response.ok) return '';
+        const data = await response.json();
+        return String(data.kana || '').trim();
+    } catch (error) {
+        console.warn('カタカナ氏名の自動入力に失敗しました:', error);
+        return '';
+    }
+}
+
+function autofillShokaijyoKana(nameEn) {
+    fetchNameKana(nameEn).then(kana => {
+        if (!kana) return;
+        shokaijyoSheetContainer.querySelectorAll('[name="name_kana"]').forEach(input => {
+            if (!input.value.trim()) input.value = kana;
+        });
+    });
+}
+
 function buildSheetHTML(patientData, destKey, saved, classification, editable = true) {
     const dest = REFERRAL_FULL[destKey];
     const today = new Date();
     const reiwa = today.getFullYear() - 2018;
     const dateStr = `令和${reiwa}年${today.getMonth() + 1}月${today.getDate()}日`;
 
-    const nameParts = (patientData.claimantName || '').split(',').map(s => s.trim());
-    const nameEn = nameParts.length === 2
-        ? nameParts[1].charAt(0).toUpperCase() + nameParts[1].slice(1).toLowerCase() + ' ' +
-          nameParts[0].charAt(0).toUpperCase() + nameParts[0].slice(1).toLowerCase()
-        : (patientData.claimantName || '');
+    const nameEn = formatClaimantNameEn(patientData.claimantName);
 
     const dobRaw = patientData.dateOfBirth || '';
     let dobFormatted = dobRaw;
