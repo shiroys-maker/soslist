@@ -863,13 +863,10 @@ function savePhone() {
 }
 
 function classifyServices(services) {
-    // カンマ分割されたservicesを結合し、()内を丸ごと除去してから再分割
-    // 例: ["Gen Med DBQs, (chronic sinusitis, back strain)"] → "Gen Med DBQs," → ["Gen Med DBQs"]
-    const joined = (services || []).join(',');
-    const stripped = joined.replace(/\([^)]*\)/g, '');
-    const arr = stripped.split(',').map(s => s.trim()).filter(s => s.length > 0);
+    const arr = normalizeServiceTokens(services);
     // "RIGHT HAND, LIMITED" のように体の部位 + LIMITED/COMPLETE のペアを整形外科レントゲンと判定
     const FACIAL_HEAD = /CHEST|NASAL|SINUS|FACIAL|SKULL|CRANIAL|MANDIBLE|MAXILLA|ORBIT|ZYGOMA/i;
+    const ortho_xrays_jp = extractOrthoXraysJp(services);
     let has_ortho = arr.some(s => /COMPLETE|X[\s-]?RAY|XRAY|RADIOGRAPH/i.test(s) && !FACIAL_HEAD.test(s));
     if (!has_ortho) {
         for (let i = 0; i < arr.length - 1; i++) {
@@ -885,7 +882,8 @@ function classifyServices(services) {
         has_echo:       arr.some(s => /ECHO/i.test(s)),
         has_chest_xray: arr.some(s => /CHEST/i.test(s)),
         has_ecg:        arr.some(s => /ECG|EKG/i.test(s)),
-        has_ortho
+        has_ortho,
+        ortho_xrays_jp
     };
 }
 
@@ -974,6 +972,73 @@ function autofillShokaijyoKana(nameEn) {
     });
 }
 
+function normalizeServiceTokens(services) {
+    const joined = (services || []).join(',');
+    const stripped = joined.replace(/\([^)]*\)/g, '');
+    return stripped.split(',').map(s => s.trim()).filter(s => s.length > 0);
+}
+
+function translateOrthoXrayItem(rawItem, projection) {
+    const raw = String(rawItem || '').toUpperCase().replace(/[^A-Z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!raw) return '';
+
+    const side = /\bRIGHT\b/.test(raw) ? '右' : (/\bLEFT\b/.test(raw) ? '左' : '');
+    const partMap = [
+        [/SHOULDER/, '肩関節'],
+        [/\bCLAVICLE\b/, '鎖骨'],
+        [/\bHUMERUS\b/, '上腕骨'],
+        [/\bELBOW\b/, '肘関節'],
+        [/\bFOREARM\b/, '前腕'],
+        [/\bWRIST\b/, '手関節'],
+        [/\bHAND\b/, '手'],
+        [/\bFINGER\b|THUMB/, '手指'],
+        [/\bHIP\b/, '股関節'],
+        [/\bFEMUR\b/, '大腿骨'],
+        [/\bKNEE\b/, '膝関節'],
+        [/\bTIBIA\b|\bFIBULA\b/, '下腿'],
+        [/\bANKLE\b/, '足関節'],
+        [/\bFOOT\b/, '足'],
+        [/\bTOE\b/, '足趾'],
+        [/CERVICAL SPINE|\bC SPINE\b|\bNECK\b/, '頸椎'],
+        [/THORACIC SPINE|\bT SPINE\b/, '胸椎'],
+        [/LUMBAR SPINE|\bL SPINE\b|\bBACK\b/, '腰椎'],
+        [/\bPELVIS\b/, '骨盤']
+    ];
+    const match = partMap.find(([pattern]) => pattern.test(raw));
+    const part = match ? match[1] : raw.replace(/\b(RIGHT|LEFT|BILATERAL|LIMITED|COMPLETE|X RAY|XRAY|RADIOGRAPH|VIEWS?)\b/g, '').trim();
+    if (!part) return '';
+
+    const direction = projection === 'complete' ? '3方向' : (projection === 'limited' ? '2方向' : '');
+    return `${side}${part}レントゲン${direction}`;
+}
+
+function extractOrthoXraysJp(services) {
+    const arr = normalizeServiceTokens(services);
+    const xrays = [];
+    const FACIAL_HEAD = /CHEST|NASAL|SINUS|FACIAL|SKULL|CRANIAL|MANDIBLE|MAXILLA|ORBIT|ZYGOMA/i;
+
+    for (let i = 0; i < arr.length; i++) {
+        const item = arr[i];
+        if (FACIAL_HEAD.test(item)) continue;
+
+        if (/^(LIMITED|COMPLETE)$/i.test(arr[i + 1] || '')) {
+            const projection = /^COMPLETE$/i.test(arr[i + 1]) ? 'complete' : 'limited';
+            const translated = translateOrthoXrayItem(item, projection);
+            if (translated) xrays.push(translated);
+            i += 1;
+            continue;
+        }
+
+        if (/X[\s-]?RAY|XRAY|RADIOGRAPH|COMPLETE|LIMITED/i.test(item)) {
+            const projection = /COMPLETE/i.test(item) ? 'complete' : (/LIMITED/i.test(item) ? 'limited' : '');
+            const translated = translateOrthoXrayItem(item, projection);
+            if (translated) xrays.push(translated);
+        }
+    }
+
+    return [...new Set(xrays)];
+}
+
 function buildSheetHTML(patientData, destKey, saved, classification, editable = true) {
     const dest = REFERRAL_FULL[destKey];
     const today = new Date();
@@ -999,9 +1064,12 @@ function buildSheetHTML(patientData, destKey, saved, classification, editable = 
         if (e.has_chest_xray) items.push('胸部レントゲン2方向');
         if (e.has_ecg)        items.push('心電図');
     } else if (destKey === 'KIN') {
+        const fallbackOrtho = e.ortho_xrays_jp && e.ortho_xrays_jp.length > 0
+            ? e.ortho_xrays_jp
+            : ['整形外科レントゲン'];
         const ortho = classification && classification.ortho_xrays_jp && classification.ortho_xrays_jp.length > 0
             ? classification.ortho_xrays_jp
-            : ['整形外科レントゲン'];
+            : fallbackOrtho;
         items.push(...ortho);
         if (e.has_chest_xray) items.push('胸部レントゲン2方向');
     } else {

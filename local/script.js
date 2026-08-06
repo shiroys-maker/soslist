@@ -767,7 +767,12 @@ function openShokaijyoModal(docId, destKey) {
                     if (c.has_chest_xray) items.push('胸部レントゲン2方向');
                     if (c.has_ecg)        items.push('心電図');
                 } else if (destKey === 'KIN') {
-                    if (c.has_ortho)      items.push('整形外科レントゲン');
+                    if (c.has_ortho) {
+                        const orthoItems = c.ortho_xrays_jp && c.ortho_xrays_jp.length > 0
+                            ? c.ortho_xrays_jp
+                            : ['整形外科レントゲン'];
+                        items.push(...orthoItems);
+                    }
                     if (c.has_chest_xray) items.push('胸部レントゲン2方向');
                 } else {
                     if (c.has_echo)       items.push('心エコー検査');
