@@ -12,6 +12,7 @@
  *   node generate-brief.js --no-audio      # 音声をスキップ(テキストのみ)
  *   node generate-brief.js --sample        # Firestore非依存のサンプルで通し検証
  *   node generate-brief.js --scheduled-context # Codex定時処理用の対象日・入力を出力
+ *   node generate-brief.js --codex-context --date YYYY-MM-DD # Codex手動処理用の対象日・入力を出力
  *   node generate-brief.js --finalize-prepared --date YYYY-MM-DD # 作成済み原稿を音声・保存処理
  *
  * 必要な環境変数:
@@ -47,6 +48,30 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
+const LOCAL_TOOL_DIRS = [
+  '/opt/homebrew/bin',
+  '/usr/local/bin',
+  '/usr/bin',
+  '/bin',
+  '/usr/sbin',
+  '/sbin',
+];
+
+function resolveLocalTool(cmd) {
+  if (path.isAbsolute(cmd)) return cmd;
+  const pathDirs = String(process.env.PATH || '')
+    .split(path.delimiter)
+    .filter(Boolean);
+  for (const dir of [...pathDirs, ...LOCAL_TOOL_DIRS]) {
+    const candidate = path.join(dir, cmd);
+    try {
+      fs.accessSync(candidate, fs.constants.X_OK);
+      return candidate;
+    } catch (_) {}
+  }
+  return cmd;
+}
+
 // ----------------------------- 引数解析 -----------------------------
 const args = process.argv.slice(2);
 const flags = {
@@ -57,6 +82,7 @@ const flags = {
   finalizePrepared: args.includes('--finalize-prepared'),
   syncAudio: args.includes('--sync-audio'),
   scheduledContext: args.includes('--scheduled-context'),
+  codexContext: args.includes('--codex-context'),
   date: null,
 };
 const dateIdx = args.indexOf('--date');
@@ -288,13 +314,17 @@ async function saveBriefToFirestore(result) {
 
   const admin = getFirebaseAdmin();
   const db = getFirestore();
+  const audioStoragePath = result.audioStoragePath
+    || (result.audioFile && path.extname(result.audioFile).toLowerCase() === '.mp3'
+      ? podcastStoragePath(result.ymd)
+      : null);
   const payload = {
     ymd: result.ymd,
     summaryMarkdown: result.summaryMarkdown,
     appointmentCount: Number.isFinite(result.count) ? result.count : null,
     hasAudio: Boolean(result.audioFile),
     audioFilename: result.audioFile ? path.basename(result.audioFile) : null,
-    audioStoragePath: result.audioStoragePath || null,
+    audioStoragePath,
     outDir: result.outDir || null,
     mdPath: result.mdPath || null,
     source: 'daily-brief-local',
@@ -606,6 +636,28 @@ async function getScheduledSummaryContext() {
     outDir: existing.outDir,
     briefPath: existing.mdPath,
     scriptPath,
+    prompt: inputs.prompt,
+  };
+}
+
+/**
+ * 手動の Codex Summary が使う対象日固定のコンテキスト。
+ * 既存成果物の判定は UI 側で済ませ、ここでは常に指定日の原稿を作り直す。
+ */
+async function getCodexSummaryContext(date) {
+  if (!date) {
+    throw new Error('--codex-context には --date YYYY-MM-DD が必要です。');
+  }
+
+  const inputs = await collectGenerationInputs({ date });
+  const existing = getExistingBriefResult(inputs.ymd);
+  return {
+    action: 'generate',
+    ymd: inputs.ymd,
+    count: inputs.count,
+    outDir: existing.outDir,
+    briefPath: existing.mdPath,
+    scriptPath: path.join(existing.outDir, 'podcast-script.txt'),
     prompt: inputs.prompt,
   };
 }
@@ -1042,7 +1094,8 @@ async function fetchArrayBufferWithTimeout(url, options, errorMessage) {
 }
 
 function runLocalTool(cmd, args, errorMessage) {
-  const result = spawnSync(cmd, args, {
+  const toolPath = resolveLocalTool(cmd);
+  const result = spawnSync(toolPath, args, {
     stdio: 'ignore',
     timeout: LOCAL_TTS_TIMEOUT_MS,
     killSignal: 'SIGKILL',
@@ -1261,7 +1314,7 @@ async function synthesizePodcast(openai, dialogue, outBaseNoExt) {
   // 速度変更が必要ならWAVも上書きで作り直す(ピッチ保持)。
   if (needTempo) {
     const tmp = `${outBaseNoExt}.tmp.wav`;
-    const r = spawnSync('ffmpeg', ['-y', '-i', wavPath, ...filterArgs, tmp], { stdio: 'ignore' });
+    const r = spawnSync(resolveLocalTool('ffmpeg'), ['-y', '-i', wavPath, ...filterArgs, tmp], { stdio: 'ignore' });
     if (r.status === 0) {
       fs.renameSync(tmp, wavPath);
       log(`再生速度を ${PODCAST_SPEED}x に調整(ffmpeg atempo)`);
@@ -1525,6 +1578,7 @@ module.exports = {
   syncLatestPodcastAudio,
   collectGenerationInputs,
   getScheduledSummaryContext,
+  getCodexSummaryContext,
   finalizeManualImport,
 };
 
@@ -1539,6 +1593,12 @@ if (require.main === module) {
 
     if (flags.scheduledContext) {
       const result = await getScheduledSummaryContext();
+      process.stdout.write(JSON.stringify(result, null, 2));
+      return;
+    }
+
+    if (flags.codexContext) {
+      const result = await getCodexSummaryContext(flags.date);
       process.stdout.write(JSON.stringify(result, null, 2));
       return;
     }

@@ -848,8 +848,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         notifyMainSummaryStatus(state: "preparing", message: "Summary 作成を開始しています...")
 
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: dailyBriefNodePath)
-        process.arguments = [dailyBriefGeneratorScript, "--date", ymd]
+        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        process.arguments = ["\(dailyBriefDir)/run-codex-summary.sh", "--date", ymd]
         process.currentDirectoryURL = URL(fileURLWithPath: dailyBriefDir, isDirectory: true)
         process.environment = makeDailyBriefEnvironment()
 
