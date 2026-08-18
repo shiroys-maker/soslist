@@ -773,7 +773,7 @@ function openShokaijyoModal(docId, destKey) {
                             : ['整形外科レントゲン'];
                         items.push(...orthoItems);
                     }
-                    if (c.has_chest_xray) items.push('胸部レントゲン2方向');
+                    if (c.has_chest_xray && !c.has_echo) items.push('胸部レントゲン2方向');
                 } else {
                     if (c.has_echo)       items.push('心エコー検査');
                     if (c.has_chest_xray) items.push('胸部レントゲン2方向');

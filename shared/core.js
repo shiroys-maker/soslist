@@ -1080,7 +1080,7 @@ function buildSheetHTML(patientData, destKey, saved, classification, editable = 
             ? classification.ortho_xrays_jp
             : fallbackOrtho;
         items.push(...ortho);
-        if (e.has_chest_xray) items.push('胸部レントゲン2方向');
+        if (e.has_chest_xray && !e.has_echo) items.push('胸部レントゲン2方向');
     } else {
         if (e.has_echo)       items.push('心エコー検査');
         if (e.has_chest_xray) items.push('胸部レントゲン2方向');
