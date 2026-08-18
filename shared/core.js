@@ -867,7 +867,7 @@ function classifyServices(services) {
     // "RIGHT HAND, LIMITED" のように体の部位 + LIMITED/COMPLETE のペアを整形外科レントゲンと判定
     const FACIAL_HEAD = /CHEST|NASAL|SINUS|FACIAL|SKULL|CRANIAL|MANDIBLE|MAXILLA|ORBIT|ZYGOMA/i;
     const ortho_xrays_jp = extractOrthoXraysJp(services);
-    let has_ortho = arr.some(s => /COMPLETE|X[\s-]?RAY|XRAY|RADIOGRAPH/i.test(s) && !FACIAL_HEAD.test(s));
+    let has_ortho = ortho_xrays_jp.length > 0 || arr.some(s => /COMPLETE|X[\s-]?RAY|XRAY|RADIOGRAPH/i.test(s) && !FACIAL_HEAD.test(s));
     if (!has_ortho) {
         for (let i = 0; i < arr.length - 1; i++) {
             if (/^(LIMITED|COMPLETE)$/i.test(arr[i + 1]) && !FACIAL_HEAD.test(arr[i])) {
@@ -881,7 +881,7 @@ function classifyServices(services) {
         has_facial:     arr.some(s => /FACIAL|SKULL|CRANIAL|MANDIBLE|MAXILLA|ORBIT|ZYGOMA/i.test(s)),
         has_echo:       arr.some(s => /ECHO/i.test(s)),
         has_chest_xray: arr.some(s => /CHEST/i.test(s)),
-        has_ecg:        arr.some(s => /ECG|EKG/i.test(s)),
+        has_ecg:        arr.some(s => /ECG|EKG|ELECTROCARDIOGRAM/i.test(s)),
         has_ortho,
         ortho_xrays_jp
     };
@@ -1016,6 +1016,7 @@ function extractOrthoXraysJp(services) {
     const arr = normalizeServiceTokens(services);
     const xrays = [];
     const FACIAL_HEAD = /CHEST|NASAL|SINUS|FACIAL|SKULL|CRANIAL|MANDIBLE|MAXILLA|ORBIT|ZYGOMA/i;
+    const ORTHO_PLAIN_XRAY = /SHOULDER|CLAVICLE|HUMERUS|ELBOW|FOREARM|WRIST|HAND|FINGER|THUMB|HIP|FEMUR|KNEE|TIBIA|FIBULA|ANKLE|FOOT|TOE|CERVICAL SPINE|\bC SPINE\b|\bNECK\b|THORACIC SPINE|\bT SPINE\b|LUMBAR SPINE|\bL SPINE\b|\bBACK\b|\bPELVIS\b/i;
 
     for (let i = 0; i < arr.length; i++) {
         const item = arr[i];
@@ -1033,6 +1034,14 @@ function extractOrthoXraysJp(services) {
             const projection = /COMPLETE/i.test(item) ? 'complete' : (/LIMITED/i.test(item) ? 'limited' : '');
             const translated = translateOrthoXrayItem(item, projection);
             if (translated) xrays.push(translated);
+            continue;
+        }
+
+        if (ORTHO_PLAIN_XRAY.test(item)) {
+            const nextSide = /^(RIGHT|LEFT|BILATERAL)$/i.test(arr[i + 1] || '') ? ` ${arr[i + 1]}` : '';
+            const translated = translateOrthoXrayItem(`${item}${nextSide}`, '');
+            if (translated) xrays.push(translated);
+            if (nextSide) i += 1;
         }
     }
 
