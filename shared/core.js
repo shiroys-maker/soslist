@@ -307,6 +307,9 @@ function setupRealtimeListener() {
               const visitdateCellClass = SOSLIST_TARGET.perReferralStatus ? 'col-visitdate' : 'col-visitdate visitdate-cell';
               const receivedCellClass = SOSLIST_TARGET.perReferralStatus ? 'col-received' : 'col-received received-cell';
               const completedCellClass = SOSLIST_TARGET.perReferralStatus ? 'col-completed' : 'col-completed completed-cell';
+              const mobileReferralStatusHTML = SOSLIST_TARGET.perReferralStatus
+                  ? buildMobileReferralStatusHTML(data, referralDests)
+                  : '';
 
               const age = calculateAge(data.dateOfBirth);
               const displayAge = age ? `${age}` : '不明';
@@ -346,21 +349,25 @@ function setupRealtimeListener() {
                       <div class="appointment-card-meta">${mobileDateText}</div>
                       <div class="appointment-card-services">${escapeHtml(displayServicesText || '検査内容なし')}</div>
                       <div class="appointment-card-compact-extra">
-                          <div><span class="appointment-card-label">紹介先</span><div class="appointment-card-referrals compact-referrals">${referralHTML || '<span class="appointment-card-empty">なし</span>'}</div></div>
-                          <div><span class="appointment-card-label">受診日</span><div class="appointment-card-value appointment-card-referral-status">${visitdateHTML || '<span class="appointment-card-empty">未入力</span>'}</div></div>
+                          ${mobileReferralStatusHTML || `
+                              <div><span class="appointment-card-label">紹介先</span><div class="appointment-card-referrals compact-referrals">${referralHTML || '<span class="appointment-card-empty">なし</span>'}</div></div>
+                              <div><span class="appointment-card-label">受診日</span><div class="appointment-card-value appointment-card-referral-status">${visitdateHTML || '<span class="appointment-card-empty">未入力</span>'}</div></div>
+                          `}
                       </div>
                       <div class="appointment-card-grid">
                           <div><span class="appointment-card-label">契約番号</span><span class="appointment-card-value">${escapeHtml(data.contractNumber || '')}</span></div>
                           <div><span class="appointment-card-label">年齢</span><span class="appointment-card-value ${ageCellClass}">${escapeHtml(displayAge)}</span></div>
                           <div><span class="appointment-card-label">電話</span><button type="button" class="appointment-card-value phone-cell">${escapeHtml(data.japanCellPhone || '')}</button></div>
-                          <div><span class="appointment-card-label">受診日</span><div class="appointment-card-value appointment-card-referral-status">${visitdateHTML || '<span class="appointment-card-empty">未入力</span>'}</div></div>
+                          ${mobileReferralStatusHTML ? '' : `<div><span class="appointment-card-label">受診日</span><div class="appointment-card-value appointment-card-referral-status">${visitdateHTML || '<span class="appointment-card-empty">未入力</span>'}</div></div>`}
                       </div>
                       <div class="appointment-card-footer">
-                          <div class="appointment-card-referrals appointment-card-referrals-full">${referralHTML || '<span class="appointment-card-label">紹介先なし</span>'}</div>
-                          <div class="appointment-card-statuses">
-                              <div class="appointment-flag appointment-card-referral-status" aria-label="受領">${receivedHTML || '受'}</div>
-                              <div class="appointment-flag appointment-card-referral-status" aria-label="完了">${completedHTML || '済'}</div>
-                          </div>
+                          ${mobileReferralStatusHTML || `
+                              <div class="appointment-card-referrals appointment-card-referrals-full">${referralHTML || '<span class="appointment-card-label">紹介先なし</span>'}</div>
+                              <div class="appointment-card-statuses">
+                                  <div class="appointment-flag appointment-card-referral-status" aria-label="受領">${receivedHTML || '受'}</div>
+                                  <div class="appointment-flag appointment-card-referral-status" aria-label="完了">${completedHTML || '済'}</div>
+                              </div>
+                          `}
                       </div>
                   </article>`;
               previousDateStr = currentDateStr;
@@ -978,6 +985,31 @@ function buildReferralStatusHTML(data, referralDests) {
         receivedHTML: receivedHTML || emptyLine,
         completedHTML: completedHTML || emptyLine
     };
+}
+
+function buildMobileReferralStatusHTML(data, referralDests) {
+    const savedReferrals = data.referrals || {};
+    if (!referralDests.length) {
+        return '<div class="mobile-referral-status mobile-referral-status-empty">紹介先なし</div>';
+    }
+
+    const rows = referralDests.map((dk, index) => {
+        const isSaved = !!(savedReferrals[dk] && savedReferrals[dk].savedAt);
+        const visitDate = getReferralStateValue(data, dk, 'visitDate', 'visitDate', index) || '';
+        const isReceived = getReferralStateValue(data, dk, 'isReceived', 'isReceived', index) === true;
+        const isCompleted = getReferralStateValue(data, dk, 'isCompleted', 'isCompleted', index) === true;
+        const label = REFERRAL_DISPLAY[dk] || dk;
+
+        return `
+            <div class="mobile-referral-row">
+                <button type="button" class="mobile-referral-dest referral-dest${isSaved ? ' saved' : ''}" data-dest="${dk}">${escapeHtml(label)}</button>
+                <button type="button" class="mobile-referral-date visitdate-cell" data-dest="${dk}">${visitDate ? escapeHtml(visitDate) : '未入力'}</button>
+                <button type="button" class="mobile-referral-check received-cell${isReceived ? ' is-active' : ''}" data-dest="${dk}" aria-label="${escapeHtml(label)} 受領">${isReceived ? '受✓' : '受'}</button>
+                <button type="button" class="mobile-referral-check completed-cell${isCompleted ? ' is-active' : ''}" data-dest="${dk}" aria-label="${escapeHtml(label)} 完了">${isCompleted ? '済✓' : '済'}</button>
+            </div>`;
+    }).join('');
+
+    return `<div class="mobile-referral-status">${rows}</div>`;
 }
 
 function escapeHtml(str) {

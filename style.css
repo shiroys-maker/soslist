@@ -711,6 +711,73 @@ body.modal-open {
         flex-shrink: 0;
     }
 
+    .mobile-referral-status {
+        display: grid;
+        gap: 6px;
+        width: 100%;
+    }
+
+    .mobile-referral-row {
+        display: grid;
+        grid-template-columns: minmax(52px, 0.8fr) minmax(82px, 1fr) 42px 42px;
+        gap: 6px;
+        align-items: center;
+        width: 100%;
+    }
+
+    .mobile-referral-dest,
+    .mobile-referral-date,
+    .mobile-referral-check {
+        min-height: 30px;
+        border: 1px solid #d7deea;
+        border-radius: 7px;
+        background: #fff;
+        color: #172033;
+        font-size: 12px;
+        line-height: 1.15;
+        text-align: center;
+        white-space: nowrap;
+    }
+
+    .mobile-referral-dest {
+        padding: 0 6px;
+        background: #f1ecff;
+        color: #5a2d9a;
+        font-weight: 700;
+    }
+
+    .mobile-referral-dest.saved {
+        color: #176f2c;
+    }
+
+    .mobile-referral-date {
+        padding: 0 5px;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .mobile-referral-check {
+        padding: 0;
+        color: #6b7280;
+        font-weight: 700;
+    }
+
+    .mobile-referral-check.is-active {
+        border-color: #2f9d50;
+        background: #eaf7ee;
+        color: #176f2c;
+    }
+
+    .mobile-referral-status-empty {
+        color: #6b7280;
+        font-size: 12px;
+    }
+
+    .appointment-card-footer > .mobile-referral-status,
+    .appointment-card-compact-extra > .mobile-referral-status {
+        flex: 1 1 100%;
+        min-width: 0;
+    }
+
     .appointment-card-referrals-full {
         flex: 1 1 auto;
         min-width: 0;
@@ -773,12 +840,8 @@ body.modal-open {
     }
 
     body[data-mobile-view-mode="compact"] .appointment-card-compact-extra {
-        display: flex;
-        gap: 10px;
+        display: block;
         margin-top: 8px;
-        align-items: center;
-        flex-wrap: nowrap;
-        overflow: hidden;
     }
 
     body[data-mobile-view-mode="compact"] .appointment-card-grid,
