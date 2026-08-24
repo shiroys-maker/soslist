@@ -4,6 +4,7 @@
 const SOSLIST_TARGET = {
     mobileUI: false,                              // モバイルUIなし
     deleteColumn: true,                           // 削除ボタン列あり
+    perReferralStatus: true,                      // 紹介先ごとに受診日・受・済を管理
     servicesCellClass: 'col-services services-cell', // 検査内容セルは編集可
     stampSrc: '../stamp.png'
 };
@@ -82,6 +83,7 @@ let isCDMonitorEnabled = false;
 let shokaijyoEditingDocId = null;
 let shokaijyoEditingDest  = null;
 let visitDateEditingDocId = null;
+let visitDateEditingDest  = null;
 const DETAIL_PAYLOAD_PREFIX = 'soslist-detail-payload:';
 const DETAIL_SAVE_REQUEST_KEY = 'soslist-detail-save-request';
 const DETAIL_SAVE_RESPONSE_PREFIX = 'soslist-detail-save-response:';
@@ -330,29 +332,41 @@ tableBody.addEventListener('click', (e) => {
         openServicesEditModal(docId);
         return;
     }
-    if (target.classList.contains('referral-dest')) {
-        const destKey = target.dataset.dest;
+    const referralTarget = target.closest('.referral-dest');
+    if (referralTarget) {
+        const destKey = referralTarget.dataset.dest;
         openShokaijyoModal(docId, destKey);
         return;
     }
-    if (target.classList.contains('visitdate-cell')) {
-        openVisitDateModal(docId);
+    const visitDateTarget = target.closest('.visitdate-cell');
+    if (visitDateTarget) {
+        openVisitDateModal(docId, visitDateTarget.dataset.dest || null);
         return;
     }
-    if (target.classList.contains('received-cell')) {
+    const receivedTarget = target.closest('.received-cell');
+    if (receivedTarget) {
+        const destKey = receivedTarget.dataset.dest || null;
         const docRef = db.collection('appointments').doc(docId);
         docRef.get().then(doc => {
-            if (doc.exists) return docRef.update({ isReceived: !doc.data().isReceived });
+            if (!doc.exists) return null;
+            if (!destKey) return docRef.update({ isReceived: !doc.data().isReceived });
+            const current = doc.data().referrals?.[destKey]?.isReceived === true;
+            return docRef.update({ [`referrals.${destKey}.isReceived`]: !current });
         }).catch(error => {
             console.error('受領フラグの更新エラー:', error);
             alert('受領フラグの更新に失敗しました。');
         });
         return;
     }
-    if (target.classList.contains('completed-cell')) {
+    const completedTarget = target.closest('.completed-cell');
+    if (completedTarget) {
+        const destKey = completedTarget.dataset.dest || null;
         const docRef = db.collection('appointments').doc(docId);
         docRef.get().then(doc => {
-            if (doc.exists) return docRef.update({ isCompleted: !doc.data().isCompleted });
+            if (!doc.exists) return null;
+            if (!destKey) return docRef.update({ isCompleted: !doc.data().isCompleted });
+            const current = doc.data().referrals?.[destKey]?.isCompleted === true;
+            return docRef.update({ [`referrals.${destKey}.isCompleted`]: !current });
         }).catch(error => {
             console.error('完了フラグの更新エラー:', error);
             alert('完了フラグの更新に失敗しました。');

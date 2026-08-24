@@ -280,17 +280,33 @@ function setupRealtimeListener() {
               }
               const displayServicesText = (data.services || []).join(', ').toLowerCase().includes("audiologist") ? "Audiology" : (data.services || []).join(', ');
 
-              // 紹介先・受診日・受・済（フラット構造）
+              // 紹介先・受診日・受・済
               const referralDests = determineReferralDests(data.services || []);
-              const savedReferrals = data.referrals || {};
-              const referralHTML   = referralDests.map(dk => {
-                  const isSaved = !!(savedReferrals[dk] && savedReferrals[dk].savedAt);
-                  return `<span class="referral-dest${isSaved ? ' saved' : ''}" data-dest="${dk}">${REFERRAL_DISPLAY[dk]}</span>`;
-              }).join('');
-              const visitdateHTML  = data.visitDate   || '';
-              const receivedHTML   = data.isReceived  ? '✅' : '';
-              const completedHTML  = data.isCompleted ? '✅' : '';
+              let referralHTML = '';
+              let visitdateHTML = '';
+              let receivedHTML = '';
+              let completedHTML = '';
+              if (SOSLIST_TARGET.perReferralStatus) {
+                  ({
+                      referralHTML,
+                      visitdateHTML,
+                      receivedHTML,
+                      completedHTML
+                  } = buildReferralStatusHTML(data, referralDests));
+              } else {
+                  const savedReferrals = data.referrals || {};
+                  referralHTML = referralDests.map(dk => {
+                      const isSaved = !!(savedReferrals[dk] && savedReferrals[dk].savedAt);
+                      return `<span class="referral-dest${isSaved ? ' saved' : ''}" data-dest="${dk}">${REFERRAL_DISPLAY[dk]}</span>`;
+                  }).join('');
+                  visitdateHTML = escapeHtml(data.visitDate || '');
+                  receivedHTML = data.isReceived ? '✅' : '';
+                  completedHTML = data.isCompleted ? '✅' : '';
+              }
               const mobileDateText = displayDate.replace('<br>', ' ');
+              const visitdateCellClass = SOSLIST_TARGET.perReferralStatus ? 'col-visitdate' : 'col-visitdate visitdate-cell';
+              const receivedCellClass = SOSLIST_TARGET.perReferralStatus ? 'col-received' : 'col-received received-cell';
+              const completedCellClass = SOSLIST_TARGET.perReferralStatus ? 'col-completed' : 'col-completed completed-cell';
 
               const age = calculateAge(data.dateOfBirth);
               const displayAge = age ? `${age}` : '不明';
@@ -313,9 +329,9 @@ function setupRealtimeListener() {
                       <td class="col-phone phone-cell">${escapeHtml(data.japanCellPhone || '')}</td>
                       <td class="${servicesCellClass}">${escapeHtml(displayServicesText)}</td>
                       <td class="col-referral">${referralHTML}</td>
-                      <td class="col-visitdate visitdate-cell">${escapeHtml(visitdateHTML)}</td>
-                      <td class="col-received received-cell">${receivedHTML}</td>
-                      <td class="col-completed completed-cell">${completedHTML}</td>${deleteCellHTML}
+                      <td class="${visitdateCellClass}">${visitdateHTML}</td>
+                      <td class="${receivedCellClass}">${receivedHTML}</td>
+                      <td class="${completedCellClass}">${completedHTML}</td>${deleteCellHTML}
                   </tr>`;
 
               if (SOSLIST_TARGET.mobileUI) mobileCardsHTML += `
@@ -331,19 +347,19 @@ function setupRealtimeListener() {
                       <div class="appointment-card-services">${escapeHtml(displayServicesText || '検査内容なし')}</div>
                       <div class="appointment-card-compact-extra">
                           <div><span class="appointment-card-label">紹介先</span><div class="appointment-card-referrals compact-referrals">${referralHTML || '<span class="appointment-card-empty">なし</span>'}</div></div>
-                          <div><span class="appointment-card-label">受診日</span><button type="button" class="appointment-card-value visitdate-cell">${escapeHtml(visitdateHTML || '未入力')}</button></div>
+                          <div><span class="appointment-card-label">受診日</span><div class="appointment-card-value appointment-card-referral-status">${visitdateHTML || '<span class="appointment-card-empty">未入力</span>'}</div></div>
                       </div>
                       <div class="appointment-card-grid">
                           <div><span class="appointment-card-label">契約番号</span><span class="appointment-card-value">${escapeHtml(data.contractNumber || '')}</span></div>
                           <div><span class="appointment-card-label">年齢</span><span class="appointment-card-value ${ageCellClass}">${escapeHtml(displayAge)}</span></div>
                           <div><span class="appointment-card-label">電話</span><button type="button" class="appointment-card-value phone-cell">${escapeHtml(data.japanCellPhone || '')}</button></div>
-                          <div><span class="appointment-card-label">受診日</span><button type="button" class="appointment-card-value visitdate-cell">${escapeHtml(visitdateHTML || '未入力')}</button></div>
+                          <div><span class="appointment-card-label">受診日</span><div class="appointment-card-value appointment-card-referral-status">${visitdateHTML || '<span class="appointment-card-empty">未入力</span>'}</div></div>
                       </div>
                       <div class="appointment-card-footer">
                           <div class="appointment-card-referrals appointment-card-referrals-full">${referralHTML || '<span class="appointment-card-label">紹介先なし</span>'}</div>
                           <div class="appointment-card-statuses">
-                              <button type="button" class="appointment-flag received-cell" aria-label="受領">${receivedHTML || '受'}</button>
-                              <button type="button" class="appointment-flag completed-cell" aria-label="完了">${completedHTML || '済'}</button>
+                              <div class="appointment-flag appointment-card-referral-status" aria-label="受領">${receivedHTML || '受'}</div>
+                              <div class="appointment-flag appointment-card-referral-status" aria-label="完了">${completedHTML || '済'}</div>
                           </div>
                       </div>
                   </article>`;
@@ -916,6 +932,54 @@ function determineReferralDests(services, classification) {
     return dests.slice(0, 3);
 }
 
+function getReferralStateValue(data, destKey, fieldName, legacyFieldName, destIndex) {
+    const referralValue = data.referrals && data.referrals[destKey];
+    if (referralValue && referralValue[fieldName] !== undefined) {
+        return referralValue[fieldName];
+    }
+    return destIndex === 0 ? data[legacyFieldName] : undefined;
+}
+
+function buildReferralStatusHTML(data, referralDests) {
+    const savedReferrals = data.referrals || {};
+    const emptyLine = '<span class="referral-row-empty">&nbsp;</span>';
+    if (!referralDests.length) {
+        return {
+            referralHTML: '',
+            visitdateHTML: '',
+            receivedHTML: '',
+            completedHTML: ''
+        };
+    }
+
+    const referralHTML = referralDests.map(dk => {
+        const isSaved = !!(savedReferrals[dk] && savedReferrals[dk].savedAt);
+        return `<span class="referral-item referral-dest${isSaved ? ' saved' : ''}" data-dest="${dk}">${REFERRAL_DISPLAY[dk]}</span>`;
+    }).join('');
+
+    const visitdateHTML = referralDests.map((dk, index) => {
+        const visitDate = getReferralStateValue(data, dk, 'visitDate', 'visitDate', index) || '';
+        return `<span class="visitdate-item visitdate-cell" data-dest="${dk}">${visitDate ? escapeHtml(visitDate) : '&nbsp;'}</span>`;
+    }).join('');
+
+    const receivedHTML = referralDests.map((dk, index) => {
+        const isReceived = getReferralStateValue(data, dk, 'isReceived', 'isReceived', index) === true;
+        return `<span class="received-item received-cell" data-dest="${dk}">${isReceived ? '✅' : '&nbsp;'}</span>`;
+    }).join('');
+
+    const completedHTML = referralDests.map((dk, index) => {
+        const isCompleted = getReferralStateValue(data, dk, 'isCompleted', 'isCompleted', index) === true;
+        return `<span class="completed-item completed-cell" data-dest="${dk}">${isCompleted ? '✅' : '&nbsp;'}</span>`;
+    }).join('');
+
+    return {
+        referralHTML: referralHTML || emptyLine,
+        visitdateHTML: visitdateHTML || emptyLine,
+        receivedHTML: receivedHTML || emptyLine,
+        completedHTML: completedHTML || emptyLine
+    };
+}
+
 function escapeHtml(str) {
     return String(str)
         .replace(/&/g, '&amp;')
@@ -1291,8 +1355,9 @@ function parseVisitDateForModal(rawVisitDate, appointmentDateTime) {
     return { dateValue: '', timeValue: defaultTime };
 }
 
-function openVisitDateModal(docId) {
+function openVisitDateModal(docId, destKey = null) {
     visitDateEditingDocId = docId;
+    visitDateEditingDest = destKey;
     visitDateInput.value = '';
     if (visitTimeInput) {
         visitTimeInput.value = '09:00';
@@ -1306,7 +1371,8 @@ function openVisitDateModal(docId) {
         }
 
         const data = doc.data() || {};
-        const parsed = parseVisitDateForModal(data.visitDate || '', data.appointmentDateTime || null);
+        const referralVisitDate = destKey ? (data.referrals?.[destKey]?.visitDate || '') : '';
+        const parsed = parseVisitDateForModal(referralVisitDate || data.visitDate || '', data.appointmentDateTime || null);
         visitDateInput.value = parsed.dateValue;
         if (visitTimeInput) {
             visitTimeInput.value = parsed.timeValue;
@@ -1323,6 +1389,7 @@ function openVisitDateModal(docId) {
 function closeVisitDateModal() {
     visitDateModal.style.display = 'none';
     visitDateEditingDocId = null;
+    visitDateEditingDest = null;
     document.body.classList.remove('modal-open');
 }
 
@@ -1336,8 +1403,11 @@ function saveVisitDate() {
     const mmdd = `${parts[1]}/${parts[2]}`;
     const timeValue = visitTimeInput?.value || '09:00';
     const visitDateValue = `${mmdd} ${timeValue}`;
+    const updatePayload = visitDateEditingDest
+        ? { [`referrals.${visitDateEditingDest}.visitDate`]: visitDateValue }
+        : { visitDate: visitDateValue };
 
-    db.collection('appointments').doc(visitDateEditingDocId).update({ visitDate: visitDateValue })
+    db.collection('appointments').doc(visitDateEditingDocId).update(updatePayload)
         .then(() => closeVisitDateModal())
         .catch(err => { console.error(err); alert('保存に失敗しました'); });
 }

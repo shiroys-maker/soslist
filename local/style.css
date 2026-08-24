@@ -625,7 +625,7 @@ th.col-completed, td.col-completed {
 .referral-dest.saved { color: #228B22; font-weight: bold; }
 
 /* 受診日・受・済 — 紹介先ごとに1行 */
-.visitdate-item, .received-item, .completed-item {
+.referral-item, .visitdate-item, .received-item, .completed-item {
     display: block;
     min-height: 1.5em;
     line-height: 1.5em;
