@@ -6,6 +6,7 @@ const SOSLIST_TARGET = {
     deleteColumn: false,                 // 削除ボタン列なし
     perReferralStatus: true,             // 紹介先ごとに受診日・受・済を管理
     servicesCellClass: 'col-services',   // 検査内容セルは編集不可
+    referralHeaderDateMode: 'visitDate',
     stampSrc: 'stamp.png'
 };
 
