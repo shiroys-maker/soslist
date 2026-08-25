@@ -259,6 +259,9 @@ function setupRealtimeListener() {
           appointments.forEach(appointment => {
               const docId = appointment.id;
               const data = appointment;
+              if (docId === shokaijyoEditingDocId) {
+                  updateOpenShokaijyoVisitDate(data);
+              }
               const correctedDateObj = appointment._correctedDateObj;
               let rowClass = '';
               let currentDateStr = '';
@@ -380,6 +383,15 @@ function setupRealtimeListener() {
       }, error => {
           console.error("Firestoreのリアルタイム監視でエラー:", error);
       });
+}
+
+function updateOpenShokaijyoVisitDate(data) {
+    if ((SOSLIST_TARGET.referralHeaderDateMode || 'today') !== 'visitDate') return;
+    if (!shokaijyoEditingDocId || !shokaijyoEditingDest) return;
+    const visitDateValue = data.referrals?.[shokaijyoEditingDest]?.visitDate || data.visitDate || '';
+    const target = shokaijyoSheetContainer?.querySelector('.shokaijyo-visit-date-value');
+    if (!target) return;
+    target.textContent = formatReferralHeaderVisitDate(visitDateValue, data);
 }
 
 function startLogoutTimer() {
@@ -1144,11 +1156,40 @@ function extractOrthoXraysJp(services) {
     return [...new Set(xrays)];
 }
 
+function formatReferralHeaderVisitDate(rawVisitDate, patientData) {
+    const trimmed = (rawVisitDate || '').trim().replace(/^受診日：\s*/, '');
+    if (!trimmed) return '';
+    if (/^令和\d+年\d{1,2}\/\d{1,2}\s+\d{1,2}:\d{2}$/.test(trimmed)) {
+        return trimmed;
+    }
+
+    const appointmentDate = getCorrectedAppointmentDate(patientData);
+    const defaultYear = appointmentDate ? appointmentDate.getFullYear() : new Date().getFullYear();
+    const slashMatch = trimmed.match(/^(?:(\d{4})[-/])?(\d{1,2})\/(\d{1,2})(?:\s+(\d{1,2}:\d{2}))?$/);
+    const isoMatch = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:\s+(\d{1,2}:\d{2}))?$/);
+    const match = isoMatch || slashMatch;
+    if (!match) return trimmed;
+
+    const year = Number(match[1] || defaultYear);
+    const month = String(Number(match[2])).padStart(2, '0');
+    const day = String(Number(match[3])).padStart(2, '0');
+    const time = match[4] || '09:00';
+    return `令和${year - 2018}年${month}/${day} ${time}`;
+}
+
 function buildSheetHTML(patientData, destKey, saved, classification, editable = true) {
     const dest = REFERRAL_FULL[destKey];
     const today = new Date();
     const reiwa = today.getFullYear() - 2018;
     const dateStr = `令和${reiwa}年${today.getMonth() + 1}月${today.getDate()}日`;
+    const headerDateMode = SOSLIST_TARGET.referralHeaderDateMode || 'today';
+    const headerVisitDate = headerDateMode === 'visitDate'
+        ? (saved?.visitDate || patientData.referrals?.[destKey]?.visitDate || patientData.visitDate || '')
+        : '';
+    const headerVisitDateDisplay = formatReferralHeaderVisitDate(headerVisitDate, patientData);
+    const headerDateHTML = headerDateMode === 'visitDate'
+        ? `受診日：<span class="shokaijyo-visit-date-value">${escapeHtml(headerVisitDateDisplay)}</span>`
+        : escapeHtml(dateStr);
 
     const nameEn = formatClaimantNameEn(patientData.claimantName);
 
@@ -1227,7 +1268,7 @@ function buildSheetHTML(patientData, destKey, saved, classification, editable = 
                 <div class="doctor-names"><strong>担当医師：</strong> ${escapeHtml(dest.doctor)} 殿</div>
             </div>
             <div class="header-right">
-                <div style="text-align:right;margin-bottom:5px;">${dateStr}</div>
+                <div class="shokaijyo-header-date" style="text-align:right;margin-bottom:5px;">${headerDateHTML}</div>
                 <div class="sender-info">
                     紹介元医療機関の所在地：${escapeHtml(SHOKAIJO_SENDER.address)}<br>
                     名称：<strong>${escapeHtml(SHOKAIJO_SENDER.name)}</strong><br>
@@ -1286,14 +1327,18 @@ function saveShokaijyo() {
     const selectedGender = sheet.querySelector('.sex-option.selected');
     const fieldPath = `referrals.${shokaijyoEditingDest}`;
     db.collection('appointments').doc(shokaijyoEditingDocId).update({
-        [fieldPath]: {
-            name_kana: get('name_kana'), name_en: get('name_en'),
-            gender:    selectedGender ? selectedGender.dataset.gender : 'M',
-            dob: get('dob'), age: get('age'), phone: get('phone'),
-            injury: get('injury'), purpose: get('purpose'),
-            history: get('history'), clinical: get('clinical'), message: get('message'),
-            savedAt: firebase.firestore.FieldValue.serverTimestamp()
-        }
+        [`${fieldPath}.name_kana`]: get('name_kana'),
+        [`${fieldPath}.name_en`]: get('name_en'),
+        [`${fieldPath}.gender`]: selectedGender ? selectedGender.dataset.gender : 'M',
+        [`${fieldPath}.dob`]: get('dob'),
+        [`${fieldPath}.age`]: get('age'),
+        [`${fieldPath}.phone`]: get('phone'),
+        [`${fieldPath}.injury`]: get('injury'),
+        [`${fieldPath}.purpose`]: get('purpose'),
+        [`${fieldPath}.history`]: get('history'),
+        [`${fieldPath}.clinical`]: get('clinical'),
+        [`${fieldPath}.message`]: get('message'),
+        [`${fieldPath}.savedAt`]: firebase.firestore.FieldValue.serverTimestamp()
     })
     .then(() => closeShokaijyoModal())
     .catch(err => { console.error(err); alert('保存に失敗しました'); });

@@ -6,6 +6,7 @@ const SOSLIST_TARGET = {
     deleteColumn: true,                           // 削除ボタン列あり
     perReferralStatus: true,                      // 紹介先ごとに受診日・受・済を管理
     servicesCellClass: 'col-services services-cell', // 検査内容セルは編集可
+    referralHeaderDateMode: 'visitDate',
     stampSrc: '../stamp.png'
 };
 
@@ -92,6 +93,7 @@ const DETAIL_CLOSE_WINDOW_KEY = 'soslist-detail-close-window';
 const handledDetailSaveRequests = new Set();
 const handledDetailReferralRequests = new Set();
 const pendingDeleteButtons = new Map();
+let didBackfillReferralHeaderDates = false;
 
 function syncCDMonitorSettingWithNative() {
     const nativeHandler = window.webkit?.messageHandlers?.setCDMonitoringEnabled;
@@ -187,6 +189,59 @@ function handleSummaryShow() {
     openSummaryPopup('view');
 }
 
+async function backfillFutureReferralHeaderDates() {
+    if (didBackfillReferralHeaderDates) return;
+    didBackfillReferralHeaderDates = true;
+
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const snapshot = await db.collection("appointments")
+        .where("appointmentDateTime", ">=", todayStart)
+        .orderBy("appointmentDateTime")
+        .limit(300)
+        .get();
+
+    let batch = db.batch();
+    let pendingWrites = 0;
+
+    for (const doc of snapshot.docs) {
+        const data = doc.data() || {};
+        const correctedDate = getCorrectedAppointmentDate(data);
+        if (correctedDate && correctedDate < todayStart) continue;
+
+        const referrals = data.referrals || {};
+        const updatePayload = {};
+        for (const destKey of Object.keys(referrals)) {
+            const referral = referrals[destKey] || {};
+            const visitDate = referral.visitDate || data.visitDate || '';
+            if (!visitDate) continue;
+
+            const headerDate = `受診日：${formatReferralHeaderVisitDate(visitDate, data)}`;
+            if (referral.visitDate !== visitDate) {
+                updatePayload[`referrals.${destKey}.visitDate`] = visitDate;
+            }
+            if (referral.referralHeaderDate !== headerDate) {
+                updatePayload[`referrals.${destKey}.referralHeaderDate`] = headerDate;
+            }
+        }
+
+        if (Object.keys(updatePayload).length === 0) continue;
+        batch.update(doc.ref, updatePayload);
+        pendingWrites += 1;
+
+        if (pendingWrites >= 450) {
+            await batch.commit();
+            batch = db.batch();
+            pendingWrites = 0;
+        }
+    }
+
+    if (pendingWrites > 0) {
+        await batch.commit();
+    }
+    console.log('紹介状右上の受診日補正が完了しました。');
+}
+
 window.addEventListener('summary-generation-status', (event) => {
     const detail = event.detail || {};
     const state = detail.state || 'info';
@@ -213,6 +268,9 @@ auth.onAuthStateChanged(user => {
         generateYearOptions();
         initializeSummaryDate();
         loadCDMonitorSetting();
+        backfillFutureReferralHeaderDates().catch(error => {
+            console.error('紹介状右上の受診日補正エラー:', error);
+        });
 
         const today = new Date();
         const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
