@@ -1188,7 +1188,7 @@ function buildSheetHTML(patientData, destKey, saved, classification, editable = 
         : '';
     const headerVisitDateDisplay = formatReferralHeaderVisitDate(headerVisitDate, patientData);
     const headerDateHTML = headerDateMode === 'visitDate'
-        ? `受診日：<span class="shokaijyo-visit-date-value">${escapeHtml(headerVisitDateDisplay)}</span>`
+        ? `<span class="shokaijyo-visit-date-label" style="display:inline-block;min-width:170px;text-align:left;white-space:nowrap;">受診日：<span class="shokaijyo-visit-date-value">${escapeHtml(headerVisitDateDisplay)}</span></span>`
         : escapeHtml(dateStr);
 
     const nameEn = formatClaimantNameEn(patientData.claimantName);
