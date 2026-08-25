@@ -1159,8 +1159,13 @@ function extractOrthoXraysJp(services) {
 function formatReferralHeaderVisitDate(rawVisitDate, patientData) {
     const trimmed = (rawVisitDate || '').trim().replace(/^受診日：\s*/, '');
     if (!trimmed) return '';
-    if (/^令和\d+年\d{1,2}\/\d{1,2}\s+\d{1,2}:\d{2}$/.test(trimmed)) {
+    if (/^令和\d+年\d{1,2}月\d{1,2}日\s+\d{1,2}:\d{2}$/.test(trimmed)) {
         return trimmed;
+    }
+    const reiwaSlashMatch = trimmed.match(/^令和(\d+)年(\d{1,2})\/(\d{1,2})\s+(\d{1,2}:\d{2})$/);
+    if (reiwaSlashMatch) {
+        const [, reiwaYear, month, day, time] = reiwaSlashMatch;
+        return `令和${Number(reiwaYear)}年${String(Number(month)).padStart(2, '0')}月${String(Number(day)).padStart(2, '0')}日 ${time}`;
     }
 
     const appointmentDate = getCorrectedAppointmentDate(patientData);
@@ -1174,7 +1179,7 @@ function formatReferralHeaderVisitDate(rawVisitDate, patientData) {
     const month = String(Number(match[2])).padStart(2, '0');
     const day = String(Number(match[3])).padStart(2, '0');
     const time = match[4] || '09:00';
-    return `令和${year - 2018}年${month}/${day} ${time}`;
+    return `令和${year - 2018}年${month}月${day}日 ${time}`;
 }
 
 function buildSheetHTML(patientData, destKey, saved, classification, editable = true) {
