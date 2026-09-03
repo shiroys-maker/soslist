@@ -930,6 +930,7 @@ function hasLabService(serviceTokens) {
         if (/\bUA\b|URINALYSIS|URINE\s+ANALYSIS|採血|血液検査|検尿/i.test(s)) return true;
         if (/BLOOD\s+(DRAW|TEST|WORK|LAB|EXAM|EXAMINATION)|LABORATORY|LAB\s+TEST/i.test(s)) return true;
         if (/\b(CBC|CMP|BMP|LFT|LIPID|HBA1C|A1C|GLUCOSE|CREATININE|BUN|ELECTROLYTES)\b/i.test(s)) return true;
+        if (/PROTHROMBIN|HEPATIC\s+FUNCTION|LIVER\s+FUNCTION|FERRITIN|HEPATITIS\s+PANEL/i.test(s)) return true;
         return /\bBLOOD\b/i.test(s) && !/BLOOD\s+PRESSURE/i.test(s);
     });
 }
