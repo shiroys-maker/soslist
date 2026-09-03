@@ -27,7 +27,7 @@ const storage = firebase.storage();
 const APPOINTMENT_TRANSITION_TIMESTAMP = new Date('2025-10-26T00:00:00+09:00').getTime();
 
 // --- 紹介先 定数 ---
-const REFERRAL_DISPLAY = { ASBO: 'aSBo', KIN: 'KINSP', ANSHIN: 'ANSIN' };
+const REFERRAL_DISPLAY = { ASBO: 'aSBo', KIN: 'KINSP', ANSHIN: 'ANSIN', LAB: 'Lab' };
 const REFERRAL_FULL = {
     ASBO:   { name: 'aSBoメディカルクリニック',     doctor: '梁先生、望月 先生' },
     KIN:    { name: 'KINスポーツ・整形クリニック',  doctor: '新庄 琢磨 先生' },
@@ -39,6 +39,7 @@ const SHOKAIJO_SENDER = {
     tel: '090-4524-2828',
     doctor: '廣安 俊吾'
 };
+const LAB_REFERRAL_START_DATE = new Date('2026-08-24T00:00:00+09:00');
 
 function generateYearOptions() {
     const currentYear = new Date().getFullYear();
@@ -284,7 +285,7 @@ function setupRealtimeListener() {
               const displayServicesText = (data.services || []).join(', ').toLowerCase().includes("audiologist") ? "Audiology" : (data.services || []).join(', ');
 
               // 紹介先・受診日・受・済
-              const referralDests = determineReferralDests(data.services || []);
+              const referralDests = determineReferralDests(data.services || [], null, data);
               let referralHTML = '';
               let visitdateHTML = '';
               let receivedHTML = '';
@@ -300,7 +301,8 @@ function setupRealtimeListener() {
                   const savedReferrals = data.referrals || {};
                   referralHTML = referralDests.map(dk => {
                       const isSaved = !!(savedReferrals[dk] && savedReferrals[dk].savedAt);
-                      return `<span class="referral-dest${isSaved ? ' saved' : ''}" data-dest="${dk}">${REFERRAL_DISPLAY[dk]}</span>`;
+                      const labelClass = isReferralSheetDest(dk) ? 'referral-dest' : 'referral-lab';
+                      return `<span class="${labelClass}${isSaved ? ' saved' : ''}" data-dest="${dk}">${REFERRAL_DISPLAY[dk]}</span>`;
                   }).join('');
                   visitdateHTML = escapeHtml(data.visitDate || '');
                   receivedHTML = data.isReceived ? '✅' : '';
@@ -917,12 +919,30 @@ function classifyServices(services) {
         has_echo:       arr.some(s => /ECHO/i.test(s)),
         has_chest_xray: arr.some(s => /CHEST/i.test(s)),
         has_ecg:        arr.some(s => /ECG|EKG|ELECTROCARDIOGRAM/i.test(s)),
+        has_lab:        hasLabService(arr),
         has_ortho,
         ortho_xrays_jp
     };
 }
 
-function determineReferralDests(services, classification) {
+function hasLabService(serviceTokens) {
+    return serviceTokens.some(s => {
+        if (/\bUA\b|URINALYSIS|URINE\s+ANALYSIS|採血|血液検査|検尿/i.test(s)) return true;
+        if (/BLOOD\s+(DRAW|TEST|WORK|LAB|EXAM|EXAMINATION)|LABORATORY|LAB\s+TEST/i.test(s)) return true;
+        return /\bBLOOD\b/i.test(s) && !/BLOOD\s+PRESSURE/i.test(s);
+    });
+}
+
+function isOnOrAfterLabReferralStart(data) {
+    const correctedDate = getCorrectedAppointmentDate(data);
+    return !!(correctedDate && correctedDate >= LAB_REFERRAL_START_DATE);
+}
+
+function isReferralSheetDest(destKey) {
+    return !!REFERRAL_FULL[destKey];
+}
+
+function determineReferralDests(services, classification, data = null) {
     // AIキャッシュがあればそれを使用、なければ正規表現フォールバック
     let e;
     if (classification) {
@@ -932,6 +952,7 @@ function determineReferralDests(services, classification) {
             has_echo:       !!classification.has_echo,
             has_chest_xray: !!classification.has_chest_xray,
             has_ecg:        !!classification.has_ecg,
+            has_lab:        !!classification.has_lab,
             has_ortho:      !!(classification.ortho_xrays_jp && classification.ortho_xrays_jp.length > 0)
         };
     } else {
@@ -947,8 +968,9 @@ function determineReferralDests(services, classification) {
             dests.push('ASBO');
         }
     }
+    if (e.has_lab && isOnOrAfterLabReferralStart(data)) dests.push('LAB');
     // has_facial は既に ASBO 追加済み（上の has_nasal || has_facial 判定で処理）
-    return dests.slice(0, 3);
+    return dests.slice(0, 4);
 }
 
 function getReferralStateValue(data, destKey, fieldName, legacyFieldName, destIndex) {
@@ -973,10 +995,14 @@ function buildReferralStatusHTML(data, referralDests) {
 
     const referralHTML = referralDests.map(dk => {
         const isSaved = !!(savedReferrals[dk] && savedReferrals[dk].savedAt);
-        return `<span class="referral-item referral-dest${isSaved ? ' saved' : ''}" data-dest="${dk}">${REFERRAL_DISPLAY[dk]}</span>`;
+        const labelClass = isReferralSheetDest(dk) ? 'referral-dest' : 'referral-lab';
+        return `<span class="referral-item ${labelClass}${isSaved ? ' saved' : ''}" data-dest="${dk}">${REFERRAL_DISPLAY[dk]}</span>`;
     }).join('');
 
     const visitdateHTML = referralDests.map((dk, index) => {
+        if (dk === 'LAB') {
+            return '<span class="visitdate-item referral-lab-date" data-dest="LAB">&nbsp;</span>';
+        }
         const visitDate = getReferralStateValue(data, dk, 'visitDate', 'visitDate', index) || '';
         return `<span class="visitdate-item visitdate-cell" data-dest="${dk}">${visitDate ? escapeHtml(visitDate) : '&nbsp;'}</span>`;
     }).join('');
@@ -1011,11 +1037,16 @@ function buildMobileReferralStatusHTML(data, referralDests) {
         const isReceived = getReferralStateValue(data, dk, 'isReceived', 'isReceived', index) === true;
         const isCompleted = getReferralStateValue(data, dk, 'isCompleted', 'isCompleted', index) === true;
         const label = REFERRAL_DISPLAY[dk] || dk;
+        const labelClass = isReferralSheetDest(dk) ? 'referral-dest' : 'referral-lab';
+        const labelTag = isReferralSheetDest(dk) ? 'button' : 'span';
+        const dateHTML = dk === 'LAB'
+            ? '<span class="mobile-referral-date referral-lab-date" data-dest="LAB">&nbsp;</span>'
+            : `<button type="button" class="mobile-referral-date visitdate-cell" data-dest="${dk}">${visitDate ? escapeHtml(visitDate) : '未入力'}</button>`;
 
         return `
             <div class="mobile-referral-row">
-                <button type="button" class="mobile-referral-dest referral-dest${isSaved ? ' saved' : ''}" data-dest="${dk}">${escapeHtml(label)}</button>
-                <button type="button" class="mobile-referral-date visitdate-cell" data-dest="${dk}">${visitDate ? escapeHtml(visitDate) : '未入力'}</button>
+                <${labelTag} ${labelTag === 'button' ? 'type="button" ' : ''}class="mobile-referral-dest ${labelClass}${isSaved ? ' saved' : ''}" data-dest="${dk}">${escapeHtml(label)}</${labelTag}>
+                ${dateHTML}
                 <button type="button" class="mobile-referral-check received-cell${isReceived ? ' is-active' : ''}" data-dest="${dk}" aria-label="${escapeHtml(label)} 受領">${isReceived ? '受✓' : '受'}</button>
                 <button type="button" class="mobile-referral-check completed-cell${isCompleted ? ' is-active' : ''}" data-dest="${dk}" aria-label="${escapeHtml(label)} 完了">${isCompleted ? '済✓' : '済'}</button>
             </div>`;

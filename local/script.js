@@ -554,7 +554,7 @@ function openDetailsModal(docId) {
 }
 
 function buildDetailsPayload(docId, data) {
-    const referralDests = determineReferralDests(data.services || []);
+    const referralDests = determineReferralDests(data.services || [], null, data);
     const sanitizedReferrals = Object.fromEntries(
         Object.entries(data.referrals || {}).map(([destKey, referralValue]) => [
             destKey,
@@ -808,6 +808,8 @@ function saveServices() {
 // ===== 紹介先 分類ロジック =====
 // ===== 紹介状モーダル =====
 function openShokaijyoModal(docId, destKey) {
+    if (!REFERRAL_FULL[destKey]) return;
+
     db.collection('appointments').doc(docId).get().then(doc => {
         if (!doc.exists) return;
         const data = doc.data();

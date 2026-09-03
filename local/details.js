@@ -6,7 +6,7 @@ const DETAIL_SAVE_REQUEST_KEY = 'soslist-detail-save-request';
 const DETAIL_SAVE_RESPONSE_PREFIX = 'soslist-detail-save-response:';
 const DETAIL_REFERRAL_OPEN_REQUEST_KEY = 'soslist-detail-referral-open-request';
 const DETAIL_CLOSE_WINDOW_KEY = 'soslist-detail-close-window';
-const REFERRAL_DISPLAY = { ASBO: 'aSBo', KIN: 'KINSP', ANSHIN: 'ANSIN' };
+const REFERRAL_DISPLAY = { ASBO: 'aSBo', KIN: 'KINSP', ANSHIN: 'ANSIN', LAB: 'Lab' };
 const QTC_TOOL_LABELS = {
     imaging: 'XR',
     audiogram: 'AUD'
@@ -66,6 +66,9 @@ function renderDetails(targetDocId, data) {
         ? referralDests.map((destKey) => {
             const isSaved = !!(referrals[destKey] && referrals[destKey].savedAt);
             const savedClass = isSaved ? ' referral-chip-saved' : '';
+            if (destKey === 'LAB') {
+                return `<span class="referral-chip referral-chip-lab" data-dest="${escapeHtml(destKey)}">${escapeHtml(REFERRAL_DISPLAY[destKey] || destKey)}</span>`;
+            }
             return `<button type="button" class="referral-chip${savedClass}" data-dest="${escapeHtml(destKey)}">${escapeHtml(REFERRAL_DISPLAY[destKey] || destKey)}</button>`;
         }).join('')
         : '<div class="detail-value">紹介先なし</div>';
@@ -140,6 +143,7 @@ function renderDetails(targetDocId, data) {
 
     document.querySelectorAll('.referral-chip').forEach((button) => {
         button.addEventListener('click', () => {
+            if (button.dataset.dest === 'LAB') return;
             openReferralSheet(targetDocId, button.dataset.dest || '');
         });
     });

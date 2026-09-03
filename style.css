@@ -750,6 +750,12 @@ body.modal-open {
         color: #176f2c;
     }
 
+    .mobile-referral-dest.referral-lab {
+        background: #e8f8ff;
+        color: #2aa7d7;
+        font-weight: 700;
+    }
+
     .mobile-referral-date {
         padding: 0 5px;
         font-variant-numeric: tabular-nums;
@@ -1269,7 +1275,8 @@ th.col-completed, td.col-completed {
     text-align: center;
 }
 
-.referral-dest {
+.referral-dest,
+.referral-lab {
     display: block;
     color: #5a2d9a;
     cursor: pointer;
@@ -1278,6 +1285,11 @@ th.col-completed, td.col-completed {
 }
 .referral-dest:hover { text-decoration: underline; }
 .referral-dest.saved { color: #228B22; font-weight: bold; }
+.referral-lab {
+    color: #2aa7d7;
+    cursor: default;
+    font-weight: 700;
+}
 
 /* 受診日・受・済 — 紹介先ごとに1行 */
 .visitdate-item, .received-item, .completed-item {
