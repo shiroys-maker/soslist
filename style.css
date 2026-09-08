@@ -1419,25 +1419,3 @@ td.col-received, td.col-completed { padding: 0 2px; }
         margin: 0;
     }
 }
-
-/* Connection state remains visible outside the mobile controls accordion. */
-#connection-status {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px;
-    margin: 0 0 12px;
-    padding: 10px 12px;
-    border-radius: 8px;
-    background: #f1f5f9;
-    color: #243247;
-    font-size: 13px;
-}
-#connection-status span { flex: 1 1 260px; min-width: 0; overflow-wrap: anywhere; }
-#connection-status button { flex: 0 0 auto; }
-@media (max-width: 768px) {
-    #connection-status { padding: 8px; }
-    #connection-status span { flex-basis: 100%; }
-    #connection-status button { min-height: 44px; }
-}
-@media print { #connection-status { display: none !important; } }

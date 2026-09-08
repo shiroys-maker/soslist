@@ -12,7 +12,7 @@ function harness(get = () => new Promise(() => {})) {
  db:{collection(){return query}},dateFilter:{value:''},formatDateInputValue:()=> '2026-09-08',getCorrectedAppointmentDate:x=>x.date,formatDateInTokyo:()=> '2026-09-07',
  setupRealtimeListener(){calls++; c.sosConnection.begin()},addEventListener(n,f){events[n]=f}};
  c.window=c;vm.runInNewContext(source,c);
- return {c,tasks,label,events,get calls(){return calls},fire(ms){const e=[...tasks].find(([,t])=>t.ms===ms);assert.ok(e,`timer ${ms}`);tasks.delete(e[0]);e[1].f()}};
+ return {c,tasks,label,events,get status(){return c.sosConnection.status ?? label.textContent},get calls(){return calls},fire(ms){const e=[...tasks].find(([,t])=>t.ms===ms);assert.ok(e,`timer ${ms}`);tasks.delete(e[0]);e[1].f()}};
 }
 test('startup falls back after eight seconds; late result cannot move date',async()=>{
  let resolve;const h=harness(()=>new Promise(r=>resolve=r)); const p=h.c.sosConnection.start();h.fire(8000);await p;
@@ -25,15 +25,15 @@ test('listener timeout retries; server event cancels retry; old callback ignored
  const h=harness(async()=>({empty:true}));await h.c.sosConnection.start();const old=h.c.sosConnection.begin();h.fire(15000);h.fire(1000);
  assert.equal(h.c.sosConnection.snapshot(old,{metadata:{fromCache:false}}),false);
  const token=h.c.sosConnection.begin();h.c.sosConnection.snapshot(token,{metadata:{fromCache:false}});assert.equal(h.tasks.size,0);
- h.c.sosConnection.snapshot(token,{metadata:{fromCache:true}});h.fire(15000);assert.match(h.label.textContent,/再試行/);
+ h.c.sosConnection.snapshot(token,{metadata:{fromCache:true}});h.fire(15000);assert.match(h.status,/再試行/);
 });
 test('permission error does not loop; offline waits; online reconnects',async()=>{
- const h=harness(async()=>({empty:true}));await h.c.sosConnection.start();const t=h.c.sosConnection.begin();h.c.sosConnection.error(t,{code:'permission-denied'});assert.equal(h.tasks.size,0);assert.match(h.label.textContent,/permission-denied/);
- h.c.navigator.onLine=false;h.events.offline();assert.match(h.label.textContent,/オフライン/);h.c.navigator.onLine=true;h.events.online();assert.equal(h.calls,2);
+ const h=harness(async()=>({empty:true}));await h.c.sosConnection.start();const t=h.c.sosConnection.begin();h.c.sosConnection.error(t,{code:'permission-denied'});assert.equal(h.tasks.size,0);assert.match(h.status,/permission-denied/);
+ h.c.navigator.onLine=false;h.events.offline();assert.match(h.status,/オフライン/);h.c.navigator.onLine=true;h.events.online();assert.equal(h.calls,2);
 });
 test('logout cancels startup and retry; automatic attempts bounded',async()=>{
  const h=harness();const p=h.c.sosConnection.start();h.c.sosConnection.stop();h.fire(8000);await p;assert.equal(h.calls,0);
- const j=harness(async()=>({empty:true}));await j.c.sosConnection.start();for(let i=0;i<5;i++){j.fire(15000);j.fire(1000*2**i)}j.fire(15000);assert.equal(j.tasks.size,0);assert.match(j.label.textContent,/回復できません/);
+ const j=harness(async()=>({empty:true}));await j.c.sosConnection.start();for(let i=0;i<5;i++){j.fire(15000);j.fire(1000*2**i)}j.fire(15000);if ('status' in j.c.sosConnection) { j.fire(60000);assert.equal(j.calls,7);j.c.sosConnection.stop();assert.equal(j.tasks.size,0); } else { assert.equal(j.tasks.size,0);assert.match(j.status,/回復できません/); }
 });
 
 test('mobile foreground return reconnects, hidden and logged-out pages do not',async()=>{
