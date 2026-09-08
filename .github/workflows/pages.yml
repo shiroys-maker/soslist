@@ -29,7 +29,7 @@ jobs:
         run: |
           mkdir -p site site/shared
           cp index.html site/
-          cp script.js site/
+          cp script.js connection.js site/
           cp shared/core.js site/shared/
           cp style.css site/
           cp CNAME site/
