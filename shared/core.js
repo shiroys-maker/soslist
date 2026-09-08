@@ -234,11 +234,14 @@ function setupRealtimeListener() {
     if (!localDateStr) return;
     // JSTの日付を明示的に指定
     const filterDate = new Date(`${localDateStr}T00:00:00+09:00`);
+    const connection = window.sosConnection;
+    const connectionToken = connection?.begin();
     unsubscribe = db.collection("appointments")
       .where("appointmentDateTime", ">=", filterDate)
       .orderBy("appointmentDateTime")
       .limit(300)
-      .onSnapshot(querySnapshot => {
+      .onSnapshot(...(connection ? [{ includeMetadataChanges: true }] : []), querySnapshot => {
+          if (connection && !connection.snapshot(connectionToken, querySnapshot)) return;
           const appointments = [];
           querySnapshot.forEach(doc => {
               appointments.push({ id: doc.id, ...doc.data() });
@@ -384,6 +387,7 @@ function setupRealtimeListener() {
           }
       }, error => {
           console.error("Firestoreのリアルタイム監視でエラー:", error);
+          connection?.error(connectionToken, error);
       });
 }
 

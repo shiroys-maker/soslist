@@ -142,6 +142,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        if message.name == "saveConnectionLog", let text = message.body as? String, text.utf8.count < 100_000 {
+            let panel = NSSavePanel()
+            panel.nameFieldStringValue = "soslist-connection-log.json"
+            panel.begin { response in
+                guard response == .OK, let url = panel.url else { return }
+                do { try text.write(to: url, atomically: true, encoding: .utf8) }
+                catch { NSApp.presentError(error) }
+            }
+            return
+        }
         if message.name == "focusMainWindow" {
             NSApp.activate(ignoringOtherApps: true)
             window.makeKeyAndOrderFront(nil)
@@ -423,6 +433,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         configuration.userContentController.add(self, name: "openSummaryWindow")
         configuration.userContentController.add(self, name: "startSummaryGeneration")
         configuration.userContentController.add(self, name: "setCDMonitoringEnabled")
+        configuration.userContentController.add(self, name: "saveConnectionLog")
         configuration.userContentController.add(self, name: "saveDetails")
         configuration.userContentController.add(self, name: "detailsSaveResult")
         configuration.userContentController.add(self, name: "openReferralFromDetails")

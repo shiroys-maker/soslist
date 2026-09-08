@@ -37,3 +37,11 @@ cd local/mac-app
 - Audio is synthesized automatically through the configured local engine, currently AivisSpeech.
 - Progress is pushed back to the main local viewer while the job runs.
 - `表示` still opens the existing Summary only.
+
+### Connection recovery
+
+Local-only `connection.js` displays server/cache/offline state and last server receipt time. Startup date lookup falls back to today after 8 seconds; a late result cannot replace the selected date. A listener waiting 15 seconds retries with exponential backoff (at most five automatic retries). Terminal permission/auth/query errors require user action. Online/foreground return and the Reconnect button recreate the listener without reloading the page or discarding detail edits. An idle listener is not considered broken merely because no appointments changed.
+
+The diagnostic log stores at most 200 timestamp/event/error-code entries in localStorage, without appointment data or raw error messages. “診断ログ保存” exports JSON using the native save panel. These changes do not address a blocked WebKit UI thread.
+
+Run recovery regression checks: `node --test local/tests/connection.test.cjs`.

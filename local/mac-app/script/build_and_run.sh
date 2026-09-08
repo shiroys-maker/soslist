@@ -48,7 +48,7 @@ cp "$BIN_PATH" "$APP_DIR/Contents/MacOS/$APP_NAME"
 
 # ランタイムに必要なファイルだけをバンドルする
 # （config.js・mac-app/ソース・README等を同梱しない）
-for f in index.html script.js style.css details.html details.js; do
+for f in index.html script.js connection.js style.css details.html details.js; do
   cp "$LOCAL_SOURCE_DIR/$f" "$WEB_RESOURCES_DIR/local/"
 done
 cp "$SHARED_SOURCE_DIR/core.js" "$WEB_RESOURCES_DIR/shared/"

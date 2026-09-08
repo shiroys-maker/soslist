@@ -272,42 +272,11 @@ auth.onAuthStateChanged(user => {
             console.error('紹介状右上の受診日補正エラー:', error);
         });
 
-        const today = new Date();
-        const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-
-        db.collection("appointments")
-            .where("appointmentDateTime", "<", startOfToday)
-            .orderBy("appointmentDateTime", "desc")
-            .limit(1)
-            .get()
-            .then(querySnapshot => {
-                if (!querySnapshot.empty) {
-                    const lastAppointment = querySnapshot.docs[0].data();
-                    const correctedDateObj = getCorrectedAppointmentDate(lastAppointment);
-                    dateFilter.value = correctedDateObj
-                        ? formatDateInTokyo(correctedDateObj)
-                        : formatDateInputValue(today);
-                } else {
-                    // No past appointments, use today's date
-                    const year = today.getFullYear();
-                    const month = String(today.getMonth() + 1).padStart(2, '0');
-                    const day = String(today.getDate()).padStart(2, '0');
-                    dateFilter.value = `${year}-${month}-${day}`;
-                }
-        setupRealtimeListener();
-            })
-            .catch(error => {
-                console.error("Error getting last appointment: ", error);
-                // On error, fallback to today's date
-                const year = today.getFullYear();
-                const month = String(today.getMonth() + 1).padStart(2, '0');
-                const day = String(today.getDate()).padStart(2, '0');
-                dateFilter.value = `${year}-${month}-${day}`;
-                setupRealtimeListener();
-            });
+        window.sosConnection.start();
 
         startLogoutTimer();
     } else {
+        window.sosConnection.stop();
         loginContainer.style.display = 'block';
         mainAppContainer.style.display = 'none';
         clearTimeout(logoutTimer);
