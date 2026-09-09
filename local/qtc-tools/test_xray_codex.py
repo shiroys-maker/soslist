@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import patch
 
 import install
+import codex_images as runner
 import xray_codex as xr
 
 
@@ -33,7 +34,7 @@ class XrayTests(unittest.TestCase):
             return subprocess.CompletedProcess(command, 0, stderr='')
 
         with patch.dict(xr.os.environ, {'OPENAI_API_KEY': 'test-only', 'CODEX_API_KEY': 'test-only'}):
-            with patch.object(xr.subprocess, 'run', side_effect=codex):
+            with patch.object(runner.subprocess, 'run', side_effect=codex):
                 result = xr.generate_report({'imageDataUrls': [data_url(b'view-one'), data_url(b'view-two')]})
         self.assertEqual(result['findings'], 'Both views')
         self.assertFalse(Path(directories[0]).exists())
@@ -54,7 +55,7 @@ class XrayTests(unittest.TestCase):
             directories.append(kwargs['cwd'])
             raise subprocess.TimeoutExpired(command, 240)
 
-        with patch.object(xr.subprocess, 'run', side_effect=timeout):
+        with patch.object(runner.subprocess, 'run', side_effect=timeout):
             for _ in range(3):
                 with self.assertRaises(xr.ReportError) as caught:
                     xr.generate_report({'imageDataUrls': [data_url(b'a')]})
@@ -68,7 +69,7 @@ class XrayTests(unittest.TestCase):
                 output.write_text(json.dumps(report))
                 return subprocess.CompletedProcess(command, returncode, stderr='test failure')
 
-            with self.subTest(report=report), patch.object(xr.subprocess, 'run', side_effect=codex):
+            with self.subTest(report=report), patch.object(runner.subprocess, 'run', side_effect=codex):
                 with self.assertRaises(xr.ReportError) as caught:
                     xr.generate_report({'imageDataUrls': [data_url(b'a')]})
                 self.assertEqual(caught.exception.status, 502)

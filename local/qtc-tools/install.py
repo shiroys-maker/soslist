@@ -1,4 +1,4 @@
-"""Install the managed XR components into the existing local QTC runtime."""
+"""Install the managed XR and AUD components into the existing local QTC runtime."""
 
 from pathlib import Path
 import shutil
@@ -50,21 +50,63 @@ def update_page(text):
     return text
 
 
+def update_audiogram_server(text):
+    import_line = 'from audiogram_codex import handle_audiogram_report\n'
+    if import_line not in text:
+        text = text.replace('import http.server\n', 'import http.server\n' + import_line, 1)
+    route = (
+        "        if parsed.path == '/api/audiogram-report':\n"
+        '            handle_audiogram_report(self)\n'
+        '            return\n'
+    )
+    if route not in text:
+        anchor = "        if parsed.path == '/api/xray-report':\n"
+        if text.count(anchor) != 1:
+            raise ValueError('Unrecognized QTC route; no changes written.')
+        text = text.replace(anchor, route + anchor, 1)
+    return text
+
+
+def update_audiogram_page(text):
+    # The runtime page contains credentials; never copy it into the repository.
+    text = ''.join(line for line in text.splitlines(keepends=True)
+                   if not line.strip().startswith('const API_KEY ='))
+    start = text.index('    async function parseImage(file) {\n')
+    end = text.index('    function fillFromFirebase(record) {\n', start)
+    return text[:start] + (
+        '    async function parseImage(file) {\n'
+        '        const base64 = await toBase64(file);\n'
+        "        const res = await fetch('/api/audiogram-report', {\n"
+        "            method: 'POST',\n"
+        "            headers: { 'Content-Type': 'application/json' },\n"
+        '            body: JSON.stringify({ imageDataUrl: `data:${file.type};base64,${base64}` })\n'
+        '        });\n'
+        '        const json = await res.json();\n'
+        "        if (!res.ok || json.error) throw new Error(json.error || '聴力解析結果を取得できませんでした。');\n"
+        '        return json;\n'
+        '    }\n\n'
+    ) + text[end:]
+
+
 def main():
     server = BIN / 'sospdf_server.py'
     page = QTC / 'ImageReport.html'
-    server_text = update_server(server.read_text(encoding='utf-8'))
+    audiogram = QTC / 'audiogram.html'
+    server_text = update_audiogram_server(update_server(server.read_text(encoding='utf-8')))
     page_text = update_page(page.read_text(encoding='utf-8'))
+    audiogram_text = update_audiogram_page(audiogram.read_text(encoding='utf-8'))
     compile(server_text, str(server), 'exec')
-    for target in (server, page):
-        backup = target.with_name(target.name + '.before-codex')
+    for target in (server, page, audiogram):
+        backup = target.with_name(target.name + '.before-audiogram-codex')
         if not backup.exists():
             shutil.copy2(target, backup)
-    shutil.copy2(SOURCE / 'xray_codex.py', BIN / 'xray_codex.py')
+    for filename in ('codex_images.py', 'xray_codex.py', 'audiogram_codex.py'):
+        shutil.copy2(SOURCE / filename, BIN / filename)
     shutil.copy2(SOURCE / 'xray-upload.js', QTC / 'xray-upload.js')
     server.write_text(server_text, encoding='utf-8')
     page.write_text(page_text, encoding='utf-8')
-    print('Installed local XR Codex integration. Restart com.va.sospdf.server to activate.')
+    audiogram.write_text(audiogram_text, encoding='utf-8')
+    print('Installed local XR/AUD Codex integration. Restart com.va.sospdf.server to activate.')
 
 
 if __name__ == '__main__':
