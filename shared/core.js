@@ -311,6 +311,7 @@ function setupRealtimeListener() {
                   receivedHTML = data.isReceived ? '✅' : '';
                   completedHTML = data.isCompleted ? '✅' : '';
               }
+              referralHTML += buildReferralReviewHTML(data);
               const mobileDateText = displayDate.replace('<br>', ' ');
               const visitdateCellClass = SOSLIST_TARGET.perReferralStatus ? 'col-visitdate' : 'col-visitdate visitdate-cell';
               const receivedCellClass = SOSLIST_TARGET.perReferralStatus ? 'col-received' : 'col-received received-cell';
@@ -949,7 +950,37 @@ function isReferralSheetDest(destKey) {
     return !!REFERRAL_FULL[destKey];
 }
 
+function getCodexReferralRouting(data) {
+    const routing = data?.referralRouting;
+    if (!routing || routing.version !== 1 || routing.provider !== 'codex') return null;
+    // Editing services/codes invalidates the imported classification and its draft purposes.
+    if (JSON.stringify(routing.sourceServices) !== JSON.stringify(data.services || []) ||
+        JSON.stringify(routing.sourceCptCodes) !== JSON.stringify(data.cptCode || [])) return null;
+    if (!Array.isArray(routing.destinations) ||
+        routing.destinations.some(dest => !Object.prototype.hasOwnProperty.call(REFERRAL_DISPLAY, dest)) ||
+        !routing.purposes || typeof routing.purposes !== 'object') return null;
+    if (routing.destinations.some(dest => dest !== 'LAB' &&
+        (typeof routing.purposes[dest] !== 'string' || !routing.purposes[dest].trim()))) return null;
+    return routing;
+}
+
+function buildReferralReviewHTML(data) {
+    if (!data?.referralRouting) return '';
+    const routing = getCodexReferralRouting(data);
+    if (routing && !routing.reviewRequired) return '';
+    const reasons = routing
+        ? (routing.assignments || []).filter(a => a.destination === 'REVIEW')
+            .map(a => `${(data.services || [])[a.serviceIndex] || ''}: ${a.reason || ''}`).join('\n')
+        : '検査内容またはCPTコードが変わったため、紹介先を再確認してください。';
+    return `<span class="referral-review" style="display:block;color:#92400e;font-size:11px;white-space:normal" title="${escapeHtml(reasons)}">紹介先要確認</span>`;
+}
+
 function determineReferralDests(services, classification, data = null) {
+    const routing = getCodexReferralRouting(data);
+    if (routing) {
+        return [...new Set(routing.destinations)].filter(dest =>
+            dest !== 'LAB' || isOnOrAfterLabReferralStart(data));
+    }
     // AIキャッシュがあればそれを使用、なければ正規表現フォールバック
     let e;
     if (classification) {
@@ -1250,8 +1281,8 @@ function buildSheetHTML(patientData, destKey, saved, classification, editable = 
     if (destKey === 'ASBO') {
         if (e.has_nasal)      items.push('鼻骨レントゲン(3方向)');
         if (e.has_facial)     items.push('顔面骨・頭蓋骨レントゲン');
-        if (e.has_chest_xray) items.push('胸部レントゲン2方向');
-        if (e.has_ecg)        items.push('心電図');
+        if (e.has_chest_xray && !e.has_echo && !(e.has_ortho && !e.has_ecg)) items.push('胸部レントゲン2方向');
+        if (e.has_ecg && !e.has_echo) items.push('心電図');
     } else if (destKey === 'KIN') {
         const fallbackOrtho = e.ortho_xrays_jp && e.ortho_xrays_jp.length > 0
             ? e.ortho_xrays_jp
@@ -1260,13 +1291,15 @@ function buildSheetHTML(patientData, destKey, saved, classification, editable = 
             ? classification.ortho_xrays_jp
             : fallbackOrtho;
         items.push(...ortho);
-        if (e.has_chest_xray && !e.has_echo) items.push('胸部レントゲン2方向');
+        if (e.has_chest_xray && !e.has_echo && !e.has_ecg) items.push('胸部レントゲン2方向');
     } else {
         if (e.has_echo)       items.push('心エコー検査');
         if (e.has_chest_xray) items.push('胸部レントゲン2方向');
         if (e.has_ecg)        items.push('心電図');
     }
-    const defaultPurpose = items.length > 0 ? items.join('、') + 'の依頼' : '検査依頼';
+    const routing = getCodexReferralRouting(patientData);
+    const codexPurpose = routing?.destinations.includes(destKey) ? routing.purposes[destKey] : '';
+    const defaultPurpose = codexPurpose || (items.length > 0 ? items.join('、') + 'の依頼' : '検査依頼');
 
     let defaultClinical = '';
     if (destKey === 'ASBO') {

@@ -784,9 +784,7 @@ function openShokaijyoModal(docId, destKey) {
         const data = doc.data();
         const saved = data.referrals && data.referrals[destKey];
 
-        const needsAIClassification = !saved || !saved.purpose;
-
-        // モーダルを即座に表示（保存済みデータがあればそのまま、なければ正規表現でデフォルト表示）
+        // 保存済みの手修正 → Codexの紹介目的 → 従来の分類の順で表示
         shokaijyoModalTitle.textContent = `紹介状 — ${REFERRAL_FULL[destKey].name}`;
         shokaijyoSheetContainer.innerHTML = buildSheetHTML(data, destKey, saved || null, null);
         shokaijyoEditingDocId = docId;
@@ -796,34 +794,6 @@ function openShokaijyoModal(docId, destKey) {
 
         if (!(saved && saved.name_kana)) {
             autofillShokaijyoKana(formatClaimantNameEn(data.claimantName));
-        }
-
-        // 検査分類（正規表現ベース）で紹介目的の初期値を組み立て
-        if (needsAIClassification) {
-            const c = classifyServices(data.services || []);
-            const purposeField = shokaijyoSheetContainer.querySelector('[name="purpose"]');
-            if (purposeField) {
-                const items = [];
-                if (destKey === 'ASBO') {
-                    if (c.has_nasal)      items.push('鼻骨レントゲン(3方向)');
-                    if (c.has_facial)     items.push('顔面骨・頭蓋骨レントゲン');
-                    if (c.has_chest_xray) items.push('胸部レントゲン2方向');
-                    if (c.has_ecg)        items.push('心電図');
-                } else if (destKey === 'KIN') {
-                    if (c.has_ortho) {
-                        const orthoItems = c.ortho_xrays_jp && c.ortho_xrays_jp.length > 0
-                            ? c.ortho_xrays_jp
-                            : ['整形外科レントゲン'];
-                        items.push(...orthoItems);
-                    }
-                    if (c.has_chest_xray && !c.has_echo) items.push('胸部レントゲン2方向');
-                } else {
-                    if (c.has_echo)       items.push('心エコー検査');
-                    if (c.has_chest_xray) items.push('胸部レントゲン2方向');
-                    if (c.has_ecg)        items.push('心電図');
-                }
-                if (items.length > 0) purposeField.value = items.join('、') + 'の依頼';
-            }
         }
     }).catch(error => {
         console.error('紹介状モーダルの表示エラー:', error);
