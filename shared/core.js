@@ -953,8 +953,9 @@ function isReferralSheetDest(destKey) {
 function getCodexReferralRouting(data) {
     const routing = data?.referralRouting;
     if (!routing || routing.version !== 1 || routing.provider !== 'codex') return null;
-    // Editing services/codes invalidates the imported classification and its draft purposes.
-    if (JSON.stringify(routing.sourceServices) !== JSON.stringify(data.services || []) ||
+    // Parenthesized request notes are editable independently of ordered examinations.
+    if (!Array.isArray(routing.sourceServices) ||
+        JSON.stringify(normalizeServiceTokens(routing.sourceServices)) !== JSON.stringify(normalizeServiceTokens(data.services)) ||
         JSON.stringify(routing.sourceCptCodes) !== JSON.stringify(data.cptCode || [])) return null;
     if (!Array.isArray(routing.destinations) ||
         routing.destinations.some(dest => !Object.prototype.hasOwnProperty.call(REFERRAL_DISPLAY, dest)) ||
@@ -970,7 +971,7 @@ function buildReferralReviewHTML(data) {
     if (routing && !routing.reviewRequired) return '';
     const reasons = routing
         ? (routing.assignments || []).filter(a => a.destination === 'REVIEW')
-            .map(a => `${(data.services || [])[a.serviceIndex] || ''}: ${a.reason || ''}`).join('\n')
+            .map(a => `${routing.sourceServices[a.serviceIndex] || ''}: ${a.reason || ''}`).join('\n')
         : '検査内容またはCPTコードが変わったため、紹介先を再確認してください。';
     return `<span class="referral-review" style="display:block;color:#92400e;font-size:11px;white-space:normal" title="${escapeHtml(reasons)}">紹介先要確認</span>`;
 }
@@ -1151,8 +1152,39 @@ function autofillShokaijyoKana(nameEn) {
 
 function normalizeServiceTokens(services) {
     const joined = (services || []).join(',');
-    const stripped = joined.replace(/\([^)]*\)/g, '');
-    return stripped.split(',').map(s => s.trim()).filter(s => s.length > 0);
+    // The editor splits on every comma, including those inside a test name.
+    // Reassemble first, then separate services only at top-level commas.
+    const tokens = [];
+    let token = '';
+    let depth = 0;
+    let isRequestNote = false;
+    const flush = () => {
+        const value = token.replace(/\s+/g, ' ').replace(/\s*([(),])\s*/g, '$1').trim();
+        if (value) tokens.push(value);
+        token = '';
+    };
+    for (const char of joined) {
+        if (char === '(' || char === '（') {
+            if (depth === 0) {
+                // A separate (...) item is a manual note. Also allow a note
+                // directly after the VA examination label without a comma.
+                // Parentheses belonging to a test (e.g. TEST(VDRL, RPR)) stay.
+                isRequestNote = !token.trim() || /\b(?:DBQs?|Questions)\s*$/i.test(token);
+            }
+            depth += 1;
+            if (!isRequestNote) token += '(';
+        } else if (char === ')' || char === '）') {
+            if (!isRequestNote) token += ')';
+            depth = Math.max(0, depth - 1);
+            if (depth === 0) isRequestNote = false;
+        } else if (char === ',' && depth === 0) {
+            flush();
+        } else if (!isRequestNote) {
+            token += char;
+        }
+    }
+    flush();
+    return tokens;
 }
 
 function translateOrthoXrayItem(rawItem, projection) {

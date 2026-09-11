@@ -72,3 +72,72 @@ test('legacy draft purposes also keep chest and ECG with the correct clinic', ()
   assert.doesNotMatch(ctx.buildSheetHTML(data, 'ASBO', null, null), /胸部レントゲン2方向|心電図/);
   assert.match(ctx.buildSheetHTML(data, 'ANSHIN', null, null), /心エコー検査、胸部レントゲン2方向、心電図の依頼/);
 });
+
+test('manual request notes split on commas do not invalidate an onsite-only import', () => {
+  const data = fixture();
+  data.services = ['Routine Medical Opinion 4-6 Questions', 'Focused Requiring 1-5 DBQs'];
+  Object.assign(data.referralRouting, { sourceServices: [...data.services], destinations: [], purposes: {}, assignments: [], reviewRequired: false });
+  data.services.push('(OSA: TERA/direct', 'Neck strain/radiculopathy: secondary', 'Back strain/radiculopathy: secondary)');
+  const original = JSON.stringify(data);
+  assert.ok(ctx.getCodexReferralRouting(data));
+  assert.equal(ctx.buildReferralReviewHTML(data), '');
+  assert.deepEqual(Array.from(ctx.determineReferralDests(data.services, null, data)), []);
+  assert.equal(JSON.stringify(data), original, 'stored/manual text is not modified');
+  data.services.push('ECG');
+  assert.equal(ctx.getCodexReferralRouting(data), null);
+  assert.match(ctx.buildReferralReviewHTML(data), /紹介先要確認/);
+});
+
+test('nested/full-width notes and comma editing preserve Codex drafts and real review reasons', () => {
+  const data = fixture();
+  data.services.splice(1, 0, '（manual note (ECHO', 'CBC)', 'RIGHT KNEE X-RAY）');
+  assert.ok(ctx.getCodexReferralRouting(data));
+  assert.match(ctx.buildSheetHTML(data, 'KIN', null, null), /右踵骨X線の依頼/);
+  assert.match(ctx.buildReferralReviewHTML(data), /MRI brain: 紹介先未設定/);
+  const formatted = fixture();
+  formatted.services = [formatted.services.join(', ') + ', (manually appended request)'];
+  assert.ok(ctx.getCodexReferralRouting(formatted));
+  formatted.cptCode.push('NEW');
+  assert.equal(ctx.getCodexReferralRouting(formatted), null);
+});
+
+test('regex fallback ignores independent request notes, also while a note is unfinished', () => {
+  for (const services of [
+    ['Focused Requiring 1-5 DBQs', '(ECHO', 'CBC', 'RIGHT KNEE X-RAY)'],
+    ['Focused Requiring 1-5 DBQs（OSA (ECHO)', 'CBC', 'RIGHT KNEE X-RAY）'],
+    ['Focused Requiring 1-5 DBQs', '(ECHO', 'CBC'],
+  ]) {
+    const c = ctx.classifyServices(services);
+    for (const key of ['has_echo', 'has_lab', 'has_ortho', 'has_chest_xray', 'has_ecg']) assert.equal(c[key], false);
+  }
+  assert.deepEqual(Array.from(ctx.normalizeServiceTokens(['ECHOCARDIO(2D)', 'SYPHILIS TEST(VDRL', 'RPR)', 'ECG'])), ['ECHOCARDIO(2D)', 'SYPHILIS TEST(VDRL,RPR)', 'ECG']);
+  const c = ctx.classifyServices(['(request: ECHO)', 'ECG']);
+  assert.equal(c.has_echo, false);
+  assert.equal(c.has_ecg, true);
+});
+
+test('test-name parentheses stay while the trailing manual SHA request is excluded', () => {
+  const source = ['VISUAL ACUITY SCREEN', 'SYPHILIS TEST(VDRL, RPR, ART)', 'PURE TONE AUDIOMETRY, AIR', 'CBGen Med SHA Requiring_6-10 DBQs'];
+  const request = '(SHA, strep throat, syphilis, shoulder blade, L hip pain, L knee pain, flat feet)';
+  const data = fixture();
+  data.services = [...source, request].join(', ').split(',').map(s => s.trim());
+  Object.assign(data.referralRouting, { sourceServices: source, destinations: ['LAB'], purposes: {}, assignments: [], reviewRequired: false });
+  const normalized = Array.from(ctx.normalizeServiceTokens(data.services));
+  assert.ok(normalized.includes('SYPHILIS TEST(VDRL,RPR,ART)'));
+  assert.equal(normalized.some(s => s.includes('shoulder blade')), false);
+  assert.ok(ctx.getCodexReferralRouting(data));
+  assert.equal(ctx.buildReferralReviewHTML(data), '');
+  assert.deepEqual(Array.from(ctx.determineReferralDests(data.services, null, data)), ['LAB']);
+  const legacy = { ...data }; delete legacy.referralRouting;
+  assert.deepEqual(Array.from(ctx.determineReferralDests(legacy.services, null, legacy)), ['LAB']);
+  data.services = data.services.map(s => s.replace('VDRL', 'DIFFERENT TEST'));
+  assert.equal(ctx.getCodexReferralRouting(data), null, 'a real test detail change must invalidate routing');
+});
+
+test('inline spaced/full-width/nested test details remain available to classification', () => {
+  assert.deepEqual(Array.from(ctx.normalizeServiceTokens(['TEST （VDRL', 'RPR（quantitative））', '(SHA', 'ECHO)'])), ['TEST(VDRL,RPR(quantitative))']);
+  const c = ctx.classifyServices(['TEST (VDRL, RPR)', '(request: ECHO, KNEE X-RAY)']);
+  assert.equal(c.has_lab, true);
+  assert.equal(c.has_echo, false);
+  assert.equal(c.has_ortho, false);
+});
