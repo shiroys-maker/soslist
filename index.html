@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SOS Appointment Viewer</title>
-    <link rel="stylesheet" href="style.css?v=20260913-ui4">
-    <link rel="stylesheet" href="shared/ui.css?v=20260913-ui4">
+    <link rel="stylesheet" href="style.css?v=20260913-ui5">
+    <link rel="stylesheet" href="shared/ui.css?v=20260913-ui5">
     <style>
         /* メインアプリを最初は非表示にする */
         #main-app-container { display: none; }
@@ -35,6 +35,8 @@
 
 
 
+        <button type="button" id="mobileControlsToggle" class="mobile-controls-toggle" aria-expanded="false" aria-controls="mobileControlsPanel">検索・日付・その他 ▼</button>
+        <div id="mobileControlsPanel" class="mobile-controls-panel">
         <div class="filter-section">
             <div class="search-area">
                 <label for="searchInput">氏名・契約番号</label>
@@ -49,8 +51,6 @@
                 <button type="button" id="todayDateButton">今日</button>
             </div>
         </div>
-        <button type="button" id="mobileControlsToggle" class="mobile-controls-toggle" aria-expanded="false" aria-controls="mobileControlsPanel">Invoice・Summary ▼</button>
-        <div id="mobileControlsPanel" class="mobile-controls-panel">
         <div class="secondary-controls">
             <div class="invoice-area">
                 <h2>Invoice印刷</h2>
@@ -221,10 +221,10 @@
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-storage-compat.js"></script>
     
-    <script src="shared/core.js?v=20260913-ui4"></script>
-    <script src="connection.js?v=20260913-ui4"></script>
-    <script src="script.js?v=20260913-ui4"></script>
+    <script src="shared/core.js?v=20260913-ui5"></script>
+    <script src="connection.js?v=20260913-ui5"></script>
+    <script src="script.js?v=20260913-ui5"></script>
 
-    <script src="shared/ui.js?v=20260913-ui4"></script>
+    <script src="shared/ui.js?v=20260913-ui5"></script>
 </body>
 </html>
