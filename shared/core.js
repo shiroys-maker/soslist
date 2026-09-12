@@ -436,8 +436,14 @@ async function toggleAppointmentStatus(target, docId, field, destKey = null) {
 function buildServicesPreviewHTML(services, displayText, editable = false, expanded = false) {
     const tokens = normalizeServiceTokens(services);
     const labels = [];
-    if (tokens.some(s => /AUDIOLOG|AUDIOMETRY/i.test(s))) labels.push('聴力');
-    if (tokens.some(s => /DBQs?|GEN\s*MED/i.test(s))) labels.push('一般診察');
+    // Audiologist Examination is the stored label for a standalone hearing DBQ.
+    // Screening audiometry within SHA does not make an appointment hearing-only.
+    const isHearingDBQ = s => /^audiologist examination$/i.test(s)
+        || /^(?:DBQ\s+(?:AUDIO\s*[-:]?\s*)?hearing loss\s*(?:and|&)\s*tinnitus|hearing loss\s*(?:and|&)\s*tinnitus\s+DBQ)$/i.test(s);
+    const hearingOnly = tokens.some(isHearingDBQ) && tokens.every(s => isHearingDBQ(s)
+        || /^(?:audiometry|audiology|tympanometry|speech audiometry|pure[ -]tone audiometry)\b/i.test(s));
+    if (hearingOnly) labels.push('聴力');
+    if (!hearingOnly && tokens.some(s => /DBQs?|GEN\s*MED/i.test(s))) labels.push('一般診察');
     if (!labels.length) labels.push('検査');
     const badges = `<span class="service-labels">${labels.map(label => `<span>${label}</span>`).join('')}</span>`;
     const text = escapeHtml(displayText || '検査内容なし');

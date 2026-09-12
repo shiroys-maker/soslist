@@ -86,3 +86,27 @@ test('collapsed service presentation preserves and escapes the entire original t
     assert.match(html, /検査内容を編集/);
     assert.doesNotMatch(ctx.buildServicesPreviewHTML(['Audiologist'], 'Audiology'), /検査内容を編集/);
 });
+
+test('hearing label is reserved for standalone hearing loss and tinnitus DBQ appointments', () => {
+    const { ctx } = environment(fixture());
+    const labels = services => ctx.buildServicesPreviewHTML(services, services.join(', ')).match(/<span class="service-labels">(.*?)<\/span><\/span>/)[1];
+    for (const services of [
+        ['Audiologist Examination'],
+        ['Hearing Loss and Tinnitus DBQ'],
+        ['DBQ AUDIO Hearing Loss and Tinnitus', 'AUDIOMETRY'],
+        ['Hearing Loss & Tinnitus DBQ', 'TYMPANOMETRY']
+    ]) {
+        assert.match(labels(services), /聴力/);
+        assert.doesNotMatch(labels(services), /一般診察/);
+    }
+    for (const services of [
+        ['AUDIOMETRY'],
+        ['Audiology'],
+        ['AUDIOMETRY', 'Gen Med SHA Requiring 6-10 DBQs'],
+        ['Audiologist Examination', 'Gen Med SHA Requiring 6-10 DBQs'],
+        ['Hearing Loss and Tinnitus DBQ', 'Knee DBQ'],
+        ['Hearing Loss and Tinnitus DBQ', 'CBC'],
+        ['Gen Med SHA Requiring 6-10 DBQs', '(Hearing Loss and Tinnitus DBQ)']
+    ]) assert.doesNotMatch(labels(services), /聴力/);
+    assert.match(labels(['AUDIOMETRY', 'Gen Med SHA Requiring 6-10 DBQs']), /一般診察/);
+});
