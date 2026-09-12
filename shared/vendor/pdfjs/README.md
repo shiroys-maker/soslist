@@ -3,7 +3,9 @@
 PDF.js 6.3.289, Apache-2.0 (see LICENSE), from the official pdfjs-dist npm package.
 The legacy build and its WorkerMessageHandler are bundled as a classic script so
 SOSList Local's file:// WebView can use the same renderer as Cloud. The renderer
-loads only when a PDF is opened. No third-party viewer receives a PDF URL or data.
+and worker initialize in idle time after the appointment list appears, and are
+reused across PDF opens. Only the renderer is warmed; appointment PDFs are still
+downloaded on click and released on close. No third-party viewer receives a PDF URL or data.
 cmaps, standard_fonts, wasm, and iccs are copied unmodified from that package;
 their included license files are retained.
 

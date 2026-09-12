@@ -397,6 +397,7 @@ function setupRealtimeListener() {
               mobileList.innerHTML = mobileCardsHTML || '<p class="mobile-empty">該当する予約はありません。</p>';
           }
           window.sosListUI?.restoreFocus(previousFocus);
+          window.sosPdfViewer?.warmup();
       }, error => {
           console.error("Firestoreのリアルタイム監視でエラー:", error);
           connection?.error(connectionToken, error);
