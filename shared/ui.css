@@ -23,7 +23,7 @@
     .secondary-controls .summary-area { flex-wrap: wrap; }
     .summary-status:empty { display: none; }
     .data-section { overflow: auto; max-height: var(--list-height, 70vh); background: white; border: 1px solid var(--ui-border); border-radius: 8px; margin-bottom: 0; }
-    #appointmentsTable { width: 100%; min-width: 1120px; table-layout: fixed; border: 0; border-collapse: separate; border-spacing: 0; }
+    #appointmentsTable { width: 100%; min-width: 1048px; table-layout: fixed; border: 0; border-collapse: separate; border-spacing: 0; }
     #appointmentsTable th, #appointmentsTable td { box-sizing: border-box; border: 0; border-bottom: 1px solid var(--ui-border); padding: 9px 6px; font-size: 13px; line-height: 1.45; vertical-align: top; overflow-wrap: anywhere; }
     #appointmentsTable thead th { position: sticky; top: 0; z-index: 3; background: #eef0f7; color: #514170; font-size: 12px; border-bottom: 1px solid #bec8d8; vertical-align: middle; }
     #appointmentsTable tbody tr[data-id]:hover { background: #f8faff; }
@@ -34,7 +34,7 @@
     #appointmentsTable .col-contract { width: 105px; }
     #appointmentsTable .col-phone { width: 117px; }
     #appointmentsTable .col-actions { width: 38px; }
-    #appointmentsTable .col-referral-status { width: 322px; padding: 9px 8px; }
+    #appointmentsTable .col-referral-status { width: 248px; padding: 9px 6px; }
     #appointmentsTable .appointment-day th { background: #eaf0f8; color: #31445f; padding: 7px 10px; font-size: 13px; border-top: 1px solid #cbd6e6; }
     #appointmentsTable tr.date-boundary td { border-top: 0; }
     #appointmentsTable .appointments-empty { padding: 32px; text-align: center; color: var(--ui-muted); }
@@ -45,7 +45,7 @@
     #appointmentsTable .phone-cell { font-size: 12px !important; color: #455773; }
     #appointmentsTable .status-toggle { min-width: 30px; min-height: 32px; padding: 2px; font-size: 12px; color: var(--ui-muted); }
     #appointmentsTable .status-toggle[aria-pressed="true"] { background: #eaf7ee; border-color: #86b997; }
-    .referral-grid-header, .mobile-referral-row { display: grid; grid-template-columns: 64px minmax(0, 1fr) 44px 44px; gap: 6px; align-items: stretch; width: 100%; }
+    .referral-grid-header, .mobile-referral-row { display: grid; grid-template-columns: 52px 84px 44px 44px; gap: 4px; align-items: stretch; width: max-content; }
     .referral-grid-header span { text-align: center; }
     .mobile-referral-status { display: grid; gap: 6px; width: 100%; }
     .mobile-referral-dest, .mobile-referral-date, .mobile-referral-check { box-sizing: border-box; display: flex; align-items: center; justify-content: center; min-width: 0; min-height: 36px; height: auto; margin: 0; padding: 4px; border: 1px solid #d5ddea; border-radius: 6px; background: #fff; color: var(--ui-ink); font-size: 12px; line-height: 1.35; text-shadow: none; white-space: normal; overflow-wrap: anywhere; }
@@ -53,7 +53,7 @@
     .mobile-referral-dest.saved { color: #176338; border-color: #8bb69c; }
     .mobile-referral-dest.referral-lab { color: #176883; background: #e8f5fa; cursor: default; }
     .mobile-referral-date { font-variant-numeric: tabular-nums; }
-    .mobile-referral-check { color: #58677c; font-weight: 650; }
+    .mobile-referral-check { color: #58677c; font-weight: 650; padding: 3px; white-space: nowrap; }
     .mobile-referral-check.is-active { background: #eaf7ee; border-color: #8bb69c; color: #176338; }
     .mobile-referral-status-empty { color: var(--ui-muted); font-size: 12px; padding: 4px 0; }
     .referral-lab-date { border-color: transparent; background: transparent; cursor: default; }
@@ -108,7 +108,7 @@
     .appointment-card-top { gap: 6px; }
     .appointment-card-meta { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
     .appointment-card-flags { gap: 4px; }
-    .appointment-card .mobile-referral-row { grid-template-columns: 58px minmax(0, 1fr) 44px 44px; gap: 4px; }
+    .appointment-card .mobile-referral-row { grid-template-columns: 52px 84px 44px 44px; gap: 4px; }
     .appointment-card .mobile-referral-dest, .appointment-card .mobile-referral-date, .appointment-card .mobile-referral-check { min-height: 44px; font-size: 12px; padding: 3px; border-radius: 6px; }
     .appointment-card .mobile-referral-date { white-space: normal; }
     .appointment-card .mobile-referral-dest.referral-lab { color: #176883; }
