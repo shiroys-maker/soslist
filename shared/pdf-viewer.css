@@ -5,6 +5,8 @@
     .pdf-dialog::backdrop { background: #16203399; }
     .pdf-header { display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; padding: 6px 10px; background: white; border-bottom: 1px solid #dce2eb; }
     .pdf-header h2 { margin: 0; font-size: 16px; }
+    .pdf-header-actions { display: flex; gap: 6px; }
+    .pdf-print-frame { position: fixed; width: 1px; height: 1px; border: 0; opacity: 0; pointer-events: none; }
     .pdf-dialog button { min-width: 36px; min-height: 36px; padding: 4px 10px; font-size: 13px; }
     .pdf-dialog button:disabled { opacity: 0.45; cursor: default; }
     .pdf-header .pdf-close { color: #fff; background: #514170; border-color: #514170; text-shadow: none; }

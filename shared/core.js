@@ -441,7 +441,8 @@ function buildServicesPreviewHTML(services, displayText, editable = false, expan
     const isHearingDBQ = s => /^audiologist examination$/i.test(s)
         || /^(?:DBQ\s+(?:AUDIO\s*[-:]?\s*)?hearing loss\s*(?:and|&)\s*tinnitus|hearing loss\s*(?:and|&)\s*tinnitus\s+DBQ)$/i.test(s);
     const hearingOnly = tokens.some(isHearingDBQ) && tokens.every(s => isHearingDBQ(s)
-        || /^(?:comprehensive audio testing|audiometry|audiology|tympanometry|speech audiometry|pure[ -]tone audiometry)\b/i.test(s));
+        || /^(?:comprehensive audio testing|audiometry|audiology|tympanometry|speech audiometry|pure[ -]tone audiometry)\b/i.test(s)
+        || /^routine medical opinion\s+\d+(?:\s*-\s*\d+)?\s+questions?$/i.test(s));
     if (hearingOnly) labels.push('聴力');
     if (!hearingOnly && tokens.some(s => /DBQs?|GEN\s*MED/i.test(s))) labels.push('一般診察');
     if (!labels.length) labels.push('検査');
