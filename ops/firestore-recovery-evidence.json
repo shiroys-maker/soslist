@@ -38,5 +38,25 @@
     "pricing_url": "https://cloud.google.com/firestore/pricing",
     "assumption": "Database size remains constant; USD list prices, excluding tax and temporary verification reads/storage."
   },
-  "restore_verification": "in_progress"
+  "restore_verification": {
+    "snapshot_time": "2026-09-12T14:31:00Z",
+    "clone_database": "soslist-recovery-check-20260912-143233",
+    "source": {
+      "document_count_including_subcollections": 1059,
+      "sha256": "dc9accc5649fdfab47d0eb6ba4f1b5c92734df64df31a7356e038efbd98a26ea"
+    },
+    "restored": {
+      "document_count_including_subcollections": 1059,
+      "sha256": "dc9accc5649fdfab47d0eb6ba4f1b5c92734df64df31a7356e038efbd98a26ea"
+    },
+    "matches": true,
+    "verified_at": "2026-09-12T23:45:13.153211+09:00",
+    "patient_content_saved": false,
+    "unauthenticated_access_http_status": 403
+  },
+  "verification_database_deleted": true,
+  "cleanup_verified_at": "2026-09-12T23:46:06.335029+09:00",
+  "delete_operation_done": false,
+  "initial_backup_count": 0,
+  "initial_backups_checked_at": "2026-09-12T23:46:07.132845+09:00"
 }
