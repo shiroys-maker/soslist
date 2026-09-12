@@ -21,7 +21,7 @@
     const viewport = find('.pdf-viewport'), status = find('.pdf-status');
     const prev = find('.pdf-prev'), next = find('.pdf-next');
     const minus = find('.pdf-minus'), plus = find('.pdf-plus'), fit = find('.pdf-fit');
-    let enginePromise, loadingTask, pdf, renderTask, opener;
+    let enginePromise, loadingTask, pdf, renderTask, opener, downloadRequest, nativeDownload;
     let session = 0, rendering = 0, pageNumber = 1, zoom = 1, resizeTimer;
 
     function engine() {
@@ -34,6 +34,36 @@
         });
         return enginePromise;
     }
+    function download(url) {
+        const native = window.webkit?.messageHandlers?.loadPdfBytes;
+        if (native) return new Promise((resolve, reject) => {
+            const requestId = crypto.randomUUID();
+            nativeDownload = { requestId, resolve, reject };
+            native.postMessage({ requestId, url });
+        });
+        // Passing bytes keeps PDF.js from issuing separate cross-origin range fetches.
+        return new Promise((resolve, reject) => {
+            const request = new XMLHttpRequest();
+            downloadRequest = request;
+            request.open('GET', url);
+            request.responseType = 'arraybuffer';
+            request.timeout = 60000;
+            request.onload = () => {
+                if (downloadRequest === request) downloadRequest = null;
+                if (request.status >= 200 && request.status < 300 && request.response?.byteLength) resolve(new Uint8Array(request.response));
+                else reject(new Error('PDF download failed'));
+            };
+            request.onerror = request.ontimeout = request.onabort = () => reject(new Error('PDF download interrupted'));
+            request.send();
+        });
+    }
+    window.sosPdfNativeResult = ({ requestId, data, error }) => {
+        if (!nativeDownload || nativeDownload.requestId !== requestId) return;
+        const pending = nativeDownload; nativeDownload = null;
+        if (error) { pending.reject(new Error('PDF download failed')); return; }
+        try { pending.resolve(Uint8Array.from(atob(data), character => character.charCodeAt(0))); }
+        catch (error) { pending.reject(error); }
+    };
     function controls() {
         prev.disabled = !pdf || pageNumber <= 1;
         next.disabled = !pdf || pageNumber >= pdf.numPages;
@@ -45,6 +75,11 @@
     function release() {
         session++; rendering++;
         clearTimeout(resizeTimer);
+        downloadRequest?.abort(); downloadRequest = null;
+        if (nativeDownload) {
+            window.webkit?.messageHandlers?.cancelPdfDownload?.postMessage({ requestId: nativeDownload.requestId });
+            nativeDownload.reject(new Error('PDF download cancelled')); nativeDownload = null;
+        }
         renderTask?.cancel(); renderTask = null;
         const oldTask = loadingTask;
         loadingTask = null; pdf = null;
@@ -103,7 +138,11 @@
         try {
             const [lib, url] = await Promise.all([engine(), resolveSource()]);
             if (current !== session || !dialog.open) return;
-            loadingTask = lib.getDocument({ url, cMapUrl: assetBase + 'cmaps/', standardFontDataUrl: assetBase + 'standard_fonts/',
+            status.textContent = 'PDFを取得しています…';
+            const data = await download(url);
+            if (current !== session || !dialog.open) return;
+            status.textContent = 'PDFを表示しています…';
+            loadingTask = lib.getDocument({ data, cMapUrl: assetBase + 'cmaps/', standardFontDataUrl: assetBase + 'standard_fonts/',
                 wasmUrl: assetBase + 'wasm/', iccUrl: assetBase + 'iccs/', useWorkerFetch: false, isEvalSupported: false, verbosity: 0 });
             const loaded = await loadingTask.promise;
             if (current !== session || !dialog.open) return;

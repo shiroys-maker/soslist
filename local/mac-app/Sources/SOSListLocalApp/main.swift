@@ -64,6 +64,14 @@ private struct ASBOCDMetadata {
 final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler, NSWindowDelegate {
     private var window: NSWindow!
     private var webView: WKWebView!
+    private var pdfDownloads: [String: URLSessionDataTask] = [:]
+    private let pdfSession: URLSession = {
+        let config = URLSessionConfiguration.ephemeral
+        config.urlCache = nil
+        config.httpCookieStorage = nil
+        config.urlCredentialStorage = nil
+        return URLSession(configuration: config)
+    }()
     private var popupWindows: [ObjectIdentifier: NSWindow] = [:]
     private var popupKinds: [ObjectIdentifier: PopupKind] = [:]
     // details保存の応答を返す先（requestId → 詳細ウィンドウのWebView）
@@ -244,6 +252,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             } else {
                 openPrintableHTMLInChrome(html: html, title: title)
             }
+            return
+        }
+
+        if message.name == "loadPdfBytes" || message.name == "cancelPdfDownload" {
+            guard message.webView === webView, message.frameInfo.isMainFrame,
+                  let payload = message.body as? [String: Any],
+                  let requestId = payload["requestId"] as? String else { return }
+            if message.name == "cancelPdfDownload" {
+                pdfDownloads.removeValue(forKey: requestId)?.cancel()
+                return
+            }
+            guard let rawURL = payload["url"] as? String, let url = URL(string: rawURL),
+                  url.scheme == "https", url.host == "firebasestorage.googleapis.com",
+                  url.path.hasPrefix("/v0/b/sos-list-4d150.firebasestorage.app/o/") else {
+                relayJSON(["requestId": requestId, "error": "invalid-source"], toFunction: "window.sosPdfNativeResult", in: webView)
+                return
+            }
+            let request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 45)
+            let task = pdfSession.dataTask(with: request) { [weak self] data, response, error in
+                DispatchQueue.main.async {
+                    guard let self, self.pdfDownloads.removeValue(forKey: requestId) != nil else { return }
+                    var result: [String: Any] = ["requestId": requestId]
+                    if error == nil, let response = response as? HTTPURLResponse,
+                       (200..<300).contains(response.statusCode), let data,
+                       data.prefix(1024).range(of: Data("%PDF-".utf8)) != nil {
+                        result["data"] = data.base64EncodedString()
+                    } else { result["error"] = "download-failed" }
+                    self.relayJSON(result, toFunction: "window.sosPdfNativeResult", in: self.webView)
+                }
+            }
+            pdfDownloads[requestId] = task
+            task.resume()
             return
         }
 
@@ -430,6 +470,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         configuration.userContentController.add(self, name: "runUtilityTool")
         configuration.userContentController.add(self, name: "printHTML")
         configuration.userContentController.add(self, name: "openExternalURL")
+        configuration.userContentController.add(self, name: "loadPdfBytes")
+        configuration.userContentController.add(self, name: "cancelPdfDownload")
         configuration.userContentController.add(self, name: "openSummaryWindow")
         configuration.userContentController.add(self, name: "startSummaryGeneration")
         configuration.userContentController.add(self, name: "setCDMonitoringEnabled")
