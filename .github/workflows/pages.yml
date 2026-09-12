@@ -30,7 +30,8 @@ jobs:
           mkdir -p site site/shared
           cp index.html site/
           cp script.js connection.js site/
-          cp shared/core.js shared/ui.css shared/ui.js site/shared/
+          cp shared/core.js shared/ui.css shared/ui.js shared/pdf-viewer.js shared/pdf-viewer.css site/shared/
+          cp -R shared/vendor site/shared/
           cp style.css site/
           cp CNAME site/
           cp stamp.png site/

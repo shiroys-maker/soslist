@@ -441,7 +441,7 @@ function buildServicesPreviewHTML(services, displayText, editable = false, expan
     const isHearingDBQ = s => /^audiologist examination$/i.test(s)
         || /^(?:DBQ\s+(?:AUDIO\s*[-:]?\s*)?hearing loss\s*(?:and|&)\s*tinnitus|hearing loss\s*(?:and|&)\s*tinnitus\s+DBQ)$/i.test(s);
     const hearingOnly = tokens.some(isHearingDBQ) && tokens.every(s => isHearingDBQ(s)
-        || /^(?:audiometry|audiology|tympanometry|speech audiometry|pure[ -]tone audiometry)\b/i.test(s));
+        || /^(?:comprehensive audio testing|audiometry|audiology|tympanometry|speech audiometry|pure[ -]tone audiometry)\b/i.test(s));
     if (hearingOnly) labels.push('聴力');
     if (!hearingOnly && tokens.some(s => /DBQs?|GEN\s*MED/i.test(s))) labels.push('一般診察');
     if (!labels.length) labels.push('検査');
@@ -469,88 +469,19 @@ function startLogoutTimer() {
 }
 
 function handleViewPdf(docId) {
-    const nativeOpenHandler = window.webkit?.messageHandlers?.openExternalURL;
-    const pendingWindow = nativeOpenHandler ? null : window.open('', '_blank');
-    if (!nativeOpenHandler && !pendingWindow) {
-        alert('PDFウインドウを開けませんでした。ポップアップ設定を確認してください。');
-        return;
-    }
-
-    db.collection('appointments').doc(docId).get().then(doc => {
-        if (!doc.exists) {
-            if (pendingWindow) pendingWindow.close();
-            alert('データベースにレコードが見つかりません。');
-            return;
-        }
+    return window.sosPdfViewer.open(async () => {
+        const sourceError = message => Object.assign(new Error(message), { pdfSourceError: true });
+        const doc = await db.collection('appointments').doc(docId).get();
+        if (!doc.exists) throw sourceError('データベースにレコードが見つかりません。');
         const fileName = doc.data().originalFileName;
-        if (!fileName) {
-            if (pendingWindow) pendingWindow.close();
-            alert('このレコードにPDFファイルは関連付けられていません。');
-            return;
+        if (!fileName) throw sourceError('このレコードにPDFファイルは関連付けられていません。');
+        const paths = [...new Set([fileName, `pdfs/${fileName}`, fileName.toLowerCase(), fileName.replace(/\s+/g, '_'), encodeURIComponent(fileName)])];
+        for (const candidate of paths) {
+            try { return await storage.ref(candidate).getDownloadURL(); }
+            catch (error) { if (error.code !== 'storage/object-not-found') throw error; }
         }
-        
-        console.log("PDF表示試行:", fileName);
-        
-        // 複数のパスパターンを試す
-        tryMultiplePaths(fileName, pendingWindow);
-    }).catch(error => {
-        if (pendingWindow) pendingWindow.close();
-        console.error("PDF参照エラー:", error);
-        alert(`PDFの参照中にエラーが発生しました: ${error.message}`);
+        throw sourceError('関連付けられたPDFファイルが見つかりませんでした。');
     });
-}
-
-function tryMultiplePaths(fileName, pendingWindow = null) {
-    // パスのバリエーションを試す
-    const pathVariations = [
-        fileName,                    // そのままのファイル名
-        `pdfs/${fileName}`,          // pdfsフォルダ内
-        fileName.toLowerCase(),      // 小文字化
-        fileName.replace(/\s+/g, '_'), // スペースを_に置換
-        encodeURIComponent(fileName) // URLエンコード
-    ];
-    
-    // 最初のパスから順に試す
-    tryNextPath(pathVariations, 0, fileName, pendingWindow);
-}
-
-function tryNextPath(paths, index, originalFileName, pendingWindow = null) {
-    if (index >= paths.length) {
-        // すべてのパスを試しても見つからなかった
-        if (pendingWindow) pendingWindow.close();
-        console.error("すべてのパスバリエーションで見つかりませんでした:", originalFileName);
-        alert(`PDFファイル「${originalFileName}」がストレージ内に見つかりませんでした。`);
-        return;
-    }
-    
-    const currentPath = paths[index];
-    console.log(`パスパターン試行 (${index+1}/${paths.length}): ${currentPath}`);
-    
-    storage.ref(currentPath).getDownloadURL()
-        .then(url => {
-            console.log("PDF見つかりました:", currentPath);
-            const nativeOpenHandler = window.webkit?.messageHandlers?.openExternalURL;
-            if (nativeOpenHandler) {
-                nativeOpenHandler.postMessage({ url });
-                return;
-            }
-            if (pendingWindow) {
-                pendingWindow.location.href = url;
-                return;
-            }
-            window.open(url, '_blank');
-        })
-        .catch(error => {
-            if (error.code === 'storage/object-not-found') {
-                console.log(`パスパターン ${index+1} では見つかりませんでした、次を試します`);
-                // 次のパスパターンを試す
-                tryNextPath(paths, index + 1, originalFileName, pendingWindow);
-            } else {
-                if (pendingWindow) pendingWindow.close();
-                console.error("PDF取得エラー:", error.code, error.message, currentPath);
-                alert(`PDFの表示中にエラーが発生しました: ${error.message}`);
-            }
-        });
 }
 
 function openEditModal(docId) {
