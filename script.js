@@ -91,7 +91,7 @@ let editingDateTimeDocId = null;
 let editingPhoneDocId = null;
 let unsubscribe;
 const MOBILE_VIEW_MODE_KEY = 'soslist-mobile-view-mode';
-const MOBILE_CONTROLS_OPEN_KEY = 'soslist-mobile-controls-open';
+const MOBILE_CONTROLS_OPEN_KEY = 'soslist-mobile-search-controls-open';
 const MOBILE_CARD_ACTIONABLE_SELECTOR = 'button, a, .name-cell, .show-toggle-cell, .contract-cell, .phone-cell, .visitdate-cell, .received-cell, .completed-cell, .referral-dest, .age-cell';
 
 let shokaijyoEditingDocId = null;
@@ -150,7 +150,7 @@ function setMobileControlsOpen(isOpen) {
     mobileControlsToggle?.classList.toggle('is-open', normalized);
     mobileControlsPanel?.classList.toggle('is-open', normalized);
     if (mobileControlsPanel) mobileControlsPanel.inert = window.innerWidth <= 768 && !normalized;
-    mobileControlsToggle.textContent = normalized ? 'Invoice・Summary ▲' : 'Invoice・Summary ▼';
+    mobileControlsToggle.textContent = normalized ? '検索・日付・その他 ▲' : '検索・日付・その他 ▼';
     try {
         localStorage.setItem(MOBILE_CONTROLS_OPEN_KEY, normalized ? 'true' : 'false');
     } catch (error) {

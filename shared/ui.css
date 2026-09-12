@@ -2,23 +2,24 @@
 @media screen {
     :root { --ui-ink: #243047; --ui-muted: #58677c; --ui-accent: #514170; --ui-border: #dce2eb; }
     body { background: #f5f7fb; color: var(--ui-ink); font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif; }
-    #main-app-container { padding: 14px 16px; }
-    #main-app-container > h1 { position: static; width: auto; margin: 0 0 16px; padding: 16px 20px; border-radius: 10px; font-size: 21px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+    #main-app-container { padding: 10px 12px; }
+    #main-app-container > h1 { position: static; width: auto; margin: 0 0 8px; padding: 7px 12px; border-radius: 7px; font-size: 18px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
     #auth-status { position: static; font-size: 12px; gap: 12px; }
-    #auth-status button { font-size: 12px; padding: 6px 10px; }
+    #auth-status button { font-size: 11px; padding: 4px 8px; }
     #connection-status { margin-bottom: 8px; border-radius: 6px; }
-    .filter-section { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 14px 24px; margin-bottom: 12px; }
-    .search-area, .date-filter-area { display: grid; gap: 6px; align-items: center; }
-    .search-area { grid-template-columns: minmax(170px, 280px) auto; }
-    .date-filter-area { grid-template-columns: 36px minmax(145px, 170px) 36px auto; }
-    .search-area label, .date-filter-area label { grid-column: 1 / -1; font-size: 12px; color: var(--ui-muted); }
-    .filter-section input, .secondary-controls input, .secondary-controls select { box-sizing: border-box; min-height: 36px; border: 1px solid #b8c3d2; border-radius: 6px; background: white; padding: 5px 8px; font-size: 14px; color: var(--ui-ink); }
+    .filter-section { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin-bottom: 6px; }
+    .search-area, .date-filter-area { display: grid; gap: 4px; align-items: center; }
+    .search-area { grid-template-columns: minmax(170px, 220px) auto; }
+    .date-filter-area { grid-template-columns: auto 30px 146px 30px auto; }
+    .search-area label { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    .date-filter-area label { grid-column: auto; font-size: 11px; color: var(--ui-muted); }
+    .filter-section input, .secondary-controls input, .secondary-controls select { box-sizing: border-box; min-height: 30px; border: 1px solid #b8c3d2; border-radius: 5px; background: white; padding: 3px 6px; font-size: 13px; color: var(--ui-ink); }
     .search-area input { width: 100%; min-width: 0; }
-    .filter-section button { min-height: 36px; }
+    .filter-section button { min-height: 30px; padding: 3px 8px; font-size: 12px; }
     .date-filter-area input { width: 100%; min-width: 0; }
-    .secondary-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; margin-bottom: 14px; }
-    .secondary-controls h2 { font-size: 13px; color: var(--ui-muted); }
-    .secondary-controls button { min-height: 34px; }
+    .secondary-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin-bottom: 8px; }
+    .secondary-controls h2 { font-size: 11px; color: var(--ui-muted); }
+    .secondary-controls button { min-height: 30px; padding: 3px 8px; font-size: 12px; }
     .secondary-controls .invoice-controls, .secondary-controls .summary-controls { display: flex; align-items: center; gap: 6px; }
     .secondary-controls .summary-area { flex-wrap: wrap; }
     .summary-status:empty { display: none; }
@@ -72,34 +73,33 @@
 }
 
 @media screen and (max-width: 768px) {
-    #main-app-container { padding: 10px; }
-    #main-app-container > h1 { margin: 0 0 12px; padding: 12px; font-size: 17px; border-radius: 8px; }
+    #main-app-container { padding: 8px; }
+    #main-app-container > h1 { margin: 0 0 6px; padding: 6px 8px; font-size: 14px; line-height: 1.3; border-radius: 6px; }
     #main-app-container #auth-status { display: none; }
-    .filter-section { display: grid; gap: 12px; margin: 0 0 10px; padding: 12px; border: 1px solid var(--ui-border); border-radius: 10px; background: white; }
-    .filter-section .search-area, .filter-section .date-filter-area { width: 100%; min-width: 0; display: grid; gap: 6px; }
-    .filter-section .search-area { grid-template-columns: minmax(0, 1fr) 60px; }
-    .filter-section .date-filter-area { grid-template-columns: 44px minmax(0, 1fr) 44px 44px; }
+    .filter-section { display: grid; gap: 4px; margin: 0 0 4px; padding: 0; border: 0; border-radius: 0; background: transparent; }
+    .filter-section .search-area, .filter-section .date-filter-area { width: 100%; min-width: 0; display: grid; gap: 4px; }
+    .filter-section .search-area { grid-template-columns: minmax(0, 1fr) 48px; }
+    .filter-section .date-filter-area { grid-template-columns: 40px minmax(0, 1fr) 40px 40px; }
     .filter-section label { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-    .filter-section .search-area input, .filter-section .date-filter-area input[type="date"] { min-width: 0; width: 100%; min-height: 44px; font-size: 16px; padding: 5px; }
-    .filter-section button { min-width: 0; min-height: 44px; padding: 4px; font-size: 13px; }
-    /* Keep the native date wide enough even at 320px. */
-    .filter-section .date-filter-area { grid-template-columns: 44px minmax(0, 1fr) 44px; }
-    .filter-section #todayDateButton { grid-column: 1 / -1; min-height: 30px; }
-    .mobile-controls-toggle { display: block; width: auto; min-width: 160px; min-height: 36px; margin: 0 auto 10px; padding: 7px 12px; border-radius: 7px; box-shadow: none; font-size: 12px; }
-    .mobile-controls-panel { max-height: 0; overflow: hidden; opacity: 0; margin: 0; transform: none; }
-    .mobile-controls-panel.is-open { max-height: none; overflow: visible; opacity: 1; margin-bottom: 12px; }
-    .secondary-controls { padding: 12px; margin: 0 0 12px; display: grid; gap: 12px; border: 1px solid var(--ui-border); border-radius: 10px; background: white; }
+    .filter-section .search-area input, .filter-section .date-filter-area input[type="date"] { min-width: 0; width: 100%; height: 40px; min-height: 40px; font-size: 16px; padding: 3px 5px; }
+    .filter-section button { min-width: 0; min-height: 40px; padding: 3px; font-size: 12px; }
+    /* Removing the surrounding card padding leaves room for Today on the date row. */
+    .filter-section #todayDateButton { grid-column: auto; }
+    .mobile-controls-toggle { display: block; width: auto; min-width: 0; min-height: 30px; margin: 0 0 4px auto; padding: 4px 8px; border-radius: 7px; box-shadow: none; font-size: 12px; }
+    .mobile-controls-panel { max-height: 0; overflow: hidden; visibility: hidden; opacity: 0; margin: 0; transform: none; }
+    .mobile-controls-panel.is-open { max-height: none; overflow: visible; visibility: visible; opacity: 1; margin-bottom: 6px; }
+    .secondary-controls { padding: 8px; margin: 0 0 6px; display: grid; gap: 8px; border: 1px solid var(--ui-border); border-radius: 10px; background: white; }
     .secondary-controls .invoice-area, .secondary-controls .summary-area { display: grid; gap: 6px; width: 100%; }
     .secondary-controls h2 { font-size: 12px; }
-    .secondary-controls input, .secondary-controls select, .secondary-controls .summary-controls input[type="date"] { min-height: 44px; min-width: 0; font-size: 16px; }
-    .secondary-controls button { min-height: 44px; min-width: 38px; padding: 5px; font-size: 13px; }
+    .secondary-controls input, .secondary-controls select, .secondary-controls .summary-controls input[type="date"] { min-height: 40px; min-width: 0; font-size: 16px; }
+    .secondary-controls button { min-height: 40px; min-width: 38px; padding: 5px; font-size: 13px; }
     .secondary-controls .invoice-controls { display: flex; flex-wrap: wrap; }
     .secondary-controls .summary-controls { display: grid; grid-template-columns: 38px minmax(0, 1fr) 38px; }
     .secondary-controls .summary-controls input { width: 100%; }
     .secondary-controls #showSummaryButton, .secondary-controls #generateSummaryButton { grid-column: 1 / -1; }
     .data-section { max-height: none; overflow: visible; border: 0; border-radius: 0; background: transparent; }
-    .mobile-view-toggle { margin: 0 0 10px; }
-    .mobile-view-toggle button { min-height: 44px; }
+    .mobile-view-toggle { width: max-content; max-width: 100%; margin: 0 0 4px; padding: 2px; gap: 2px; }
+    .mobile-view-toggle button { min-height: 32px; padding: 4px 14px; font-size: 12px; }
     .mobile-appointments-list { gap: 10px; }
     body[data-mobile-view-mode] .appointment-card { padding: 12px; border-radius: 10px; background: white; box-shadow: 0 2px 6px #23334d08; }
     .appointment-card.date-boundary { border-top-width: 1px; }
