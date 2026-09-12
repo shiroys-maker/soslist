@@ -4,15 +4,15 @@ const vm = require('node:vm');
 const fs = require('node:fs');
 const source = fs.readFileSync(process.env.CONNECTION_SOURCE || require('node:path').join(__dirname, '../connection.js'),'utf8');
 function harness(get = () => new Promise(() => {})) {
- const tasks = new Map(), events = {}, label = {}, buttons = [{addEventListener(){}},{addEventListener(){}}]; let id=0, calls=0;
+ const tasks = new Map(), events = {}, label = {}, reconnect = {addEventListener(n,f){events['reconnect-'+n]=f}}, buttons = [{addEventListener(){}},{addEventListener(){}}]; let id=0, calls=0;
  const query = {where(){return this},orderBy(){return this},limit(){return this},get};
  const c = {console, Date, Promise, JSON, Blob, URL, navigator:{onLine:true}, localStorage:{getItem(){return null},setItem(){}},
- document:{querySelector(){return {after(){}}},createElement(){return {querySelector(){return label},querySelectorAll(){return buttons}}},getElementById(){return {prepend(){}}},addEventListener(n,f){events[n]=f}},
+ document:{querySelector(){return {after(){}}},createElement(){return {querySelector(){return label},querySelectorAll(){return buttons}}},getElementById(id){return id==='reconnectButton' ? reconnect : {prepend(){}}},addEventListener(n,f){events[n]=f}},
  setTimeout(f,ms){tasks.set(++id,{f,ms});return id},clearTimeout(id){tasks.delete(id)},
  db:{collection(){return query}},dateFilter:{value:''},formatDateInputValue:()=> '2026-09-08',getCorrectedAppointmentDate:x=>x.date,formatDateInTokyo:()=> '2026-09-07',
  setupRealtimeListener(){calls++; c.sosConnection.begin()},addEventListener(n,f){events[n]=f}};
  c.window=c;vm.runInNewContext(source,c);
- return {c,tasks,label,events,get status(){return c.sosConnection.status ?? label.textContent},get calls(){return calls},fire(ms){const e=[...tasks].find(([,t])=>t.ms===ms);assert.ok(e,`timer ${ms}`);tasks.delete(e[0]);e[1].f()}};
+ return {c,tasks,label,events,get status(){return c.sosConnection.status ?? reconnect.title ?? label.textContent},get calls(){return calls},fire(ms){const e=[...tasks].find(([,t])=>t.ms===ms);assert.ok(e,`timer ${ms}`);tasks.delete(e[0]);e[1].f()}};
 }
 test('startup falls back after eight seconds; late result cannot move date',async()=>{
  let resolve;const h=harness(()=>new Promise(r=>resolve=r)); const p=h.c.sosConnection.start();h.fire(8000);await p;
@@ -42,4 +42,13 @@ test('mobile foreground return reconnects, hidden and logged-out pages do not',a
  h.c.document.hidden=false;h.events.visibilitychange();assert.equal(h.calls,2);
  if(h.events.pageshow){h.events.pageshow({persisted:false});assert.equal(h.calls,2);h.events.pageshow({persisted:true});assert.equal(h.calls,3);}
  h.c.sosConnection.stop();const count=h.calls;h.events.visibilitychange();h.events.online();assert.equal(h.calls,count);
+});
+
+if (!process.env.CONNECTION_SOURCE) test('banner reconnect restarts the listener only while logged in',async()=>{
+ const h=harness(async()=>({empty:true}));
+ h.events['reconnect-click']();assert.equal(h.calls,0);
+ await h.c.sosConnection.start();assert.equal(h.calls,1);
+ h.events['reconnect-click']();assert.equal(h.calls,2);
+ assert.match(h.status,/読み込んでいます/);
+ h.c.sosConnection.stop();h.events['reconnect-click']();assert.equal(h.calls,2);
 });

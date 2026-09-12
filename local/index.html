@@ -28,7 +28,12 @@
 
     <div id="main-app-container">
         <h1>
-            Nirai Seaside Clinic Appointments (Local)
+            <span class="local-banner-title">Nirai Seaside Clinic
+                <button type="button" id="reconnectButton" aria-label="再接続" title="再接続">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5"/><path d="M19.2 8a8 8 0 1 0 .3 7"/></svg>
+                </button>
+                <span>Appointments (Local)</span>
+            </span>
             <div id="auth-status">
                 <p>ログイン中: <span id="userEmail"></span></p>
                 <button id="logoutButton">ログアウト</button>
