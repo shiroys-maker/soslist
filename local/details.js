@@ -14,6 +14,7 @@ const QTC_TOOL_LABELS = {
 let activeSaveRequestId = null;
 let currentDetailsData = null;
 let pendingCloseAfterSave = false;
+let pendingSaveValues = null;
 
 if (injectedDetailsPayload?.docId) {
     renderDetails(injectedDetailsPayload.docId, injectedDetailsPayload);
@@ -86,7 +87,7 @@ function renderDetails(targetDocId, data) {
             <div class="action-bar">
                 ${qtcToolButtons}
                 ${utilityButtons}
-                <button type="button" id="closeWindowButton" class="secondary">閉じる</button>
+                <button type="button" id="closeWindowButton" class="secondary">保存して閉じる</button>
             </div>
         </div>
 
@@ -114,13 +115,13 @@ function renderDetails(targetDocId, data) {
         </div>
 
         <section class="notes-card">
-            <span class="detail-label">URL</span>
+            <label class="detail-label" for="referenceUrlInput">URL</label>
             <input id="referenceUrlInput" type="url" class="detail-input" placeholder="https://..." value="${escapeHtml(referenceUrl)}">
             <a id="referenceUrlLink" class="reference-link${sanitizeUrl(referenceUrl) ? '' : ' is-hidden'}" href="${escapeAttribute(sanitizeUrl(referenceUrl))}" rel="noopener noreferrer">${escapeHtml(sanitizeUrl(referenceUrl))}</a>
-            <span class="detail-label">メモ (所見など)</span>
+            <label class="detail-label" for="notesTextarea">メモ (所見など)</label>
             <textarea id="notesTextarea" placeholder="1500文字程度まで入力可能...">${escapeHtml(notes)}</textarea>
             <div class="button-row">
-                <div id="statusText" class="status-text"></div>
+                <div id="statusText" class="status-text" role="status" aria-live="polite">変更なし</div>
                 <div class="button-group">
                     <button type="button" id="saveNotesButton">保存</button>
                 </div>
@@ -139,7 +140,10 @@ function renderDetails(targetDocId, data) {
     const referenceUrlInput = document.getElementById('referenceUrlInput');
     referenceUrlInput.addEventListener('input', () => {
         syncReferenceUrlLink(referenceUrlInput.value);
+        showUnsavedChanges();
     });
+
+    document.getElementById('notesTextarea').addEventListener('input', showUnsavedChanges);
 
     document.querySelectorAll('.referral-chip').forEach((button) => {
         button.addEventListener('click', () => {
@@ -159,6 +163,16 @@ function renderDetails(targetDocId, data) {
             runUtilityTool(button.dataset.tool || '');
         });
     });
+}
+
+function hasUnsavedChanges() {
+    return document.getElementById('notesTextarea').value !== (currentDetailsData?.notes || '')
+        || document.getElementById('referenceUrlInput').value.trim() !== (currentDetailsData?.referenceUrl || '').trim();
+}
+
+function showUnsavedChanges() {
+    if (activeSaveRequestId) return;
+    document.getElementById('statusText').textContent = hasUnsavedChanges() ? '未保存の変更があります' : '変更なし';
 }
 
 function saveNotes(targetDocId, options = {}) {
@@ -187,6 +201,8 @@ function saveNotes(targetDocId, options = {}) {
         notes: notesTextarea.value,
         referenceUrl: referenceUrlInput ? referenceUrlInput.value.trim() : ''
     };
+
+    pendingSaveValues = { notes: savePayload.notes, referenceUrl: savePayload.referenceUrl };
 
     // ネイティブアプリではWKWebView間にstorageイベントが届かないため、ブリッジ経由で保存する
     const nativeSaveHandler = window.webkit?.messageHandlers?.saveDetails;
@@ -221,8 +237,10 @@ function applySaveResponse(response) {
     statusText.textContent = response?.message || '';
     if (response?.status !== 'success') {
         window.alert('メモの保存に失敗しました。');
-    } else if (pendingCloseAfterSave) {
-        closeDetailsWindowImmediately();
+    } else {
+        Object.assign(currentDetailsData, pendingSaveValues);
+        if (hasUnsavedChanges()) statusText.textContent = '保存後の変更が未保存です';
+        else if (pendingCloseAfterSave) closeDetailsWindowImmediately();
     }
 
     saveButton.disabled = false;

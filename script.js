@@ -100,6 +100,9 @@ let visitDateEditingDocId = null;
 let visitDateEditingDest  = null;
 
 window.addEventListener('resize', updateShokaijyoSheetScale);
+window.addEventListener('resize', () => {
+    mobileControlsPanel.inert = window.innerWidth <= 768 && document.body.dataset.mobileControlsOpen !== 'true';
+});
 
 function applyMobileViewMode(mode) {
     const normalizedMode = mode === 'card' ? 'card' : 'compact';
@@ -128,9 +131,15 @@ function toggleAppointmentCardExpansion(card) {
     const willExpand = !card.classList.contains('is-expanded');
     mobileAppointmentsList?.querySelectorAll('.appointment-card.is-expanded').forEach((expandedCard) => {
         expandedCard.classList.remove('is-expanded');
+        expandedCard.querySelector('.card-expand')?.setAttribute('aria-expanded', 'false');
+        const label = expandedCard.querySelector('.card-expand');
+        if (label) label.textContent = '詳細を展開';
     });
     if (willExpand) {
         card.classList.add('is-expanded');
+        card.querySelector('.card-expand')?.setAttribute('aria-expanded', 'true');
+        const label = card.querySelector('.card-expand');
+        if (label) label.textContent = '折りたたむ';
     }
 }
 
@@ -140,7 +149,8 @@ function setMobileControlsOpen(isOpen) {
     mobileControlsToggle?.setAttribute('aria-expanded', normalized ? 'true' : 'false');
     mobileControlsToggle?.classList.toggle('is-open', normalized);
     mobileControlsPanel?.classList.toggle('is-open', normalized);
-    mobileControlsToggle.textContent = normalized ? '操作 ▲' : '操作 ▼';
+    if (mobileControlsPanel) mobileControlsPanel.inert = window.innerWidth <= 768 && !normalized;
+    mobileControlsToggle.textContent = normalized ? 'Invoice・Summary ▲' : 'Invoice・Summary ▼';
     try {
         localStorage.setItem(MOBILE_CONTROLS_OPEN_KEY, normalized ? 'true' : 'false');
     } catch (error) {
@@ -332,16 +342,7 @@ function handleAppointmentInteraction(target, docId) {
         return;
     }
     if (target.classList.contains('show-toggle-cell')) {
-        const docRef = db.collection('appointments').doc(docId);
-        docRef.get().then(doc => {
-            if (doc.exists) {
-                const currentIsShown = doc.data().isShown === true;
-                return docRef.update({ isShown: !currentIsShown });
-            }
-        }).catch(error => {
-            console.error('来院表示の更新エラー:', error);
-            alert('来院表示の更新に失敗しました。');
-        });
+        toggleAppointmentStatus(target, docId, 'isShown');
         return;
     }
     if (target.closest('.date-cell')) {
@@ -361,32 +362,12 @@ function handleAppointmentInteraction(target, docId) {
     }
     const receivedTarget = target.closest('.received-cell');
     if (receivedTarget) {
-        const destKey = receivedTarget.dataset.dest || null;
-        const docRef = db.collection('appointments').doc(docId);
-        docRef.get().then(doc => {
-            if (!doc.exists) return null;
-            if (!destKey) return docRef.update({ isReceived: !doc.data().isReceived });
-            const current = doc.data().referrals?.[destKey]?.isReceived === true;
-            return docRef.update({ [`referrals.${destKey}.isReceived`]: !current });
-        }).catch(error => {
-            console.error('受領フラグの更新エラー:', error);
-            alert('受領フラグの更新に失敗しました。');
-        });
+        toggleAppointmentStatus(receivedTarget, docId, 'isReceived', receivedTarget.dataset.dest || null);
         return;
     }
     const completedTarget = target.closest('.completed-cell');
     if (completedTarget) {
-        const destKey = completedTarget.dataset.dest || null;
-        const docRef = db.collection('appointments').doc(docId);
-        docRef.get().then(doc => {
-            if (!doc.exists) return null;
-            if (!destKey) return docRef.update({ isCompleted: !doc.data().isCompleted });
-            const current = doc.data().referrals?.[destKey]?.isCompleted === true;
-            return docRef.update({ [`referrals.${destKey}.isCompleted`]: !current });
-        }).catch(error => {
-            console.error('完了フラグの更新エラー:', error);
-            alert('完了フラグの更新に失敗しました。');
-        });
+        toggleAppointmentStatus(completedTarget, docId, 'isCompleted', completedTarget.dataset.dest || null);
         return;
     }
     if (target.classList.contains('contract-cell') || target.classList.contains('col-contract')) {
@@ -426,6 +407,10 @@ mobileAppointmentsList?.addEventListener('click', (e) => {
     if (!(rawTarget instanceof HTMLElement)) return;
     const card = rawTarget.closest('.appointment-card');
     if (!card) return;
+    if (rawTarget.closest('.card-expand')) {
+        toggleAppointmentCardExpansion(card);
+        return;
+    }
     const interactiveTarget = rawTarget.closest(MOBILE_CARD_ACTIONABLE_SELECTOR);
     if (!interactiveTarget) {
         toggleAppointmentCardExpansion(card);

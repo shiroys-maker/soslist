@@ -51,7 +51,9 @@ cp "$BIN_PATH" "$APP_DIR/Contents/MacOS/$APP_NAME"
 for f in index.html script.js connection.js style.css details.html details.js; do
   cp "$LOCAL_SOURCE_DIR/$f" "$WEB_RESOURCES_DIR/local/"
 done
-cp "$SHARED_SOURCE_DIR/core.js" "$WEB_RESOURCES_DIR/shared/"
+for f in core.js ui.css ui.js; do
+  cp "$SHARED_SOURCE_DIR/$f" "$WEB_RESOURCES_DIR/shared/"
+done
 cp "$SOURCE_ICON" "$WEB_RESOURCES_DIR/stamp.png"
 
 sips -z 16 16 "$SOURCE_ICON" --out "$ICONSET_DIR/icon_16x16.png" >/dev/null
@@ -112,3 +114,6 @@ else
   [ "$DO_RUN" -eq 1 ] && open -n "$APP_DIR"
   echo "$APP_DIR (build $BUILD_SHA)"
 fi
+
+# A successful --no-run install should also return success.
+exit 0
