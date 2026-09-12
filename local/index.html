@@ -6,6 +6,7 @@
     <title>SOS Appointment Viewer Local</title>
     <link rel="stylesheet" href="style.css">
     <meta name="theme-color" content="#5b2b74">
+    <link rel="stylesheet" href="../shared/ui.css?v=20260913-ui1">
     <style>
         /* メインアプリを最初は非表示にする */
         #main-app-container { display: none; }
@@ -34,27 +35,30 @@
             </div>
         </h1>
 
-        <div class="header-spacer"></div>
+
 
         <div class="filter-section">
             <div class="search-area">
-                <label for="searchInput">契約番号 / 氏名で検索：</label>
-                <input type="text" id="searchInput" placeholder="例: 7026... または 山田">
+                <label for="searchInput">氏名・契約番号</label>
+                <input type="text" id="searchInput" placeholder="氏名または契約番号">
                 <button id="searchButton">検索</button>
             </div>
             <div class="date-filter-area">
-                <label for="dateFilter">表示する予約の開始日：</label>
-                <button type="button" id="prevDateButton" class="date-nav-button" aria-label="1日前">&#9664;</button>
+                <label for="dateFilter">表示開始日</label>
+                <button type="button" id="prevDateButton" class="date-nav-button" aria-label="前の予約日">&#9664;</button>
                 <input type="date" id="dateFilter">
-                <button type="button" id="nextDateButton" class="date-nav-button" aria-label="1日後">&#9654;</button>
-            </div>            
+                <button type="button" id="nextDateButton" class="date-nav-button" aria-label="次の予約日">&#9654;</button>
+                <button type="button" id="todayDateButton">今日</button>
+            </div>
+        </div>
+        <div class="secondary-controls">
             <div class="invoice-area">
                 <h2>Invoice印刷</h2>
                 <div class="invoice-controls">
-                    <select id="invoiceYearSelect">
+                    <select id="invoiceYearSelect" aria-label="Invoiceの年">
                         <!-- 年のオプションはJSで動的生成 -->
                     </select>
-                    <select id="invoiceMonthSelect">
+                    <select id="invoiceMonthSelect" aria-label="Invoiceの月">
                         <option value="01">1月</option>
                         <option value="02">2月</option>
                         <option value="03">3月</option>
@@ -73,11 +77,11 @@
                 </div>
             </div>
             <div class="summary-area">
-                <h2>Summery</h2>
+                <h2>Summary</h2>
                 <div class="summary-controls">
-                    <button type="button" id="summaryPrevDateButton" class="date-nav-button" aria-label="1日前">&#9664;</button>
-                    <input type="date" id="summaryDateInput">
-                    <button type="button" id="summaryNextDateButton" class="date-nav-button" aria-label="1日後">&#9654;</button>
+                    <button type="button" id="summaryPrevDateButton" class="date-nav-button" aria-label="前の予約日">&#9664;</button>
+                    <input type="date" id="summaryDateInput" aria-label="Summaryの対象日">
+                    <button type="button" id="summaryNextDateButton" class="date-nav-button" aria-label="次の予約日">&#9654;</button>
                     <button type="button" id="generateSummaryButton">作成</button>
                     <button type="button" id="showSummaryButton">表示</button>
                 </div>
@@ -85,20 +89,17 @@
             </div>
     </div>
         <div class="data-section">
-            <table id="appointmentsTable">
+            <table id="appointmentsTable" aria-label="予約一覧">
                 <thead>
                     <tr>
-                        <th class="col-show">来</th>
+                        <th class="col-show">来院</th>
                         <th class="col-date">予約日時</th>
                         <th class="col-name">氏名</th>
                         <th class="col-age">歳</th>
                         <th class="col-contract">契約番号</th>
                         <th class="col-phone">電話番号</th>
                         <th class="col-services">検査内容</th>
-                        <th class="col-referral">紹介先</th>
-                        <th class="col-visitdate">受診日</th>
-                        <th class="col-received">受</th>
-                        <th class="col-completed">済</th>
+                        <th class="col-referral-status" colspan="4"><div class="referral-grid-header"><span>紹介先</span><span>受診日時</span><span>受領</span><span>完了</span></div></th>
                         <th class="col-actions">操作</th>
                     </tr>
                 </thead>
@@ -209,5 +210,6 @@
     <script src="connection.js"></script>
     <script src="script.js?v=20260725a"></script>
 
+    <script src="../shared/ui.js?v=20260913-ui1"></script>
 </body>
 </html>

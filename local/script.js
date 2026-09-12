@@ -339,16 +339,7 @@ tableBody.addEventListener('click', (e) => {
         return;
     }
     if (target.classList.contains('show-toggle-cell')) {
-        const docRef = db.collection('appointments').doc(docId);
-        docRef.get().then(doc => {
-            if (doc.exists) {
-                const currentIsShown = doc.data().isShown === true;
-                return docRef.update({ isShown: !currentIsShown });
-            }
-        }).catch(error => {
-            console.error('来院表示の更新エラー:', error);
-            alert('来院表示の更新に失敗しました。');
-        });
+        toggleAppointmentStatus(target, docId, 'isShown');
         return;
     }
     if (target.closest('.date-cell')) {
@@ -372,32 +363,12 @@ tableBody.addEventListener('click', (e) => {
     }
     const receivedTarget = target.closest('.received-cell');
     if (receivedTarget) {
-        const destKey = receivedTarget.dataset.dest || null;
-        const docRef = db.collection('appointments').doc(docId);
-        docRef.get().then(doc => {
-            if (!doc.exists) return null;
-            if (!destKey) return docRef.update({ isReceived: !doc.data().isReceived });
-            const current = doc.data().referrals?.[destKey]?.isReceived === true;
-            return docRef.update({ [`referrals.${destKey}.isReceived`]: !current });
-        }).catch(error => {
-            console.error('受領フラグの更新エラー:', error);
-            alert('受領フラグの更新に失敗しました。');
-        });
+        toggleAppointmentStatus(receivedTarget, docId, 'isReceived', receivedTarget.dataset.dest || null);
         return;
     }
     const completedTarget = target.closest('.completed-cell');
     if (completedTarget) {
-        const destKey = completedTarget.dataset.dest || null;
-        const docRef = db.collection('appointments').doc(docId);
-        docRef.get().then(doc => {
-            if (!doc.exists) return null;
-            if (!destKey) return docRef.update({ isCompleted: !doc.data().isCompleted });
-            const current = doc.data().referrals?.[destKey]?.isCompleted === true;
-            return docRef.update({ [`referrals.${destKey}.isCompleted`]: !current });
-        }).catch(error => {
-            console.error('完了フラグの更新エラー:', error);
-            alert('完了フラグの更新に失敗しました。');
-        });
+        toggleAppointmentStatus(completedTarget, docId, 'isCompleted', completedTarget.dataset.dest || null);
         return;
     }
     if (target.classList.contains('contract-cell')) {

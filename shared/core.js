@@ -242,6 +242,7 @@ function setupRealtimeListener() {
       .limit(300)
       .onSnapshot(...(connection ? [{ includeMetadataChanges: true }] : []), querySnapshot => {
           if (connection && !connection.snapshot(connectionToken, querySnapshot)) return;
+          const previousFocus = window.sosListUI?.captureFocus();
           const appointments = [];
           querySnapshot.forEach(doc => {
               appointments.push({ id: doc.id, ...doc.data() });
@@ -260,6 +261,8 @@ function setupRealtimeListener() {
           let tableRowsHTML = "";
           let mobileCardsHTML = "";
           let previousDateStr = null;
+          const expandedServices = new Set(Array.from(tableBody.querySelectorAll('tr[data-id] details[open]'), el => el.closest('tr').dataset.id));
+          const expandedCardId = document.querySelector('.appointment-card.is-expanded')?.dataset.id;
           appointments.forEach(appointment => {
               const docId = appointment.id;
               const data = appointment;
@@ -323,7 +326,12 @@ function setupRealtimeListener() {
               const age = calculateAge(data.dateOfBirth);
               const displayAge = age ? `${age}` : '不明';
               const ageCellClass = data.isAgePink ? 'age-cell pink' : 'age-cell';
-              const servicesCellClass = SOSLIST_TARGET.servicesCellClass;
+              const servicesCellClass = 'col-services';
+              const editableServices = SOSLIST_TARGET.servicesCellClass.includes('services-cell');
+              const servicesHTML = buildServicesPreviewHTML(data.services || [], displayServicesText, editableServices, expandedServices.has(docId));
+              const referralCellsHTML = SOSLIST_TARGET.perReferralStatus
+                  ? `<td colspan="4" class="col-referral-status">${buildMobileReferralStatusHTML(data, referralDests)}${buildReferralReviewHTML(data)}</td>`
+                  : `<td class="col-referral">${referralHTML}</td><td class="${visitdateCellClass}">${visitdateHTML}</td><td class="${receivedCellClass}">${receivedHTML}</td><td class="${completedCellClass}">${completedHTML}</td>`;
               const deleteCellHTML = SOSLIST_TARGET.deleteColumn
                   ? `
                       <td class="col-actions">
@@ -331,31 +339,33 @@ function setupRealtimeListener() {
                       </td>`
                   : '';
 
+              if (currentDateStr !== previousDateStr) {
+                  const dateLabel = correctedDateObj ? new Intl.DateTimeFormat('ja-JP', { month: 'long', day: 'numeric', weekday: 'long', timeZone: 'Asia/Tokyo' }).format(correctedDateObj) : '日付なし';
+                  tableRowsHTML += `<tr class="appointment-day"><th scope="rowgroup" colspan="${SOSLIST_TARGET.deleteColumn ? 12 : 11}">${escapeHtml(dateLabel)}</th></tr>`;
+                  mobileCardsHTML += `<h2 class="appointment-day-heading">${escapeHtml(dateLabel)}</h2>`;
+              }
               tableRowsHTML += `
                   <tr data-id="${docId}" class="${rowClass}">
-                      <td class="col-show show-toggle-cell">${checkmark}</td>
-                      <td class="col-date date-cell">${displayDate}</td>
-                      <td class="col-name name-cell${data.notes ? '' : ' name-no-notes'}">${escapeHtml(data.claimantName || '')}</td>
-                      <td class="col-age ${ageCellClass}">${escapeHtml(displayAge)}</td>
-                      <td class="col-contract contract-cell">${escapeHtml(data.contractNumber || '')}</td>
-                      <td class="col-phone phone-cell">${escapeHtml(data.japanCellPhone || '')}</td>
-                      <td class="${servicesCellClass}">${escapeHtml(displayServicesText)}</td>
-                      <td class="col-referral">${referralHTML}</td>
-                      <td class="${visitdateCellClass}">${visitdateHTML}</td>
-                      <td class="${receivedCellClass}">${receivedHTML}</td>
-                      <td class="${completedCellClass}">${completedHTML}</td>${deleteCellHTML}
+                      <td class="col-show"><button type="button" class="show-toggle-cell status-toggle" aria-label="来院" aria-pressed="${isShown}">${checkmark || '未'}</button></td>
+                      <td class="col-date"><button type="button" class="cell-link date-cell" title="予約日時を変更">${displayDate}</button></td>
+                      <td class="col-name"><button type="button" class="cell-link name-cell${data.notes ? '' : ' name-no-notes'}" title="予約詳細を開く">${escapeHtml(data.claimantName || '')}</button></td>
+                      <td class="col-age"><button type="button" class="cell-link ${ageCellClass}" title="色のフラグを切り替え">${escapeHtml(displayAge)}</button></td>
+                      <td class="col-contract"><button type="button" class="cell-link contract-cell" title="201Bill PDFを開く">${escapeHtml(data.contractNumber || '')}</button></td>
+                      <td class="col-phone"><button type="button" class="cell-link phone-cell" title="電話番号を編集">${escapeHtml(data.japanCellPhone || '未入力')}</button></td>
+                      <td class="${servicesCellClass}">${servicesHTML}</td>
+                      ${referralCellsHTML}${deleteCellHTML}
                   </tr>`;
 
               if (SOSLIST_TARGET.mobileUI) mobileCardsHTML += `
-                  <article class="appointment-card${rowClass ? ' date-boundary' : ''}" data-id="${docId}">
+                  <article class="appointment-card${expandedCardId === docId ? ' is-expanded' : ''}" data-id="${docId}">
                       <div class="appointment-card-top">
                           <button type="button" class="appointment-card-name name-cell${data.notes ? '' : ' name-no-notes'}">${escapeHtml(data.claimantName || '')}</button>
                           <div class="appointment-card-flags">
-                              <button type="button" class="appointment-flag show-toggle-cell" aria-label="来院表示">${checkmark || '来'}</button>
-                              <button type="button" class="appointment-flag contract-cell" aria-label="201Bill PDF">P</button>
+                              <button type="button" class="appointment-flag show-toggle-cell" aria-label="来院表示" aria-pressed="${isShown}">${checkmark || '未'}</button>
+                              <button type="button" class="appointment-flag contract-cell" aria-label="201Bill PDF">PDF</button>
                           </div>
                       </div>
-                      <div class="appointment-card-meta">${mobileDateText}</div>
+                      <div class="appointment-card-meta"><span>${mobileDateText}</span><button type="button" class="card-expand" aria-expanded="${expandedCardId === docId}">${expandedCardId === docId ? '折りたたむ' : '詳細を展開'}</button></div>
                       <div class="appointment-card-services">${escapeHtml(displayServicesText || '検査内容なし')}</div>
                       <div class="appointment-card-compact-extra">
                           ${mobileReferralStatusHTML || `
@@ -366,7 +376,7 @@ function setupRealtimeListener() {
                       <div class="appointment-card-grid">
                           <div><span class="appointment-card-label">契約番号</span><span class="appointment-card-value">${escapeHtml(data.contractNumber || '')}</span></div>
                           <div><span class="appointment-card-label">年齢</span><span class="appointment-card-value ${ageCellClass}">${escapeHtml(displayAge)}</span></div>
-                          <div><span class="appointment-card-label">電話</span><button type="button" class="appointment-card-value phone-cell">${escapeHtml(data.japanCellPhone || '')}</button></div>
+                          <div><span class="appointment-card-label">電話</span><button type="button" class="appointment-card-value phone-cell" title="電話番号を編集">${escapeHtml(data.japanCellPhone || '未入力')}</button></div>
                           ${mobileReferralStatusHTML ? '' : `<div><span class="appointment-card-label">受診日</span><div class="appointment-card-value appointment-card-referral-status">${visitdateHTML || '<span class="appointment-card-empty">未入力</span>'}</div></div>`}
                       </div>
                       <div class="appointment-card-footer">
@@ -381,15 +391,62 @@ function setupRealtimeListener() {
                   </article>`;
               previousDateStr = currentDateStr;
           });
-          tableBody.innerHTML = tableRowsHTML;
+          tableBody.innerHTML = tableRowsHTML || `<tr><td colspan="${SOSLIST_TARGET.deleteColumn ? 12 : 11}" class="appointments-empty">この開始日以降の予約はありません。</td></tr>`;
           const mobileList = SOSLIST_TARGET.mobileUI ? document.getElementById('mobileAppointmentsList') : null;
           if (mobileList) {
               mobileList.innerHTML = mobileCardsHTML || '<p class="mobile-empty">該当する予約はありません。</p>';
           }
+          window.sosListUI?.restoreFocus(previousFocus);
       }, error => {
           console.error("Firestoreのリアルタイム監視でエラー:", error);
           connection?.error(connectionToken, error);
       });
+}
+
+async function toggleAppointmentStatus(target, docId, field, destKey = null) {
+    if (target.disabled) return;
+    const previousFocus = typeof window !== 'undefined' ? window.sosListUI?.captureFocus() : null;
+    target.disabled = true;
+    target.setAttribute('aria-busy', 'true');
+    try {
+        const ref = db.collection('appointments').doc(docId);
+        const doc = await ref.get();
+        if (!doc.exists) throw new Error('Appointment not found');
+        const data = doc.data();
+        const destIndex = destKey ? determineReferralDests(data.services || [], null, data).indexOf(destKey) : -1;
+        const current = destKey
+            ? getReferralStateValue(data, destKey, field, field, destIndex) === true
+            : data[field] === true;
+        const key = destKey ? `referrals.${destKey}.${field}` : field;
+        await ref.update({ [key]: !current });
+        target.setAttribute('aria-pressed', String(!current));
+        target.classList.toggle('is-active', !current);
+        target.textContent = field === 'isShown' ? (!current ? '✅' : '未') : `${field === 'isReceived' ? '受領' : '完了'}${!current ? '✓' : ''}`;
+    } catch (error) {
+        console.error('状態の更新に失敗しました:', error);
+        alert('状態を更新できませんでした。もう一度お試しください。');
+    } finally {
+        target.disabled = false;
+        target.removeAttribute('aria-busy');
+        if (previousFocus && document.activeElement === document.body) window.sosListUI?.restoreFocus(previousFocus);
+    }
+}
+
+// Presentation only: the original service text and referral routing stay intact.
+function buildServicesPreviewHTML(services, displayText, editable = false, expanded = false) {
+    const tokens = normalizeServiceTokens(services);
+    const labels = [];
+    if (tokens.some(s => /AUDIOLOG|AUDIOMETRY/i.test(s))) labels.push('聴力');
+    if (tokens.some(s => /DBQs?|GEN\s*MED/i.test(s))) labels.push('一般診察');
+    if (!labels.length) labels.push('検査');
+    const badges = `<span class="service-labels">${labels.map(label => `<span>${label}</span>`).join('')}</span>`;
+    const text = escapeHtml(displayText || '検査内容なし');
+    const editButton = editable ? '<button type="button" class="services-cell service-edit">検査内容を編集</button>' : '';
+    if (displayText.length <= 110) return `${badges}<div class="service-text">${text}</div>${editButton}`;
+    return `<details class="services-preview"${expanded ? ' open' : ''}>
+        <summary>${badges}<span class="service-excerpt">${text}</span><span class="service-expand-label">全文を表示／折りたたむ</span></summary>
+        <div class="service-text">${text}</div>
+    </details>${editButton}`;
 }
 
 function updateOpenShokaijyoVisitDate(data) {
@@ -1083,11 +1140,11 @@ function buildMobileReferralStatusHTML(data, referralDests) {
             : `<button type="button" class="mobile-referral-date visitdate-cell" data-dest="${dk}">${visitDate ? escapeHtml(visitDate) : '未入力'}</button>`;
 
         return `
-            <div class="mobile-referral-row">
+            <div class="mobile-referral-row" data-dest="${dk}">
                 <${labelTag} ${labelTag === 'button' ? 'type="button" ' : ''}class="mobile-referral-dest ${labelClass}${isSaved ? ' saved' : ''}" data-dest="${dk}">${escapeHtml(label)}</${labelTag}>
                 ${dateHTML}
-                <button type="button" class="mobile-referral-check received-cell${isReceived ? ' is-active' : ''}" data-dest="${dk}" aria-label="${escapeHtml(label)} 受領">${isReceived ? '受✓' : '受'}</button>
-                <button type="button" class="mobile-referral-check completed-cell${isCompleted ? ' is-active' : ''}" data-dest="${dk}" aria-label="${escapeHtml(label)} 完了">${isCompleted ? '済✓' : '済'}</button>
+                <button type="button" class="mobile-referral-check received-cell${isReceived ? ' is-active' : ''}" data-dest="${dk}" aria-label="${escapeHtml(label)} 受領" aria-pressed="${isReceived}">${isReceived ? '受領✓' : '受領'}</button>
+                <button type="button" class="mobile-referral-check completed-cell${isCompleted ? ' is-active' : ''}" data-dest="${dk}" aria-label="${escapeHtml(label)} 完了" aria-pressed="${isCompleted}">${isCompleted ? '完了✓' : '完了'}</button>
             </div>`;
     }).join('');
 

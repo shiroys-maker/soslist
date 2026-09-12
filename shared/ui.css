@@ -1,0 +1,119 @@
+/* Shared screen UI. Keep referral sheets and print layouts on their existing styles. */
+@media screen {
+    :root { --ui-ink: #243047; --ui-muted: #58677c; --ui-accent: #514170; --ui-border: #dce2eb; }
+    body { background: #f5f7fb; color: var(--ui-ink); font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif; }
+    #main-app-container { padding: 14px 16px; }
+    #main-app-container > h1 { position: static; width: auto; margin: 0 0 16px; padding: 16px 20px; border-radius: 10px; font-size: 21px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+    #auth-status { position: static; font-size: 12px; gap: 12px; }
+    #auth-status button { font-size: 12px; padding: 6px 10px; }
+    #connection-status { margin-bottom: 8px; border-radius: 6px; }
+    .filter-section { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 14px 24px; margin-bottom: 12px; }
+    .search-area, .date-filter-area { display: grid; gap: 6px; align-items: center; }
+    .search-area { grid-template-columns: minmax(170px, 280px) auto; }
+    .date-filter-area { grid-template-columns: 36px minmax(145px, 170px) 36px auto; }
+    .search-area label, .date-filter-area label { grid-column: 1 / -1; font-size: 12px; color: var(--ui-muted); }
+    .filter-section input, .secondary-controls input, .secondary-controls select { box-sizing: border-box; min-height: 36px; border: 1px solid #b8c3d2; border-radius: 6px; background: white; padding: 5px 8px; font-size: 14px; color: var(--ui-ink); }
+    .search-area input { width: 100%; min-width: 0; }
+    .filter-section button { min-height: 36px; }
+    .date-filter-area input { width: 100%; min-width: 0; }
+    .secondary-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; margin-bottom: 14px; }
+    .secondary-controls h2 { font-size: 13px; color: var(--ui-muted); }
+    .secondary-controls button { min-height: 34px; }
+    .secondary-controls .invoice-controls, .secondary-controls .summary-controls { display: flex; align-items: center; gap: 6px; }
+    .secondary-controls .summary-area { flex-wrap: wrap; }
+    .summary-status:empty { display: none; }
+    .data-section { overflow: auto; max-height: var(--list-height, 70vh); background: white; border: 1px solid var(--ui-border); border-radius: 8px; margin-bottom: 0; }
+    #appointmentsTable { width: 100%; min-width: 1120px; table-layout: fixed; border: 0; border-collapse: separate; border-spacing: 0; }
+    #appointmentsTable th, #appointmentsTable td { box-sizing: border-box; border: 0; border-bottom: 1px solid var(--ui-border); padding: 9px 6px; font-size: 13px; line-height: 1.45; vertical-align: top; overflow-wrap: anywhere; }
+    #appointmentsTable thead th { position: sticky; top: 0; z-index: 3; background: #eef0f7; color: #514170; font-size: 12px; border-bottom: 1px solid #bec8d8; vertical-align: middle; }
+    #appointmentsTable tbody tr[data-id]:hover { background: #f8faff; }
+    #appointmentsTable .col-show { width: 44px; text-align: center; background: transparent; }
+    #appointmentsTable .col-date { width: 86px; }
+    #appointmentsTable .col-name { width: 132px; }
+    #appointmentsTable .col-age { width: 38px; }
+    #appointmentsTable .col-contract { width: 105px; }
+    #appointmentsTable .col-phone { width: 117px; }
+    #appointmentsTable .col-actions { width: 38px; }
+    #appointmentsTable .col-referral-status { width: 322px; padding: 9px 8px; }
+    #appointmentsTable .appointment-day th { background: #eaf0f8; color: #31445f; padding: 7px 10px; font-size: 13px; border-top: 1px solid #cbd6e6; }
+    #appointmentsTable tr.date-boundary td { border-top: 0; }
+    #appointmentsTable .appointments-empty { padding: 32px; text-align: center; color: var(--ui-muted); }
+    #appointmentsTable button.cell-link { background: transparent; border: 0; border-radius: 4px; padding: 2px 0; min-height: 28px; text-shadow: none; font-size: inherit; line-height: inherit; text-align: left; max-width: 100%; overflow-wrap: anywhere; }
+    #appointmentsTable .name-cell { font-size: 14px !important; font-weight: 650; }
+    #appointmentsTable .name-no-notes { color: #6e4294; }
+    #appointmentsTable .date-cell { color: #243047; font-weight: 650; }
+    #appointmentsTable .phone-cell { font-size: 12px !important; color: #455773; }
+    #appointmentsTable .status-toggle { min-width: 30px; min-height: 32px; padding: 2px; font-size: 12px; color: var(--ui-muted); }
+    #appointmentsTable .status-toggle[aria-pressed="true"] { background: #eaf7ee; border-color: #86b997; }
+    .referral-grid-header, .mobile-referral-row { display: grid; grid-template-columns: 64px minmax(0, 1fr) 44px 44px; gap: 6px; align-items: stretch; width: 100%; }
+    .referral-grid-header span { text-align: center; }
+    .mobile-referral-status { display: grid; gap: 6px; width: 100%; }
+    .mobile-referral-dest, .mobile-referral-date, .mobile-referral-check { box-sizing: border-box; display: flex; align-items: center; justify-content: center; min-width: 0; min-height: 36px; height: auto; margin: 0; padding: 4px; border: 1px solid #d5ddea; border-radius: 6px; background: #fff; color: var(--ui-ink); font-size: 12px; line-height: 1.35; text-shadow: none; white-space: normal; overflow-wrap: anywhere; }
+    .mobile-referral-dest { background: #f2eef8; color: #5a3b7c; font-weight: 650; }
+    .mobile-referral-dest.saved { color: #176338; border-color: #8bb69c; }
+    .mobile-referral-dest.referral-lab { color: #176883; background: #e8f5fa; cursor: default; }
+    .mobile-referral-date { font-variant-numeric: tabular-nums; }
+    .mobile-referral-check { color: #58677c; font-weight: 650; }
+    .mobile-referral-check.is-active { background: #eaf7ee; border-color: #8bb69c; color: #176338; }
+    .mobile-referral-status-empty { color: var(--ui-muted); font-size: 12px; padding: 4px 0; }
+    .referral-lab-date { border-color: transparent; background: transparent; cursor: default; }
+    .service-labels { display: flex; gap: 4px; margin-bottom: 5px; }
+    .service-labels > span { background: #eef2f7; color: #4b5d78; border-radius: 4px; padding: 1px 5px; font-size: 11px; font-weight: 600; }
+    .service-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+    .services-preview > summary { cursor: pointer; list-style: none; border-radius: 4px; }
+    .services-preview > summary::-webkit-details-marker { display: none; }
+    .service-excerpt { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+    .services-preview[open] .service-excerpt { display: none; }
+    .service-expand-label { display: block; color: #355c91; font-size: 12px; margin: 4px 0; }
+    #appointmentsTable .service-edit { display: block; border: 0; background: transparent; color: #355c91; text-shadow: none; padding: 4px 0; font-size: 12px; font-weight: normal; margin-top: 4px; }
+    :is(button, input, select, textarea, summary, a):focus-visible { outline: 3px solid #558bd1; outline-offset: 2px; }
+    .appointment-day-heading { margin: 8px 2px 0; font-size: 15px; color: #31445f; }
+    .card-expand { display: none; }
+}
+
+@media screen and (max-width: 768px) {
+    #main-app-container { padding: 10px; }
+    #main-app-container > h1 { margin: 0 0 12px; padding: 12px; font-size: 17px; border-radius: 8px; }
+    #main-app-container #auth-status { display: none; }
+    .filter-section { display: grid; gap: 12px; margin: 0 0 10px; padding: 12px; border: 1px solid var(--ui-border); border-radius: 10px; background: white; }
+    .filter-section .search-area, .filter-section .date-filter-area { width: 100%; min-width: 0; display: grid; gap: 6px; }
+    .filter-section .search-area { grid-template-columns: minmax(0, 1fr) 60px; }
+    .filter-section .date-filter-area { grid-template-columns: 44px minmax(0, 1fr) 44px 44px; }
+    .filter-section label { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    .filter-section .search-area input, .filter-section .date-filter-area input[type="date"] { min-width: 0; width: 100%; min-height: 44px; font-size: 16px; padding: 5px; }
+    .filter-section button { min-width: 0; min-height: 44px; padding: 4px; font-size: 13px; }
+    /* Keep the native date wide enough even at 320px. */
+    .filter-section .date-filter-area { grid-template-columns: 44px minmax(0, 1fr) 44px; }
+    .filter-section #todayDateButton { grid-column: 1 / -1; min-height: 30px; }
+    .mobile-controls-toggle { display: block; width: auto; min-width: 160px; min-height: 36px; margin: 0 auto 10px; padding: 7px 12px; border-radius: 7px; box-shadow: none; font-size: 12px; }
+    .mobile-controls-panel { max-height: 0; overflow: hidden; opacity: 0; margin: 0; transform: none; }
+    .mobile-controls-panel.is-open { max-height: none; overflow: visible; opacity: 1; margin-bottom: 12px; }
+    .secondary-controls { padding: 12px; margin: 0 0 12px; display: grid; gap: 12px; border: 1px solid var(--ui-border); border-radius: 10px; background: white; }
+    .secondary-controls .invoice-area, .secondary-controls .summary-area { display: grid; gap: 6px; width: 100%; }
+    .secondary-controls h2 { font-size: 12px; }
+    .secondary-controls input, .secondary-controls select, .secondary-controls .summary-controls input[type="date"] { min-height: 44px; min-width: 0; font-size: 16px; }
+    .secondary-controls button { min-height: 44px; min-width: 38px; padding: 5px; font-size: 13px; }
+    .secondary-controls .invoice-controls { display: flex; flex-wrap: wrap; }
+    .secondary-controls .summary-controls { display: grid; grid-template-columns: 38px minmax(0, 1fr) 38px; }
+    .secondary-controls .summary-controls input { width: 100%; }
+    .secondary-controls #showSummaryButton, .secondary-controls #generateSummaryButton { grid-column: 1 / -1; }
+    .data-section { max-height: none; overflow: visible; border: 0; border-radius: 0; background: transparent; }
+    .mobile-view-toggle { margin: 0 0 10px; }
+    .mobile-view-toggle button { min-height: 44px; }
+    .mobile-appointments-list { gap: 10px; }
+    body[data-mobile-view-mode] .appointment-card { padding: 12px; border-radius: 10px; background: white; box-shadow: 0 2px 6px #23334d08; }
+    .appointment-card.date-boundary { border-top-width: 1px; }
+    body[data-mobile-view-mode] .appointment-card-name { font-size: 16px; }
+    body[data-mobile-view-mode] .appointment-flag { min-width: 44px; min-height: 44px; padding: 4px; font-size: 12px; }
+    .appointment-card-top { gap: 6px; }
+    .appointment-card-meta { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+    .appointment-card-flags { gap: 4px; }
+    .appointment-card .mobile-referral-row { grid-template-columns: 58px minmax(0, 1fr) 44px 44px; gap: 4px; }
+    .appointment-card .mobile-referral-dest, .appointment-card .mobile-referral-date, .appointment-card .mobile-referral-check { min-height: 44px; font-size: 12px; padding: 3px; border-radius: 6px; }
+    .appointment-card .mobile-referral-date { white-space: normal; }
+    .appointment-card .mobile-referral-dest.referral-lab { color: #176883; }
+    .appointment-card-grid .appointment-card-value.phone-cell { min-height: 44px; }
+    body[data-mobile-view-mode="compact"] .card-expand { display: block; width: auto; flex-shrink: 0; min-height: 36px; text-align: right; margin: 0; border: 0; background: transparent; color: #355c91; text-shadow: none; padding: 2px 0; font-size: 12px; }
+    .modal-content input, .modal-content select, .modal-content textarea { font-size: 16px !important; }
+    .modal-content button { min-height: 44px; }
+}
