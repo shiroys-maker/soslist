@@ -92,6 +92,7 @@ test('hearing label is reserved for standalone hearing loss and tinnitus DBQ app
     const labels = services => ctx.buildServicesPreviewHTML(services, services.join(', ')).match(/<span class="service-labels">(.*?)<\/span><\/span>/)[1];
     for (const services of [
         ['Audiologist Examination'],
+        ['COMPREHENSIVE AUDIO TESTING', 'TYMPANOMETRY & REFLEX THRESH', 'Audiologist Examination'],
         ['Hearing Loss and Tinnitus DBQ'],
         ['DBQ AUDIO Hearing Loss and Tinnitus', 'AUDIOMETRY'],
         ['Hearing Loss & Tinnitus DBQ', 'TYMPANOMETRY']

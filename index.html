@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SOS Appointment Viewer</title>
-    <link rel="stylesheet" href="style.css?v=20260913-ui5">
-    <link rel="stylesheet" href="shared/ui.css?v=20260913-ui5">
+    <link rel="stylesheet" href="style.css?v=20260913-ui6">
+    <link rel="stylesheet" href="shared/ui.css?v=20260913-ui6">
     <style>
         /* メインアプリを最初は非表示にする */
         #main-app-container { display: none; }
@@ -13,6 +13,7 @@
         .date-cell:hover { cursor: pointer; background-color: #f0f8ff; }
         .visitdate-cell:hover { cursor: pointer; background-color: #f0f8ff; }
     </style>
+    <link rel="stylesheet" href="shared/pdf-viewer.css?v=20260913-ui6">
 </head>
 <body>
 
@@ -221,10 +222,11 @@
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-storage-compat.js"></script>
     
-    <script src="shared/core.js?v=20260913-ui5"></script>
-    <script src="connection.js?v=20260913-ui5"></script>
-    <script src="script.js?v=20260913-ui5"></script>
+    <script src="shared/core.js?v=20260913-ui6"></script>
+    <script src="connection.js?v=20260913-ui6"></script>
+    <script src="script.js?v=20260913-ui6"></script>
 
-    <script src="shared/ui.js?v=20260913-ui5"></script>
+    <script src="shared/ui.js?v=20260913-ui6"></script>
+    <script src="shared/pdf-viewer.js?v=20260913-ui6"></script>
 </body>
 </html>

@@ -276,6 +276,7 @@ auth.onAuthStateChanged(user => {
 
         startLogoutTimer();
     } else {
+        window.sosPdfViewer?.close();
         window.sosConnection.stop();
         loginContainer.style.display = 'block';
         mainAppContainer.style.display = 'none';

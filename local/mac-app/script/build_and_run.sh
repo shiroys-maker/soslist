@@ -51,9 +51,10 @@ cp "$BIN_PATH" "$APP_DIR/Contents/MacOS/$APP_NAME"
 for f in index.html script.js connection.js style.css details.html details.js; do
   cp "$LOCAL_SOURCE_DIR/$f" "$WEB_RESOURCES_DIR/local/"
 done
-for f in core.js ui.css ui.js; do
+for f in core.js ui.css ui.js pdf-viewer.js pdf-viewer.css; do
   cp "$SHARED_SOURCE_DIR/$f" "$WEB_RESOURCES_DIR/shared/"
 done
+cp -R "$SHARED_SOURCE_DIR/vendor" "$WEB_RESOURCES_DIR/shared/"
 cp "$SOURCE_ICON" "$WEB_RESOURCES_DIR/stamp.png"
 
 sips -z 16 16 "$SOURCE_ICON" --out "$ICONSET_DIR/icon_16x16.png" >/dev/null
