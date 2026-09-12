@@ -25,7 +25,8 @@
     // WKWebView uses a separate native print path; this control is for Cloud browsers.
     printButton.hidden = !!window.webkit?.messageHandlers?.loadPdfBytes;
     let printJob;
-    let enginePromise, loadingTask, pdf, renderTask, opener, downloadRequest, nativeDownload;
+    let enginePromise, readyPromise, warmupScheduled = false;
+    let loadingTask, pdf, renderTask, opener, downloadRequest, nativeDownload;
     let session = 0, rendering = 0, pageNumber = 1, zoom = 1, resizeTimer;
 
     function engine() {
@@ -37,6 +38,23 @@
             document.head.append(script);
         });
         return enginePromise;
+    }
+    function prepare() {
+        if (!readyPromise) readyPromise = engine().then(async lib => {
+            const worker = lib.PDFWorker.create({ verbosity: 0 });
+            try { await worker.promise; }
+            catch (error) { worker.destroy(); throw error; }
+            return { lib, worker };
+        }).catch(error => { readyPromise = null; throw error; });
+        return readyPromise;
+    }
+    function warmup() {
+        if (warmupScheduled) return;
+        warmupScheduled = true;
+        // Prepare only the bundled renderer. Never prefetch appointment PDFs.
+        const run = () => prepare().catch(() => { warmupScheduled = false; });
+        if (window.requestIdleCallback) window.requestIdleCallback(run, { timeout: 1000 });
+        else setTimeout(run, 0);
     }
     function download(url) {
         const native = window.webkit?.messageHandlers?.loadPdfBytes;
@@ -209,21 +227,39 @@
         document.body.classList.add('pdf-open');
         find('.pdf-close').focus();
         status.textContent = 'PDFを読み込んでいます…';
+        const started = performance.now(), timings = {};
+        delete dialog.dataset.loadTimings;
         try {
-            const [lib, url] = await Promise.all([engine(), resolveSource()]);
-            if (current !== session || !dialog.open) return;
-            status.textContent = 'PDFを取得しています…';
-            const data = await download(url);
+            // Download immediately after resolving the source, even on a cold renderer.
+            const [{ lib, worker }, data] = await Promise.all([
+                prepare().then(ready => { timings.rendererReady = Math.round(performance.now() - started); return ready; }),
+                (async () => {
+                    const url = await resolveSource();
+                    if (current !== session || !dialog.open) return;
+                    timings.sourceReady = Math.round(performance.now() - started);
+                    status.textContent = 'PDFを取得しています…';
+                    const bytes = await download(url);
+                    timings.downloaded = Math.round(performance.now() - started);
+                    return bytes;
+                })()
+            ]);
             if (current !== session || !dialog.open) return;
             status.textContent = 'PDFを表示しています…';
-            loadingTask = lib.getDocument({ data, cMapUrl: assetBase + 'cmaps/', standardFontDataUrl: assetBase + 'standard_fonts/',
+            loadingTask = lib.getDocument({ data, worker, cMapUrl: assetBase + 'cmaps/', standardFontDataUrl: assetBase + 'standard_fonts/',
                 wasmUrl: assetBase + 'wasm/', iccUrl: assetBase + 'iccs/', useWorkerFetch: false, isEvalSupported: false, verbosity: 0 });
             const loaded = await loadingTask.promise;
             if (current !== session || !dialog.open) return;
             pdf = loaded;
+            timings.parsed = Math.round(performance.now() - started);
             await render();
+            if (current === session && dialog.open) {
+                timings.displayed = Math.round(performance.now() - started);
+                // Numeric diagnostics only: no document identifiers, URLs or PDF contents.
+                dialog.dataset.loadTimings = JSON.stringify(timings);
+            }
         } catch (error) {
             if (current !== session || !dialog.open) return;
+            release();
             status.textContent = error.pdfSourceError ? error.message : 'PDFを表示できませんでした。通信状態を確認して、もう一度開いてください。';
             controls();
         }
@@ -240,5 +276,5 @@
         clearTimeout(resizeTimer);
         if (dialog.open) resizeTimer = setTimeout(render, 120);
     });
-    window.sosPdfViewer = { open, close };
+    window.sosPdfViewer = { open, close, warmup };
 })();
