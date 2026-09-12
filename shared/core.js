@@ -383,7 +383,7 @@ function setupRealtimeListener() {
                           ${mobileReferralStatusHTML || `
                               <div class="appointment-card-referrals appointment-card-referrals-full">${referralHTML || '<span class="appointment-card-label">紹介先なし</span>'}</div>
                               <div class="appointment-card-statuses">
-                                  <div class="appointment-flag appointment-card-referral-status" aria-label="受領">${receivedHTML || '受'}</div>
+                                  <div class="appointment-flag appointment-card-referral-status" aria-label="受診">${receivedHTML || '受'}</div>
                                   <div class="appointment-flag appointment-card-referral-status" aria-label="完了">${completedHTML || '済'}</div>
                               </div>
                           `}
@@ -421,7 +421,7 @@ async function toggleAppointmentStatus(target, docId, field, destKey = null) {
         await ref.update({ [key]: !current });
         target.setAttribute('aria-pressed', String(!current));
         target.classList.toggle('is-active', !current);
-        target.textContent = field === 'isShown' ? (!current ? '✅' : '未') : `${field === 'isReceived' ? '受領' : '完了'}${!current ? '✓' : ''}`;
+        target.textContent = field === 'isShown' ? (!current ? '✅' : '未') : `${field === 'isReceived' ? '受診' : '完了'}${!current ? '✓' : ''}`;
     } catch (error) {
         console.error('状態の更新に失敗しました:', error);
         alert('状態を更新できませんでした。もう一度お試しください。');
@@ -1143,7 +1143,7 @@ function buildMobileReferralStatusHTML(data, referralDests) {
             <div class="mobile-referral-row" data-dest="${dk}">
                 <${labelTag} ${labelTag === 'button' ? 'type="button" ' : ''}class="mobile-referral-dest ${labelClass}${isSaved ? ' saved' : ''}" data-dest="${dk}">${escapeHtml(label)}</${labelTag}>
                 ${dateHTML}
-                <button type="button" class="mobile-referral-check received-cell${isReceived ? ' is-active' : ''}" data-dest="${dk}" aria-label="${escapeHtml(label)} 受領" aria-pressed="${isReceived}">${isReceived ? '受領✓' : '受領'}</button>
+                <button type="button" class="mobile-referral-check received-cell${isReceived ? ' is-active' : ''}" data-dest="${dk}" aria-label="${escapeHtml(label)} 受診" aria-pressed="${isReceived}">${isReceived ? '受診✓' : '受診'}</button>
                 <button type="button" class="mobile-referral-check completed-cell${isCompleted ? ' is-active' : ''}" data-dest="${dk}" aria-label="${escapeHtml(label)} 完了" aria-pressed="${isCompleted}">${isCompleted ? '完了✓' : '完了'}</button>
             </div>`;
     }).join('');
