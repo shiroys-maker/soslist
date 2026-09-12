@@ -1,0 +1,42 @@
+{
+  "project": "sos-list-4d150",
+  "database": "(default)",
+  "location": "asia-northeast1",
+  "settings_verified_at": "2026-09-12T23:38:27.522223+09:00",
+  "pitr": "POINT_IN_TIME_RECOVERY_ENABLED",
+  "version_retention": "604800s",
+  "delete_protection": "DELETE_PROTECTION_ENABLED",
+  "schedules": [
+    {
+      "name": "projects/sos-list-4d150/databases/(default)/backupSchedules/8bb3e69e-8ead-4c61-a943-06608846df99",
+      "createTime": "2026-09-12T14:31:43.129476Z",
+      "retention": "8467200s",
+      "weeklyRecurrence": {
+        "day": "SUNDAY"
+      },
+      "updateTime": "2026-09-12T14:31:43.129476Z"
+    },
+    {
+      "name": "projects/sos-list-4d150/databases/(default)/backupSchedules/84c7df4b-b59c-4def-93c5-af9d1089813b",
+      "createTime": "2026-09-12T14:31:42.769843Z",
+      "retention": "2592000s",
+      "dailyRecurrence": {},
+      "updateTime": "2026-09-12T14:31:42.769843Z"
+    }
+  ],
+  "first_scheduled_backup_verified": false,
+  "cost_estimate": {
+    "storage_bytes": 14416986,
+    "measurement_time": "2026-09-12T14:27:00Z",
+    "pitr_usd_per_gib_month": 0.195,
+    "backup_usd_per_gib_month": 0.038,
+    "daily_copies": 30,
+    "weekly_copies": 14,
+    "steady_state_estimate_usd_month": 0.025067956058308482,
+    "clone_estimate_usd": 0.003448018808662891,
+    "pricing_location": "asia-northeast1",
+    "pricing_url": "https://cloud.google.com/firestore/pricing",
+    "assumption": "Database size remains constant; USD list prices, excluding tax and temporary verification reads/storage."
+  },
+  "restore_verification": "in_progress"
+}
