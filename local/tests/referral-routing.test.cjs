@@ -141,3 +141,58 @@ test('inline spaced/full-width/nested test details remain available to classific
   assert.equal(c.has_echo, false);
   assert.equal(c.has_ortho, false);
 });
+
+test('orthopedic counts follow body definitions and always supply a practical direction count', () => {
+  const cases = [
+    ['CERVICAL SPINE X-RAY, COMPLETE', '4方向'],
+    ['LUMBAR SPINE X-RAY, COMPLETE', '4方向'],
+    ['LUMBOSACRAL X-RAY, COMPLETE', '4方向'],
+    ['RIGHT FOOT X-RAY, COMPLETE', '3方向'],
+    ['LEFT HAND, LIMITED', '2方向'],
+    ['LEFT ANKLE X-RAY, LIMITED', '2方向'],
+    ['RIGHT SHOULDER, COMPLETE', '2方向'],
+    ['LEFT KNEE X-RAY, COMPLETE', '4方向'],
+    ['UNFAMILIAR BONE X-RAY, COMPLETE', '3方向'],
+    ['UNFAMILIAR BONE X-RAY, LIMITED', '2方向'],
+    ['CERVICAL SPINE X-RAY, COMPLETE, 5 VIEWS', '5方向'],
+    ['CERVICAL SPINE X-RAY, 4 OR 5 VIEWS', '4～5方向'],
+    ['RIGHT FOOT X-RAY, MINIMUM OF THREE VIEWS', '3方向以上'],
+    ['RIGHT FOOT X-RAY, 3 OR MORE VIEWS', '3方向以上'],
+  ];
+  for (const [source, expected] of cases) assert.equal(ctx.xrayViewLabel(source), expected, source);
+  assert.equal(ctx.xrayViewLabel('RIGHT KNEE X-RAY', '73564'), '4方向');
+  assert.equal(ctx.xrayViewLabel('RIGHT FOOT X-RAY', '73620R'), '2方向');
+  assert.equal(ctx.xrayViewLabel('RIGHT FOOT X-RAY, 3 VIEWS', '73620R'), '3方向');
+  assert.equal(ctx.xrayViewLabel('LEFT FOOT X-RAY', '72050'), '2方向');
+  assert.equal(ctx.normalizeXrayExamJa('頸椎X線（3方向）', 'CERVICAL SPINE X-RAY, COMPLETE'), '頸椎X線4方向');
+  assert.deepEqual(Array.from(ctx.extractOrthoXraysJp(['CERVICAL SPINE X-RAY', 'COMPLETE', 'LEFT HAND', 'LIMITED'])), ['頸椎レントゲン4方向', '左手レントゲン2方向']);
+  assert.deepEqual(Array.from(ctx.extractOrthoXraysJp(['CERVICAL SPINE X-RAY', 'COMPLETE', '5 VIEWS'])), ['頸椎レントゲン5方向']);
+  assert.deepEqual(Array.from(ctx.extractOrthoXraysJp(['LEFT FOOT X-RAY', '4 VIEWS'])), ['左足レントゲン4方向']);
+});
+
+test('existing generated directions update in the sheet without changing sources, owners or saved edits', () => {
+  const data = fixture();
+  data.services = ['CERVICAL SPINE X-RAY, COMPLETE', 'LUMBAR SPINE X-RAY, COMPLETE', 'RIGHT FOOT X-RAY, LIMITED', 'CHEST X-RAY, 2 VIEWS'];
+  data.cptCode = ['72050', '72110', '73620R', '71046'];
+  data.referralRouting = { version: 1, provider: 'codex', sourceServices: [...data.services], sourceCptCodes: [...data.cptCode], destinations: ['KIN'], reviewRequired: false,
+    purposes: { KIN: '頸椎X線（3方向）、腰椎X線、右足X線（荷重位）、胸部X線2方向の依頼' },
+    assignments: [
+      { serviceIndex: 0, destination: 'KIN', category: 'orthopedic_xray', examJa: '頸椎X線（3方向）' },
+      { serviceIndex: 1, destination: 'KIN', category: 'orthopedic_xray', examJa: '腰椎X線' },
+      { serviceIndex: 2, destination: 'KIN', category: 'orthopedic_xray', examJa: '右足X線（荷重位）' },
+      { serviceIndex: 3, destination: 'KIN', category: 'chest_xray', examJa: '胸部X線2方向' },
+    ],
+  };
+  const before = JSON.stringify(data);
+  const purpose = '頸椎X線4方向、腰椎X線4方向、右足X線（荷重位）2方向、胸部X線2方向の依頼';
+  assert.match(ctx.buildSheetHTML(data, 'KIN', null, null), new RegExp(purpose));
+  assert.match(ctx.buildSheetHTML(data, 'KIN', null, null, false), new RegExp(purpose));
+  assert.equal(JSON.stringify(data), before);
+  const saved = ctx.buildSheetHTML(data, 'KIN', { purpose: '手修正した検査依頼' }, null);
+  assert.match(saved, /手修正した検査依頼/);
+  assert.doesNotMatch(saved, /頸椎X線4方向/);
+  const blank = ctx.buildSheetHTML(data, 'KIN', { purpose: '' }, null);
+  assert.doesNotMatch(blank, /頸椎X線4方向/);
+  const legacy = { ...data }; delete legacy.referralRouting;
+  assert.match(ctx.buildSheetHTML(legacy, 'KIN', null, null), /頸椎レントゲン4方向、腰椎レントゲン4方向、右足レントゲン2方向/);
+});

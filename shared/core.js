@@ -965,6 +965,27 @@ function getCodexReferralRouting(data) {
     return routing;
 }
 
+// Refresh generated wording at display time; saved referral purposes still win below.
+function codexReferralPurpose(routing, destination) {
+    const original = routing.purposes[destination];
+    const assignments = routing.assignments || [];
+    const sources = routing.sourceServices;
+    if (assignments.length !== sources.length ||
+        new Set(assignments.map(a => a.serviceIndex)).size !== sources.length ||
+        assignments.some(a => !Number.isInteger(a.serviceIndex) || a.serviceIndex < 0 || a.serviceIndex >= sources.length)) return original;
+    const owned = assignments.filter(a => a.destination === destination);
+    if (!owned.length || owned.some(a => typeof a.examJa !== 'string' || !a.examJa.trim())) return original;
+    let hasOrtho = false;
+    const exams = owned.map(a => {
+        if (a.category !== 'orthopedic_xray') return a.examJa;
+        hasOrtho = true;
+        const code = routing.sourceCptCodes.length === sources.length ? routing.sourceCptCodes[a.serviceIndex] : '';
+        const exam = normalizeXrayExamJa(a.examJa, sources[a.serviceIndex], code);
+        return exam;
+    });
+    return hasOrtho ? [...new Set(exams)].join('、') + 'の依頼' : original;
+}
+
 function buildReferralReviewHTML(data) {
     if (!data?.referralRouting) return '';
     const routing = getCodexReferralRouting(data);
@@ -1187,6 +1208,55 @@ function normalizeServiceTokens(services) {
     return tokens;
 }
 
+// Keep these pure helpers identical to shared/core.js in SOSList.
+// Cervical/lumbar COMPLETE labels follow the requested clinic wording.
+// Explicit source counts win. Missing counts receive practical body-specific defaults,
+// as requested by the clinician; minimum CPT definitions do not prescribe extra views.
+function xrayViewLabel(service, cptCode = '') {
+    const words = { ONE: 1, TWO: 2, THREE: 3, FOUR: 4, FIVE: 5, SIX: 6, SEVEN: 7, EIGHT: 8, NINE: 9 };
+    const raw = String(service || '').toUpperCase().replace(/\b(ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE)\b/g, word => words[word]);
+    const explicit = raw.match(/\b(?:(MINIMUM(?: OF)?|AT LEAST)\s+)?([1-9])\s*(?:(?:-|–|\/|OR|TO)\s*([1-9])\s*|(OR MORE|AND MORE|\+)\s*)?(?:VIEWS?|PROJECTIONS?)\b/);
+    if (explicit) return explicit[2] + (explicit[3] ? `～${explicit[3]}` : '') + '方向' + (explicit[1] || explicit[4] ? '以上' : '');
+    const body = raw.replace(/[^A-Z0-9 ]/g, ' ').replace(/\s+/g, ' ');
+    const cervical = /\bCERVICAL\b|\bC SPINE\b|\bNECK\b/.test(body);
+    const lumbar = /\bLUMBAR\b|\bLUMBOSACRAL\b|\bL SPINE\b/.test(body);
+    // Small, verified table; match the body as well as a code from the same row.
+    const definitions = [
+        [/^(72040|72050|72052)$/, cervical, { 72040: '2方向', 72050: '4方向', 72052: '6方向' }],
+        [/^(72100|72110|72114)$/, lumbar, { 72100: '2方向', 72110: '4方向', 72114: '6方向' }],
+        [/^(73560|73562|73564)$/, /\bKNEE\b/.test(body), { 73560: '2方向', 73562: '3方向', 73564: '4方向' }],
+        [/^73030$/, /\bSHOULDER\b/.test(body), { 73030: '2方向' }],
+        [/^(73070|73080)$/, /\bELBOW\b/.test(body), { 73070: '2方向', 73080: '3方向' }],
+        [/^(73120|73130)$/, /\bHAND\b/.test(body), { 73120: '2方向', 73130: '3方向' }],
+        [/^(73600|73610)$/, /\bANKLE\b/.test(body), { 73600: '2方向', 73610: '3方向' }],
+        [/^(73620|73630)$/,  /\bFOOT\b/.test(body), { 73620: '2方向', 73630: '3方向' }],
+    ];
+    const code = String(cptCode || '').toUpperCase().match(/^(\d{5})(?:[- ]?(?:R|L|RT|LT))?$/)?.[1] || '';
+    for (const [pattern, matchesBody, views] of definitions) {
+        if (matchesBody && pattern.test(code)) return views[code];
+    }
+    if (/\bCOMPLETE\b/.test(body)) {
+        if (cervical || lumbar) return '4方向';
+        if (/\bSHOULDER\b/.test(body)) return '2方向';
+        if (/\bKNEE\b/.test(body)) return '4方向';
+        return '3方向';
+    }
+    if (/\bLIMITED\b/.test(body)) return '2方向';
+    if (/\b(?:FINGER|THUMB|TOE)\b/.test(body)) return '3方向';
+    if (/\bPELVIS\b/.test(body)) return '1方向';
+    return '2方向';
+}
+
+function normalizeXrayExamJa(examJa, service, cptCode = '') {
+    const semanticCount = String(examJa).match(/[1-9１-９]+(?:\s*[～〜~–－\-/・]\s*[1-9１-９]+)?\s*方向(?:以上)?/);
+    const hasOrderCount = /\b(?:COMPLETE|LIMITED|VIEWS?|PROJECTIONS?)\b/i.test(service) || /^\d{5}/.test(cptCode);
+    const label = !hasOrderCount && semanticCount ? semanticCount[0] : xrayViewLabel(service, cptCode);
+    if (!label) return examJa;
+    return String(examJa).replace(/方向数要確認/g, '').replace(/[0-9０-９]+(?:\s*[～〜~–－\-/・]\s*[0-9０-９]+)?\s*(?:方向|撮影方向)(?:以上|以下)?|全方向/g, '')
+        .replace(/[（(]\s*[)）]/g, '').trim() + label;
+}
+
+
 function translateOrthoXrayItem(rawItem, projection) {
     const raw = String(rawItem || '').toUpperCase().replace(/[^A-Z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
     if (!raw) return '';
@@ -1210,14 +1280,14 @@ function translateOrthoXrayItem(rawItem, projection) {
         [/\bTOE\b/, '足趾'],
         [/CERVICAL SPINE|\bC SPINE\b|\bNECK\b/, '頸椎'],
         [/THORACIC SPINE|\bT SPINE\b/, '胸椎'],
-        [/LUMBAR SPINE|\bL SPINE\b|\bBACK\b/, '腰椎'],
+        [/LUMBAR SPINE|LUMBOSACRAL|\bL SPINE\b|\bBACK\b/, '腰椎'],
         [/\bPELVIS\b/, '骨盤']
     ];
     const match = partMap.find(([pattern]) => pattern.test(raw));
     const part = match ? match[1] : raw.replace(/\b(RIGHT|LEFT|BILATERAL|LIMITED|COMPLETE|X RAY|XRAY|RADIOGRAPH|VIEWS?)\b/g, '').trim();
     if (!part) return '';
 
-    const direction = projection === 'complete' ? '3方向' : (projection === 'limited' ? '2方向' : '');
+    const direction = xrayViewLabel(`${rawItem} ${projection || ''}`);
     return `${side}${part}レントゲン${direction}`;
 }
 
@@ -1228,14 +1298,16 @@ function extractOrthoXraysJp(services) {
     const ORTHO_PLAIN_XRAY = /SHOULDER|CLAVICLE|HUMERUS|ELBOW|FOREARM|WRIST|HAND|FINGER|THUMB|HIP|FEMUR|KNEE|TIBIA|FIBULA|ANKLE|FOOT|TOE|CERVICAL SPINE|\bC SPINE\b|\bNECK\b|THORACIC SPINE|\bT SPINE\b|LUMBAR SPINE|\bL SPINE\b|\bBACK\b|\bPELVIS\b/i;
 
     for (let i = 0; i < arr.length; i++) {
-        const item = arr[i];
+        let item = arr[i];
         if (FACIAL_HEAD.test(item)) continue;
+        if (/^(?:(?:MINIMUM(?: OF)?|AT LEAST)\s+)?[1-9].*\b(?:VIEWS?|PROJECTIONS?)$/i.test(arr[i + 1] || '')) item += `, ${arr[++i]}`;
 
         if (/^(LIMITED|COMPLETE)$/i.test(arr[i + 1] || '')) {
             const projection = /^COMPLETE$/i.test(arr[i + 1]) ? 'complete' : 'limited';
-            const translated = translateOrthoXrayItem(item, projection);
+            let description = `${item}, ${arr[++i]}`;
+            if (/^(?:(?:MINIMUM(?: OF)?|AT LEAST)\s+)?[1-9].*\b(?:VIEWS?|PROJECTIONS?)$/i.test(arr[i + 1] || '')) description += `, ${arr[++i]}`;
+            const translated = translateOrthoXrayItem(description, projection);
             if (translated) xrays.push(translated);
-            i += 1;
             continue;
         }
 
@@ -1330,7 +1402,7 @@ function buildSheetHTML(patientData, destKey, saved, classification, editable = 
         if (e.has_ecg)        items.push('心電図');
     }
     const routing = getCodexReferralRouting(patientData);
-    const codexPurpose = routing?.destinations.includes(destKey) ? routing.purposes[destKey] : '';
+    const codexPurpose = routing?.destinations.includes(destKey) ? codexReferralPurpose(routing, destKey) : '';
     const defaultPurpose = codexPurpose || (items.length > 0 ? items.join('、') + 'の依頼' : '検査依頼');
 
     let defaultClinical = '';
