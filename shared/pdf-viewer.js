@@ -5,7 +5,7 @@
     dialog.className = 'pdf-dialog';
     dialog.setAttribute('aria-labelledby', 'pdfDialogTitle');
     dialog.innerHTML = `
-        <header class="pdf-header"><h2 id="pdfDialogTitle">PDF</h2><button type="button" class="pdf-close">閉じる</button></header>
+        <header class="pdf-header"><h2 id="pdfDialogTitle">PDF</h2><div class="pdf-header-actions"><button type="button" class="pdf-print">印刷</button><button type="button" class="pdf-close">閉じる</button></div></header>
         <div class="pdf-toolbar" aria-label="PDF操作">
             <button type="button" class="pdf-prev" aria-label="前のページ">◀</button>
             <span class="pdf-page-count" aria-live="polite"></span>
@@ -21,6 +21,10 @@
     const viewport = find('.pdf-viewport'), status = find('.pdf-status');
     const prev = find('.pdf-prev'), next = find('.pdf-next');
     const minus = find('.pdf-minus'), plus = find('.pdf-plus'), fit = find('.pdf-fit');
+    const printButton = find('.pdf-print');
+    // WKWebView uses a separate native print path; this control is for Cloud browsers.
+    printButton.hidden = !!window.webkit?.messageHandlers?.loadPdfBytes;
+    let printJob;
     let enginePromise, loadingTask, pdf, renderTask, opener, downloadRequest, nativeDownload;
     let session = 0, rendering = 0, pageNumber = 1, zoom = 1, resizeTimer;
 
@@ -65,15 +69,18 @@
         catch (error) { pending.reject(error); }
     };
     function controls() {
-        prev.disabled = !pdf || pageNumber <= 1;
-        next.disabled = !pdf || pageNumber >= pdf.numPages;
-        minus.disabled = !pdf || zoom <= 0.5;
-        plus.disabled = !pdf || zoom >= 3;
-        fit.disabled = !pdf;
+        const busy = !pdf || !!printJob;
+        prev.disabled = busy || pageNumber <= 1;
+        next.disabled = busy || pageNumber >= pdf.numPages;
+        minus.disabled = busy || zoom <= 0.5;
+        plus.disabled = busy || zoom >= 3;
+        fit.disabled = busy;
+        printButton.disabled = busy;
         find('.pdf-page-count').textContent = pdf ? `${pageNumber} / ${pdf.numPages}` : '— / —';
     }
     function release() {
         session++; rendering++;
+        clearPrint();
         clearTimeout(resizeTimer);
         downloadRequest?.abort(); downloadRequest = null;
         if (nativeDownload) {
@@ -87,6 +94,73 @@
         viewport.replaceChildren();
         status.textContent = '';
         controls();
+    }
+    function clearPrint() {
+        if (!printJob) return;
+        printJob.renderTask?.cancel();
+        printJob.frame.remove();
+        printJob.urls.forEach(url => URL.revokeObjectURL(url));
+        printJob = null;
+    }
+    async function print() {
+        if (!pdf || printJob) return;
+        const current = session, documentToPrint = pdf;
+        const frame = document.createElement('iframe');
+        frame.className = 'pdf-print-frame';
+        frame.title = 'PDF印刷';
+        dialog.append(frame);
+        const job = printJob = { frame, urls: [], renderTask: null };
+        controls();
+        const active = () => session === current && printJob === job;
+        try {
+            const printDocument = frame.contentDocument;
+            printDocument.open();
+            printDocument.write('<!doctype html><html><head><title>PDF</title><style>html,body{margin:0;padding:0}img{display:block;width:100%;height:100%}.page{break-after:page;overflow:hidden}.page:last-child{break-after:auto}@page{margin:0}</style></head><body></body></html>');
+            printDocument.close();
+            for (let number = 1; number <= documentToPrint.numPages; number++) {
+                status.textContent = `印刷を準備しています… ${number} / ${documentToPrint.numPages}`;
+                const page = await documentToPrint.getPage(number);
+                if (!active()) return;
+                const size = page.getViewport({ scale: 1 });
+                const scale = Math.min(150 / 72, Math.sqrt(12000000 / (size.width * size.height)));
+                const canvas = document.createElement('canvas');
+                const view = page.getViewport({ scale });
+                canvas.width = Math.ceil(view.width); canvas.height = Math.ceil(view.height);
+                job.renderTask = page.render({ canvasContext: canvas.getContext('2d'), viewport: view, intent: 'print', background: 'white' });
+                await job.renderTask.promise;
+                job.renderTask = null;
+                if (!active()) return;
+                const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+                canvas.width = canvas.height = 0;
+                if (!active()) return;
+                if (!blob) throw new Error('Print page failed');
+                const url = URL.createObjectURL(blob); job.urls.push(url);
+                const style = printDocument.createElement('style');
+                style.textContent = `@page pdf${number}{size:${size.width}pt ${size.height}pt}`;
+                printDocument.head.append(style);
+                const sheet = printDocument.createElement('div');
+                sheet.className = 'page';
+                sheet.style.cssText = `page:pdf${number};width:${size.width}pt;height:${size.height}pt`;
+                const img = printDocument.createElement('img');
+                img.src = url; sheet.append(img); printDocument.body.append(sheet);
+                await img.decode();
+                if (!active()) return;
+            }
+            status.textContent = '';
+            frame.contentWindow.addEventListener('afterprint', () => {
+                if (!active()) return;
+                setTimeout(() => {
+                    if (!active()) return;
+                    clearPrint(); controls(); printButton.focus();
+                }, 0);
+            }, { once: true });
+            frame.contentWindow.focus();
+            frame.contentWindow.print();
+        } catch (error) {
+            if (!active()) return;
+            clearPrint(); controls();
+            status.textContent = '印刷の準備に失敗しました。もう一度「印刷」を押してください。';
+        }
     }
     function close() {
         release();
@@ -155,6 +229,7 @@
         }
     }
     find('.pdf-close').addEventListener('click', close);
+    printButton.addEventListener('click', print);
     dialog.addEventListener('cancel', event => { event.preventDefault(); close(); });
     prev.addEventListener('click', () => { if (pdf && pageNumber > 1) { pageNumber--; render(); } });
     next.addEventListener('click', () => { if (pdf && pageNumber < pdf.numPages) { pageNumber++; render(); } });

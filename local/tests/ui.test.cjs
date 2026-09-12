@@ -93,6 +93,7 @@ test('hearing label is reserved for standalone hearing loss and tinnitus DBQ app
     for (const services of [
         ['Audiologist Examination'],
         ['COMPREHENSIVE AUDIO TESTING', 'TYMPANOMETRY & REFLEX THRESH', 'Audiologist Examination'],
+        ['COMPREHENSIVE AUDIO TESTING', 'TYMPANOMETRY & REFLEX THRESH', 'Routine Medical Opinion 1-3 Questions', 'Audiologist Examination'],
         ['Hearing Loss and Tinnitus DBQ'],
         ['DBQ AUDIO Hearing Loss and Tinnitus', 'AUDIOMETRY'],
         ['Hearing Loss & Tinnitus DBQ', 'TYMPANOMETRY']
@@ -103,6 +104,7 @@ test('hearing label is reserved for standalone hearing loss and tinnitus DBQ app
     for (const services of [
         ['AUDIOMETRY'],
         ['Audiology'],
+        ['Routine Medical Opinion 1-3 Questions'],
         ['AUDIOMETRY', 'Gen Med SHA Requiring 6-10 DBQs'],
         ['Audiologist Examination', 'Gen Med SHA Requiring 6-10 DBQs'],
         ['Hearing Loss and Tinnitus DBQ', 'Knee DBQ'],
