@@ -5,6 +5,9 @@
         dateInput.value = formatDateInTokyo(new Date());
         dateInput.dispatchEvent(new Event('change'));
     });
+    document.querySelectorAll('.results-waiting-toggle').forEach(button => {
+        button.addEventListener('click', () => setResultsWaitingMode(!resultsWaitingOnly));
+    });
 
     const list = document.querySelector('.data-section');
     const fitList = () => {

@@ -226,6 +226,64 @@ async function jumpToAdjacentSummaryReservationDate(direction) {
     }
 }
 
+let resultsWaitingOnly = false;
+
+function setResultsWaitingMode(enabled, reload = true) {
+    resultsWaitingOnly = enabled === true;
+    document.querySelectorAll('.results-waiting-toggle').forEach(button => {
+        button.setAttribute('aria-pressed', String(resultsWaitingOnly));
+    });
+    // Keep the normal start date intact while the results view searches the last two months.
+    for (const id of ['dateFilter', 'prevDateButton', 'nextDateButton', 'todayDateButton']) {
+        const control = document.getElementById(id);
+        if (control) control.disabled = resultsWaitingOnly;
+    }
+    if (reload) setupRealtimeListener();
+}
+
+function parseResultsVisitDate(raw, data) {
+    const match = typeof raw === 'string' && raw.trim().match(/^(?:(\d{4})[-/])?(\d{1,2})[/-](\d{1,2})(?:\s+(\d{1,2}):(\d{2}))?$/);
+    if (!match) return null;
+    const [, year, month, day, hour = '09', minute = '00'] = match;
+    if (+hour > 23 || +minute > 59) return null;
+    const anchor = getCorrectedAppointmentDate(data);
+    if (!year && (!anchor || !Number.isFinite(anchor.getTime()))) return null;
+    const baseYear = year ? +year : +formatDateInTokyo(anchor).slice(0, 4);
+    // Legacy MM/DD values omit the year. Resolve December/January around the appointment.
+    const years = year ? [baseYear] : [baseYear - 1, baseYear, baseYear + 1];
+    const candidates = years.map(y => {
+        const isoDate = `${y}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+        const date = new Date(`${isoDate}T${hour.padStart(2, '0')}:${minute}:00+09:00`);
+        return Number.isFinite(date.getTime()) && formatDateInTokyo(date) === isoDate ? date : null;
+    }).filter(Boolean);
+    if (!candidates.length) return null;
+    if (!year) candidates.sort((a, b) => Math.abs(a - anchor) - Math.abs(b - anchor));
+    return candidates[0];
+}
+
+function resultsWaitingCutoff(now) {
+    // Subtract two calendar months in JST, clamping month-end dates (e.g. April 30).
+    const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+    const day = jst.getUTCDate();
+    jst.setUTCDate(1);
+    jst.setUTCMonth(jst.getUTCMonth() - 2);
+    const lastDay = new Date(Date.UTC(jst.getUTCFullYear(), jst.getUTCMonth() + 1, 0)).getUTCDate();
+    jst.setUTCDate(Math.min(day, lastDay));
+    return new Date(jst.getTime() - 9 * 60 * 60 * 1000);
+}
+
+function isAwaitingResults(data, now = new Date()) {
+    const appointment = getCorrectedAppointmentDate(data);
+    if (!appointment || !Number.isFinite(appointment.getTime()) || appointment <= resultsWaitingCutoff(now)) return false;
+    return determineReferralDests(data.services || [], null, data).some((dest, index) => {
+        if (getReferralStateValue(data, dest, 'isCompleted', 'isCompleted', index) === true) return false;
+        // Lab happens onsite at the appointment; its displayed visit-date cell stays blank.
+        const visit = dest === 'LAB' ? appointment
+            : parseResultsVisitDate(getReferralStateValue(data, dest, 'visitDate', 'visitDate', index), data);
+        return visit !== null && visit.getTime() < now.getTime();
+    });
+}
+
 function setupRealtimeListener() {
     if (unsubscribe) {
         unsubscribe();
@@ -236,16 +294,23 @@ function setupRealtimeListener() {
     const filterDate = new Date(`${localDateStr}T00:00:00+09:00`);
     const connection = window.sosConnection;
     const connectionToken = connection?.begin();
-    unsubscribe = db.collection("appointments")
-      .where("appointmentDateTime", ">=", filterDate)
-      .orderBy("appointmentDateTime")
-      .limit(300)
-      .onSnapshot(...(connection ? [{ includeMetadataChanges: true }] : []), querySnapshot => {
-          if (connection && !connection.snapshot(connectionToken, querySnapshot)) return;
+    const waitingMode = resultsWaitingOnly;
+    let query = db.collection('appointments');
+    if (waitingMode) query = query.where('appointmentDateTime', '>', resultsWaitingCutoff(new Date())).orderBy('appointmentDateTime');
+    else query = query.where('appointmentDateTime', '>=', filterDate).orderBy('appointmentDateTime').limit(300);
+    // No row limit within the requested two-month window: don't omit pending referrals.
+    let active = true, latestSnapshot, refreshTimer;
+    tableBody.innerHTML = `<tr><td colspan="${SOSLIST_TARGET.deleteColumn ? 12 : 11}" class="appointments-empty">読み込み中…</td></tr>`;
+    const pendingMobileList = SOSLIST_TARGET.mobileUI ? document.getElementById('mobileAppointmentsList') : null;
+    if (pendingMobileList) pendingMobileList.innerHTML = '<p class="mobile-empty">読み込み中…</p>';
+    const renderSnapshot = querySnapshot => {
+          if (!active) return;
           const previousFocus = window.sosListUI?.captureFocus();
           const appointments = [];
+          const now = new Date();
           querySnapshot.forEach(doc => {
-              appointments.push({ id: doc.id, ...doc.data() });
+              const data = doc.data();
+              if (!waitingMode || isAwaitingResults(data, now)) appointments.push({ id: doc.id, ...data });
           });
           // ソート前に各アポイントメントの補正済み日時を計算・付与する
           appointments.forEach(appointment => {
@@ -391,17 +456,26 @@ function setupRealtimeListener() {
                   </article>`;
               previousDateStr = currentDateStr;
           });
-          tableBody.innerHTML = tableRowsHTML || `<tr><td colspan="${SOSLIST_TARGET.deleteColumn ? 12 : 11}" class="appointments-empty">この開始日以降の予約はありません。</td></tr>`;
+          const emptyMessage = waitingMode ? '結果待ちの予約はありません。' : 'この開始日以降の予約はありません。';
+          tableBody.innerHTML = tableRowsHTML || `<tr><td colspan="${SOSLIST_TARGET.deleteColumn ? 12 : 11}" class="appointments-empty">${emptyMessage}</td></tr>`;
           const mobileList = SOSLIST_TARGET.mobileUI ? document.getElementById('mobileAppointmentsList') : null;
           if (mobileList) {
-              mobileList.innerHTML = mobileCardsHTML || '<p class="mobile-empty">該当する予約はありません。</p>';
+              mobileList.innerHTML = mobileCardsHTML || `<p class="mobile-empty">${emptyMessage}</p>`;
           }
           window.sosListUI?.restoreFocus(previousFocus);
           window.sosPdfViewer?.warmup();
+    };
+    const stopSnapshot = query.onSnapshot(...(connection ? [{ includeMetadataChanges: true }] : []), querySnapshot => {
+          if (!active || (connection && !connection.snapshot(connectionToken, querySnapshot))) return;
+          latestSnapshot = querySnapshot;
+          renderSnapshot(querySnapshot);
+          if (waitingMode && !refreshTimer) refreshTimer = setInterval(() => renderSnapshot(latestSnapshot), 30000);
       }, error => {
+          if (!active) return;
           console.error("Firestoreのリアルタイム監視でエラー:", error);
           connection?.error(connectionToken, error);
       });
+    unsubscribe = () => { active = false; clearInterval(refreshTimer); stopSnapshot(); };
 }
 
 async function toggleAppointmentStatus(target, docId, field, destKey = null) {
