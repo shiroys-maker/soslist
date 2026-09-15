@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SOS Appointment Viewer</title>
-    <link rel="stylesheet" href="style.css?v=20260913-ui8">
-    <link rel="stylesheet" href="shared/ui.css?v=20260913-ui8">
+    <link rel="stylesheet" href="style.css?v=20260915-results1">
+    <link rel="stylesheet" href="shared/ui.css?v=20260915-results1">
     <style>
         /* メインアプリを最初は非表示にする */
         #main-app-container { display: none; }
@@ -13,7 +13,7 @@
         .date-cell:hover { cursor: pointer; background-color: #f0f8ff; }
         .visitdate-cell:hover { cursor: pointer; background-color: #f0f8ff; }
     </style>
-    <link rel="stylesheet" href="shared/pdf-viewer.css?v=20260913-ui8">
+    <link rel="stylesheet" href="shared/pdf-viewer.css?v=20260915-results1">
 </head>
 <body>
 
@@ -50,6 +50,7 @@
                 <input type="date" id="dateFilter">
                 <button type="button" id="nextDateButton" class="date-nav-button" aria-label="次の予約日">&#9654;</button>
                 <button type="button" id="todayDateButton">今日</button>
+                <button type="button" class="results-waiting-toggle results-waiting-desktop" aria-pressed="false">結果待ち</button>
             </div>
         </div>
         <div class="secondary-controls">
@@ -91,6 +92,7 @@
             <div class="mobile-view-toggle" id="mobileViewToggle" aria-label="モバイル表示切替">
                 <button type="button" id="mobileCompactViewButton" class="is-active">簡易</button>
                 <button type="button" id="mobileCardViewButton">詳細</button>
+                <button type="button" class="results-waiting-toggle results-waiting-mobile" aria-pressed="false">結果待ち</button>
             </div>
             <table id="appointmentsTable" aria-label="予約一覧">
                 <thead>
@@ -222,11 +224,11 @@
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-storage-compat.js"></script>
     
-    <script src="shared/core.js?v=20260913-ui8"></script>
-    <script src="connection.js?v=20260913-ui8"></script>
-    <script src="script.js?v=20260913-ui8"></script>
+    <script src="shared/core.js?v=20260915-results1"></script>
+    <script src="connection.js?v=20260915-results1"></script>
+    <script src="script.js?v=20260915-results1"></script>
 
-    <script src="shared/ui.js?v=20260913-ui8"></script>
-    <script src="shared/pdf-viewer.js?v=20260913-ui8"></script>
+    <script src="shared/ui.js?v=20260915-results1"></script>
+    <script src="shared/pdf-viewer.js?v=20260915-results1"></script>
 </body>
 </html>

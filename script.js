@@ -288,6 +288,7 @@ auth.onAuthStateChanged(user => {
 
         startLogoutTimer();
     } else {
+        setResultsWaitingMode(false, false);
         window.sosPdfViewer?.close();
         window.sosConnection.stop();
         loginContainer.style.display = 'block';
