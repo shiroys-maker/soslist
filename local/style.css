@@ -81,6 +81,21 @@ button:active {
     color: #333;
 }
 
+.col-actions { white-space: nowrap; }
+.dbq-btn {
+    margin-left: 5px;
+    border: 1px solid #a8c6dc;
+    border-radius: 5px;
+    padding: 4px 7px;
+    color: #165e91;
+    background: #eaf4fc;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+}
+.dbq-btn:hover { background: #d9ebfa; }
+.dbq-btn:disabled { opacity: .5; }
+
 #main-app-container h1 {
     background: linear-gradient(to right, #3c355e, #933495);
     color: white;

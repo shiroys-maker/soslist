@@ -226,6 +226,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             return
         }
 
+        if message.name == "openDBQProcessor" {
+            guard message.frameInfo.isMainFrame, let payload = message.body as? [String: Any],
+                  let docId = payload["docId"] as? String, !docId.isEmpty else { return }
+            openDBQProcessor(payload)
+            return
+        }
+
         if message.name == "runUtilityTool" {
             guard
                 let payload = message.body as? [String: Any],
@@ -468,6 +475,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         configuration.userContentController.add(self, name: "closeDetailsWindow")
         configuration.userContentController.add(self, name: "openQtcTool")
         configuration.userContentController.add(self, name: "runUtilityTool")
+        configuration.userContentController.add(self, name: "openDBQProcessor")
         configuration.userContentController.add(self, name: "printHTML")
         configuration.userContentController.add(self, name: "openExternalURL")
         configuration.userContentController.add(self, name: "loadPdfBytes")
@@ -1523,6 +1531,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             NSLog("Failed to probe server %@: %@", url.absoluteString, error.localizedDescription)
             return false
         }
+    }
+
+    private func openDBQProcessor(_ appointment: [String: Any]) {
+        let applicationURL = URL(fileURLWithPath: "/Applications/DBQ Processor.app", isDirectory: true)
+        guard FileManager.default.fileExists(atPath: applicationURL.path) else {
+            let alert = NSAlert()
+            alert.messageText = "DBQ Processorが見つかりません"
+            alert.informativeText = "/Applications/DBQ Processor.app をインストールしてください。"
+            alert.runModal()
+            return
+        }
+        do {
+            let directory = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/SOSList Local/DBQHandoff", isDirectory: true)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+            let requestURL = directory.appendingPathComponent(UUID().uuidString + ".dbqrequest")
+            let data = try JSONSerialization.data(withJSONObject: ["version": 1, "createdAt": Date().timeIntervalSince1970, "appointment": appointment])
+            guard data.count < 3_000_000 else { throw NSError(domain: appName, code: 2001, userInfo: [NSLocalizedDescriptionKey: "予約メモが大きすぎます。"] ) }
+            try data.write(to: requestURL, options: .atomic)
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: requestURL.path)
+            let configuration = NSWorkspace.OpenConfiguration()
+            configuration.activates = true
+            NSWorkspace.shared.open([requestURL], withApplicationAt: applicationURL, configuration: configuration) { _, error in
+                if let error {
+                    try? FileManager.default.removeItem(at: requestURL)
+                    DispatchQueue.main.async { NSApp.presentError(error) }
+                }
+            }
+        } catch { NSApp.presentError(error) }
     }
 
     private func runUtilityTool(named tool: String, details: [String: Any]?, sourceWebView: WKWebView?) {

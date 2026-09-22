@@ -4,6 +4,7 @@
 const SOSLIST_TARGET = {
     mobileUI: false,                              // モバイルUIなし
     deleteColumn: true,                           // 削除ボタン列あり
+    dbqProcessor: true,                           // DBQ Processor を起動
     perReferralStatus: true,                      // 紹介先ごとに受診日・受・済を管理
     servicesCellClass: 'col-services services-cell', // 検査内容セルは編集可
     referralHeaderDateMode: 'visitDate',
@@ -377,6 +378,18 @@ tableBody.addEventListener('click', (e) => {
         handleViewPdf(docId);
         return;
     }
+    const dbqButton = target.closest('.dbq-btn');
+    if (dbqButton) {
+        const handler = window.webkit?.messageHandlers?.openDBQProcessor;
+        if (!handler) { alert('DBQ ProcessorはSOSList Localアプリから開いてください。'); return; }
+        dbqButton.disabled = true;
+        db.collection('appointments').doc(docId).get().then(doc => {
+            if (!doc.exists) throw new Error('予約が見つかりません。');
+            handler.postMessage(buildDetailsPayload(docId, doc.data()));
+        }).catch(error => alert(error.message || 'DBQ Processorを開けませんでした。'))
+            .finally(() => { dbqButton.disabled = false; });
+        return;
+    }
     const deleteButton = target.closest('.delete-btn');
     if (deleteButton) {
         handleDeleteButtonClick(deleteButton, docId);
@@ -519,10 +532,17 @@ function buildDetailsPayload(docId, data) {
         services: Array.isArray(data.services) ? data.services : [],
         referralDests,
         referrals: sanitizedReferrals,
-        appointmentDateTimeMs: data.appointmentDateTime?.toDate
-            ? data.appointmentDateTime.toDate().getTime()
-            : null
+        appointmentDateTimeMs: normalizeAppointmentDateTimeMs(data.appointmentDateTime)
     };
+}
+
+function normalizeAppointmentDateTimeMs(value) {
+    const date = value?.toDate ? value.toDate()
+        : value && typeof value.seconds === 'number' ? new Date(value.seconds * 1000)
+        : typeof value === 'string' ? new Date(value)
+        : value instanceof Date ? value : null;
+    const milliseconds = date?.getTime();
+    return Number.isFinite(milliseconds) && milliseconds > 0 ? milliseconds : null;
 }
 
 function handleDetailStorageEvent(event) {

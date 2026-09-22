@@ -401,6 +401,7 @@ function setupRealtimeListener() {
                   ? `
                       <td class="col-actions">
                         <button class="delete-btn" aria-label="削除">🗑️</button>
+                        ${SOSLIST_TARGET.dbqProcessor ? '<button type="button" class="dbq-btn" aria-label="DBQ Processorを開く">DBQ</button>' : ''}
                       </td>`
                   : '';
 
