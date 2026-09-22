@@ -102,16 +102,19 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-# Finderの付加情報だけを除き、署名失敗をインストール前に検出する。
-xattr -dr com.apple.FinderInfo "$APP_DIR" 2>/dev/null || true
-xattr -dr com.apple.ResourceFork "$APP_DIR" 2>/dev/null || true
-xattr -d com.apple.FinderInfo "$APP_DIR" 2>/dev/null || true
-xattr -d com.apple.ResourceFork "$APP_DIR" 2>/dev/null || true
-codesign --force --deep --sign - "$APP_DIR"
-codesign --verify --deep --strict "$APP_DIR"
+# File Provider由来のFinder付加情報をコピーせず、一時領域で署名する。
+# 完成品は恒久ビルド先と /Applications に戻す。
+SIGN_DIR="$(mktemp -d /private/tmp/soslist-local-sign.XXXXXX)"
+trap 'rm -rf "$SIGN_DIR"' EXIT
+SIGNED_APP_DIR="$SIGN_DIR/$APP_NAME.app"
+ditto --norsrc --noextattr "$APP_DIR" "$SIGNED_APP_DIR"
+codesign --force --deep --sign - "$SIGNED_APP_DIR"
+codesign --verify --deep --strict "$SIGNED_APP_DIR"
+rm -rf "$APP_DIR"
+ditto --norsrc --noextattr "$SIGNED_APP_DIR" "$APP_DIR"
 
 if [ "$DO_INSTALL" -eq 1 ]; then
-  ditto --norsrc "$APP_DIR" "/Applications/$APP_NAME.app.new"
+  ditto --norsrc --noextattr "$SIGNED_APP_DIR" "/Applications/$APP_NAME.app.new"
   codesign --verify --deep --strict "/Applications/$APP_NAME.app.new"
   rm -rf "/Applications/$APP_NAME.app"
   mv "/Applications/$APP_NAME.app.new" "/Applications/$APP_NAME.app"
