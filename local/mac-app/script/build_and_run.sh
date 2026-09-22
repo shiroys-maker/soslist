@@ -102,11 +102,15 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-# ad-hoc署名（無署名だと初回起動でGatekeeperに弾かれることがある）
-codesign --force --deep --sign - "$APP_DIR" 2>/dev/null || true
+# Finderの付加情報だけを除き、署名失敗をインストール前に検出する。
+xattr -dr com.apple.FinderInfo "$APP_DIR" 2>/dev/null || true
+xattr -dr com.apple.ResourceFork "$APP_DIR" 2>/dev/null || true
+codesign --force --deep --sign - "$APP_DIR"
+codesign --verify --deep --strict "$APP_DIR"
 
 if [ "$DO_INSTALL" -eq 1 ]; then
-  ditto "$APP_DIR" "/Applications/$APP_NAME.app.new"
+  ditto --norsrc "$APP_DIR" "/Applications/$APP_NAME.app.new"
+  codesign --verify --deep --strict "/Applications/$APP_NAME.app.new"
   rm -rf "/Applications/$APP_NAME.app"
   mv "/Applications/$APP_NAME.app.new" "/Applications/$APP_NAME.app"
   echo "installed: /Applications/$APP_NAME.app (build $BUILD_SHA)"
