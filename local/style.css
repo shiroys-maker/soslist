@@ -81,7 +81,7 @@ button:active {
     color: #333;
 }
 
-.col-actions { white-space: nowrap; }
+body #appointmentsTable .col-actions { width: 88px; white-space: nowrap; }
 .dbq-btn {
     margin-left: 5px;
     border: 1px solid #a8c6dc;
