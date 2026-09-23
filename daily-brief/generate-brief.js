@@ -2,7 +2,7 @@
 /**
  * daily-brief / generate-brief.js
  * ------------------------------------------------------------------
- * 翌日(JST)の予約を Firestore から取得し、検査内容(services)とメモ(notes)を
+ * 翌日(JST)の予約を Firestore から取得し、検査内容(services)・Claim詳細(claimDetail)・メモ(notes)を
  * 判定ルールに沿って OpenAI で要約 + 二人対話のポッドキャスト台本を生成し、
  * クラウドTTSで音声(WAV/MP3)を出力する。
  *
@@ -467,8 +467,8 @@ function sampleAppointments() {
       id: 'sample4', time: '14:30', claimantName: 'GARCIA, LUIS',
       contractNumber: '6020888.4.1', age: 39, sex: '男性',
       services: ['PTSD DBQ', 'Mental Disorders'],
-      notes: 'PTSD 初回claim。IMO必要。過去にstressorの裏付け不足で一度reject。'
-        + '2008-2012アフガニスタン2回派遣、IED爆発の目撃エピソードあり。'
+      claimDetail: 'PTSD 初回claim。Direct IMO依頼。過去にstressorの裏付け不足で一度reject。',
+      notes: '2008-2012アフガニスタン2回派遣、IED爆発の目撃エピソードあり。'
         + '現在: 不眠・悪夢・過覚醒・回避傾向。民間でのカウンセリング歴半年。'
         + '軍歴(stressor)とのnexus、症状の発症時期と継続を要確認。',
       isAudiology: false,
@@ -504,6 +504,22 @@ function isBriefTooThin(summaryMarkdown, dialogue, appts) {
   return summaryLength < minimumSummaryChars(appts) || dialogueLength < minimumDialogueChars();
 }
 
+// 手動・定時・API・台本再生成で、分離保存されたClaim詳細の扱いを揃える。
+const CLAIM_AND_NOTES_INSTRUCTIONS = `# Claim詳細とメモの読み込み(最重要)
+- claimDetail は独立して保存された「Claim詳細」、notes は予約詳細画面の「メモ」。同じ予約の両方を全文読み、サマリーと台本の両方に反映する。
+- claim名・対象部位・左右・DBQ・IMO依頼は claimDetail を主な情報源とし、notes にだけあるclaim・IMO情報も補完する。claimDetail が空または未設定の従来予約は notes を根拠にする。
+- notes が空でも claimDetail に情報があれば必ず取り入れる。claim・IMOが notes の先頭にあるとは限らない。
+- 同じclaimが両方にあれば重複計上しない。別の予約の情報は混ぜず、同一患者でも契約番号・予約IDごとに扱う。
+- claimDetail と notes の内容が食い違う場合は、どちらかで黙って上書きせず、情報源を添えて相違と要確認事項を明記する。
+- IMO 種類は Direct / 2ndly / TERA などの明記された依頼をclaimごとに抽出する。同一claimに複数種類の依頼があればすべて残す。
+  同一予約内で「片頭痛は Direct、IBS は TERA、頚椎は 2ndly」のように混在しうるため、claim名ごとにIMOを対応づける。
+- 分類の一般ルールより claimDetail・notes の明示的な依頼内容を優先する。IMOの記載がないことだけを理由に「IMO不要」と断定せず、必要な情報がなければ「記載なし／要確認」とする。
+- notes の過去の病歴・受傷機転・手術歴・前回評価・経過・現在症状を時系列の文章で具体的に要約し、claimDetail に病歴があればそれも統合する。services は検査の種類の補足として使う。
+- services の単語の読み上げだけで済ませず、claimDetail と notes の具体情報を今回の検査・問診・DBQの確認点へ結びつける。
+- Audiologyでも claimDetail または notes にIMO依頼や注意点があれば省略しない。両方に特記がない場合だけ、氏名・年齢・性別・「聴覚のみ」と簡潔に述べてよい。
+- 各予約で、検査医が問診時に確認すべき項目を具体的に挙げる。IMOが必要な案件は nexus・受傷機転・発症時期・症状の継続、follow up案件は前回評価との比較・悪化/改善の客観的所見を重視する。
+- 入力にない病歴・診断・依頼を補わない。情報が少ない場合は不足を明記し、分量を満たすために事実を作らない。`;
+
 function buildGeminiPrompt(appts, ymd) {
   const targetChars = Math.round(PODCAST_MINUTES * 360);
   return `あなたは米国退役軍人(VA)障害認定検査クリニックの臨床コーディネーターであり、
@@ -534,21 +550,7 @@ function buildGeminiPrompt(appts, ymd) {
           「診断(評価)が前回から変わったか=悪化/改善の有無」が焦点。
       II. それ以外(過去にrejectされている、または初回claim): IMOが必要。
 
-# Claim詳細とメモの読み込み(最重要)
-- claimDetail は検査内容から分離したClaim詳細。claim・IMOの情報としてnotesと併せて読み、両者に相違があれば相違を明記する。
-- claim内容(主訴・対象部位)とIMOの有無は notes の先頭に書かれている。判定はnotesを最優先の根拠にする。
-- notes 先頭から、claim名と IMO 種類を抽出すること。IMO 種類は Direct / 2ndly / TERA を優先して拾い、
-  無い場合だけ「IMO不要」とみなす。
-- 重要: IMO 種類は予約全体で 1 つではなく、claim ごとに別々に判定すること。
-  同一予約内で「片頭痛は Direct、IBS は TERA、頚椎は 2ndly」のように混在しうる。
-  したがって claim 集計でも各予約行でも、claim 名ごとに IMO 種類を対応づけて表示すること。
-- notesに書かれた過去の病歴・受傷機転・手術歴・前回評価・経過・現在の症状を、
-  単語の羅列ではなく時系列の文章で具体的に要約する。servicesは検査の種類の補足として使う。
-- 「検査内容(services)に書かれた単語だけを読み上げる」のは禁止。必ずnotesの中身を咀嚼して語る。
-- notesが空のAudiology予約だけは、ルール1に従い深掘り不要(氏名・年齢・性別・聴覚のみと一言)。
-- 各予約で、検査医が問診時に確認すべき項目を具体的に挙げる。
-  IMOが必要な案件は nexus(軍歴との因果)・受傷機転・発症時期・症状の継続の確認点を重視。
-  follow up案件は「前回評価との比較」「悪化/改善の客観的所見」に重点。
+${CLAIM_AND_NOTES_INSTRUCTIONS}
 
 # claim集計の作り方(必須)
 - 1日全体の claim 集計は書かないこと。` + "`brief.md`" + ` の冒頭に全体集計段落は不要。
@@ -558,7 +560,7 @@ function buildGeminiPrompt(appts, ymd) {
 - それ以外は「整形以外」に入れる。
 - 各予約の claim まとめの形式は次に合わせる:
   整形以外4件（副鼻腔炎、GERD、片頭痛(direct IMO)、IBS(TERA IMO)）、整形4件（頚椎(2ndly IMO)、腰椎、膝(2ndly IMO)、足）
-- claim 名は notes 先頭から日本語で短く正規化して列挙する。同一予約に複数 claim があればそのまま並べてよい。
+- claim 名は claimDetail と notes から日本語で短く正規化し、対象部位・左右を保って重複なく列挙する。同一予約の別claimは省略しない。
 - IMO 種類が Direct / 2ndly / TERA のものだけ claim 名の後ろに「(<種類> IMO)」を付ける。
 - Direct は表示時に direct IMO、2ndly は 2ndly IMO、TERA は TERA IMO とする。
 
@@ -804,31 +806,17 @@ async function generateBrief(openai, appts, ymd) {
           「診断(評価)が前回から変わったか=悪化/改善の有無」が焦点。
       II. それ以外(過去にrejectされている、または初回claim): IMOが必要。
 
-# Claim詳細とメモの読み込み(最重要)
-- claimDetail は検査内容から分離したClaim詳細。claim・IMOの情報としてnotesと併せて読み、両者に相違があれば相違を明記する。
-- claim内容(主訴・対象部位)とIMOの有無は notes の先頭に書かれている。判定はnotesを最優先の根拠にする。
-- notes 先頭から、claim名と IMO 種類を抽出すること。IMO 種類は Direct / 2ndly / TERA を優先して拾い、
-  無い場合だけ「IMO不要」とみなす。
-- 重要: IMO 種類は予約全体で 1 つではなく、claim ごとに別々に判定すること。
-  同一予約内で「片頭痛は Direct、IBS は TERA、頚椎は 2ndly」のように混在しうる。
-  したがって claim 集計でも各予約行でも、claim 名ごとに IMO 種類を対応づけて表示すること。
-- notesに書かれた**過去の病歴・受傷機転・手術歴・前回評価・経過・現在の症状**を、
-  単語の羅列ではなく**時系列の文章で具体的に要約**する。servicesは検査の種類の補足として使う。
-- 「検査内容(services)に書かれた単語だけを読み上げる」のは禁止。必ずnotesの中身を咀嚼して語る。
-- notesが空のAudiology予約だけは、ルール1に従い深掘り不要(氏名・年齢・性別・聴覚のみと一言)。
-- 各予約で、検査医が問診時に確認すべき項目を具体的に挙げる。
-  IMOが必要な案件は nexus(軍歴との因果)・受傷機転・発症時期・症状の継続の確認点を重視。
-  follow up案件は「前回評価との比較」「悪化/改善の客観的所見」に重点。
+${CLAIM_AND_NOTES_INSTRUCTIONS}
 - **簡潔すぎる要約は禁止**。Audiology 以外の予約は、病歴要約で最低でも受傷/発症時期、経過、現在症状、今回の焦点を含めること。
 - Audiology 以外の各予約について、病歴要約は原則 6 文以上で書き、既往・治療歴・前回評価・現在の訴え・今回の検査焦点まで展開すること。
 - Audiology 以外の各予約では、確認すべき項目を最低5件は入れること。
 - 各非Audiology予約は、必ず次の情報を本文に含める:
-  1. notes先頭から抽出したclaim名とclaimごとのIMO種別
+  1. claimDetail と notes から抽出したclaim名とclaimごとのIMO種別
   2. 発症/受傷/診断の時期、軍歴や派遣歴との関係
-  3. 治療歴、手術歴、画像検査、前回評価などnotesにある客観情報
+  3. 治療歴、手術歴、画像検査、前回評価など claimDetail・notes にある客観情報
   4. 現在症状、機能制限、悪化/改善の比較点
   5. 当日の問診・DBQ・nexus確認で落とせない焦点
-- servicesだけからの推測で済ませず、notesにある具体語を患者ごとの準備事項へ展開すること。
+- servicesだけからの推測で済ませず、claimDetail と notes にある具体語を患者ごとの準備事項へ展開すること。
 - 対象日の各予約を省略せず、全件を個別に扱うこと。
 - summaryMarkdown 全体は最低でも約${summaryMinChars}文字以上を目安にし、短すぎる場合は自分で追記してから返すこと。
 
@@ -846,7 +834,7 @@ JSONを返す直前に、次の不足が1つでもあれば本文を自分で補
 - 非Audiology予約で病歴要約が6文未満。
 - 非Audiology予約で確認項目が5件未満。
 - claim名、claimごとのIMO種別、時系列、現在症状、今回の焦点のどれかが抜けている。
-- notesにある具体情報を services の言い換えだけで済ませている。
+- claimDetail または notes にある具体情報を services の言い換えだけで済ませている。
 - 非Audiology ${nonAudiologyCount}件のうち、briefまたはpodcastで個別に扱っていない予約がある。
 
 # claim集計の作り方(必須)
@@ -857,7 +845,7 @@ JSONを返す直前に、次の不足が1つでもあれば本文を自分で補
 - それ以外は「整形以外」に入れる。
 - 各予約の claim まとめの形式は次に合わせる:
   整形以外4件（副鼻腔炎、GERD、片頭痛(direct IMO)、IBS(TERA IMO)）、整形4件（頚椎(2ndly IMO)、腰椎、膝(2ndly IMO)、足）
-- claim 名は notes 先頭から日本語で短く正規化して列挙する。同一予約に複数 claim があればそのまま並べてよい。
+- claim 名は claimDetail と notes から日本語で短く正規化し、対象部位・左右を保って重複なく列挙する。同一予約の別claimは省略しない。
 - IMO 種類が Direct / 2ndly / TERA のものだけ claim 名の後ろに「(<種類> IMO)」を付ける。
 - Direct は表示時に direct IMO、2ndly は 2ndly IMO、TERA は TERA IMO とする。
 - 予約ごとの claim まとめでも同じルールを使い、各 claim に対応する IMO を個別に付けること。
@@ -893,7 +881,7 @@ JSONを返す直前に、次の不足が1つでもあれば本文を自分で補
 
   const user = `対象日(JST): ${ymd}
 予約件数: 全${appts.length}件（Audiology ${audiologyCount}件 / Audiology以外 ${nonAudiologyCount}件）
-予約一覧(JSON。各予約に age=年齢, sex=性別, notes=病歴メモ を含む):
+予約一覧(JSON。各予約に age=年齢, sex=性別, claimDetail=Claim詳細, notes=病歴メモ を含む):
 ${JSON.stringify(appts, null, 2)}
 
 分類ルールに従って判定し、指定のJSONのみを返す。
@@ -903,7 +891,7 @@ ${JSON.stringify(appts, null, 2)}
 - podcastDialogue は最低約${dialogueMinChars}文字以上、理想は約${dialogueTargetChars}文字以上にすること。
 - 非Audiology予約ごとに summary ではおおむね600文字以上、podcast では最低16ターンを配分すること。
 - 各予約の語り出しで年齢・性別を述べること。
-- notes の病歴を時系列の文章で具体的に要約し、claim ごとの IMO を claim まとめに反映すること。
+- claimDetail と notes の病歴を時系列の文章で具体的に要約し、claim ごとの IMO を claim まとめに反映すること。
 - 初回出力から再生成不要な完成度にすること。短すぎる・浅すぎる・項目不足があれば、返答前に自分で追記して基準を満たすこと。
 
 JSON以外は出力しない。`;
@@ -923,7 +911,7 @@ JSON以外は出力しない。`;
 追加指示:
 - 前回の出力は簡素すぎたため、今回は各予約の不足項目を明示的に補完すること。
 - summaryMarkdown は各非Audiology予約ごとに、病歴要約6文以上、確認項目5件以上、今回の焦点1段落を必ず含めること。
-- claim名、IMO種別、病歴時系列、現在症状、今回の焦点が欠けた予約があれば、notesから読み直して出力前に補完すること。
+- claim名、IMO種別、病歴時系列、現在症状、今回の焦点が欠けた予約があれば、claimDetail と notes を読み直して出力前に補完すること。
 - podcastDialogue は短くまとめず、各非Audiology予約で病歴、鑑別/DBQ観点、nexus/悪化確認を十分に掘り下げること。
 - summaryMarkdown は最低約${summaryMinChars}文字以上、podcastDialogue は最低約${dialogueMinChars}文字以上を必ず満たすこと。`;
       log(`ブリーフ生成中 (model=${modelAttempt.model}, attempt=${attempt + 1}/${modelAttempt.maxAttempts}) ...`);
@@ -974,7 +962,9 @@ async function generatePodcastDialogueFallback(openai, appts, ymd, summaryMarkdo
 - 聞き手は専門医なので一般的説明は不要。病歴要約と確認項目に集中すること。
 - 各 text は空にしないこと。
 - Audiology以外の各予約は最低8往復以上で掘り下げること。
-- 出力が短すぎたり、患者ごとの論点が浅くならないようにすること。`;
+- 出力が短すぎたり、患者ごとの論点が浅くならないようにすること。
+
+${CLAIM_AND_NOTES_INSTRUCTIONS}`;
 
   const targetChars = Math.round(PODCAST_MINUTES * 360);
   const user = `対象日: ${ymd}
