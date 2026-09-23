@@ -5,7 +5,7 @@ const SOSLIST_TARGET = {
     mobileUI: true,                      // モバイルカードUIあり
     deleteColumn: false,                 // 削除ボタン列なし
     perReferralStatus: true,             // 紹介先ごとに受診日・受・済を管理
-    servicesCellClass: 'col-services',   // 検査内容セルは編集不可
+    servicesCellClass: 'col-services services-cell', // Claim詳細を参照
     referralHeaderDateMode: 'visitDate',
     stampSrc: 'stamp.png'
 };
@@ -42,6 +42,10 @@ const cancelEditBtn = document.getElementById('cancelEdit');
 const detailsModal = document.getElementById('detailsModal');
 const detailsContentContainer = document.getElementById('details-content-container');
 const notesTextarea = document.getElementById('notesTextarea');
+const claimDetailModal = document.getElementById('claimDetailModal');
+const claimDetailText = document.getElementById('claimDetailText');
+const claimDetailIdentity = document.getElementById('claimDetailIdentity');
+const closeClaimDetailButton = document.getElementById('closeClaimDetailButton');
 const saveNotesButton = document.getElementById('saveNotesButton');
 const closeDetailsModalButton = document.getElementById('closeDetailsModalButton');
 // Invoice印刷用
@@ -288,6 +292,8 @@ auth.onAuthStateChanged(user => {
 
         startLogoutTimer();
     } else {
+        closeClaimDetailModal();
+        displayedAppointments.clear();
         setResultsWaitingMode(false, false);
         window.sosPdfViewer?.close();
         window.sosConnection.stop();
@@ -338,7 +344,12 @@ nextDateButton?.addEventListener('click', () => {
     jumpToAdjacentReservationDate(1);
 });
 
-function handleAppointmentInteraction(target, docId) {
+function handleAppointmentInteraction(target, docId, event) {
+    if (target.closest('.services-cell')) {
+        event?.preventDefault();
+        openClaimDetailModal(docId);
+        return;
+    }
     if (target.classList.contains('name-cell')) {
         openDetailsModal(docId);
         return;
@@ -401,7 +412,7 @@ tableBody.addEventListener('click', (e) => {
     const docId = tr.dataset.id;
     if (!docId) return;
 
-    handleAppointmentInteraction(target, docId);
+    handleAppointmentInteraction(target, docId, e);
 });
 
 mobileAppointmentsList?.addEventListener('click', (e) => {
@@ -420,7 +431,7 @@ mobileAppointmentsList?.addEventListener('click', (e) => {
     }
     const docId = card?.dataset.id;
     if (!docId) return;
-    handleAppointmentInteraction(interactiveTarget, docId);
+    handleAppointmentInteraction(interactiveTarget, docId, e);
 });
 
 confirmEditBtn.addEventListener('click', () => {
@@ -466,6 +477,10 @@ showSummaryButton?.addEventListener('click', () => {
     });
 });
 closeSummaryModalButton?.addEventListener('click', closeSummaryModal);
+closeClaimDetailButton.addEventListener('click', closeClaimDetailModal);
+claimDetailModal.addEventListener('keydown', event => {
+    if (event.key === 'Escape') closeClaimDetailModal();
+});
 mobileCompactViewButton?.addEventListener('click', () => applyMobileViewMode('compact'));
 mobileCardViewButton?.addEventListener('click', () => applyMobileViewMode('card'));
 mobileControlsToggle?.addEventListener('click', () => {
@@ -496,6 +511,32 @@ const activityEvents = ['mousemove', 'mousedown', 'keypress', 'scroll', 'touchst
 activityEvents.forEach(eventName => { window.addEventListener(eventName, resetLogoutTimer, true); });
 
 // --- 関数定義 ---
+
+// Read-only viewer: use the exact record already loaded by the list.
+function openClaimDetailModal(docId) {
+    const data = displayedAppointments.get(docId);
+    if (!data) {
+        alert('一覧のデータを取得できませんでした。再接続後に開き直してください。');
+        return;
+    }
+    const date = getCorrectedAppointmentDate(data);
+    const dateText = date ? new Intl.DateTimeFormat('ja-JP', {
+        dateStyle: 'short', timeStyle: 'short', timeZone: 'Asia/Tokyo'
+    }).format(date) : '';
+    claimDetailIdentity.textContent = [data.claimantName, data.contractNumber, dateText].filter(Boolean).join(' ｜ ');
+    claimDetailText.value = data.claimDetail || '';
+    claimDetailText.setSelectionRange(0, 0);
+    claimDetailText.scrollTop = 0;
+    claimDetailModal.style.display = 'flex';
+    document.body.classList.add('modal-open');
+}
+
+function closeClaimDetailModal() {
+    claimDetailModal.style.display = 'none';
+    claimDetailText.value = '';
+    claimDetailIdentity.textContent = '';
+    document.body.classList.remove('modal-open');
+}
 
 // 氏名の部分一致マッチング
 // 保存形式: "JONES, JONATHAN"（姓, 名、大文字）

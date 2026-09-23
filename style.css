@@ -1419,3 +1419,48 @@ td.col-received, td.col-completed { padding: 0 2px; }
         margin: 0;
     }
 }
+
+/* Claim details share the appointment data, with no web editing controls. */
+#claimDetailModal .claim-detail-content {
+    width: min(1200px, 94vw);
+    max-width: 94vw;
+    height: 88vh;
+    height: 88dvh;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    text-align: left;
+}
+.claim-detail-content h3, .claim-detail-identity { margin: 0; }
+.claim-detail-identity { color: #555; font-size: 14px; overflow-wrap: anywhere; }
+#claimDetailText {
+    flex: 1;
+    min-height: 100px;
+    width: 100%;
+    box-sizing: border-box;
+    resize: none;
+    padding: 14px;
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, sans-serif;
+    border: 1px solid #aab3c3;
+    border-radius: 6px;
+    color: #243047;
+    background: #fff;
+}
+#appointmentsTable .service-claim-open, button.appointment-card-services {
+    width: 100%; border: 0; background: transparent; color: inherit;
+    padding: 0; text-align: left; text-shadow: none; cursor: pointer;
+    border-radius: 4px; box-shadow: none;
+}
+#appointmentsTable .service-claim-open { margin: 0; font: inherit; }
+#appointmentsTable .service-claim-open:hover, button.appointment-card-services:hover { text-decoration: underline; }
+button.claim-detail-link {
+    display: block; border: 0; background: transparent; color: #355c91;
+    text-shadow: none; padding: 6px 0; margin-top: 4px;
+    font-size: 13px; font-weight: normal; box-shadow: none;
+}
+@media screen and (max-width: 768px) {
+    #claimDetailModal { padding: 2vh 0; padding: 2dvh 0; }
+    #claimDetailModal .claim-detail-content { height: 96vh; height: 96dvh; padding: 14px; }
+    button.claim-detail-link { min-height: 36px; }
+}

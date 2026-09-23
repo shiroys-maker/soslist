@@ -83,8 +83,8 @@ test('collapsed service presentation preserves and escapes the entire original t
     assert.match(html, /&lt;script&gt;request&lt;\/script&gt;/);
     assert.doesNotMatch(html, /<script>/);
     assert.ok(html.includes(ctx.escapeHtml(text)));
-    assert.match(html, /検査内容を編集/);
-    assert.doesNotMatch(ctx.buildServicesPreviewHTML(['Audiologist'], 'Audiology'), /検査内容を編集/);
+    assert.match(html, /Claim詳細/);
+    assert.doesNotMatch(ctx.buildServicesPreviewHTML(['Audiologist'], 'Audiology'), /Claim詳細/);
 });
 
 test('hearing label is reserved for standalone hearing loss and tinnitus DBQ appointments', () => {

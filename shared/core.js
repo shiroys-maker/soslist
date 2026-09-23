@@ -22,6 +22,8 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 const storage = firebase.storage();
+// Exact records currently rendered in the list; editors can open synchronously.
+const displayedAppointments = new Map();
 
 // 2025-10-26 以前に登録されたレコードはUTC相当で保存されているため表示時に-9h補正する
 const APPOINTMENT_TRANSITION_TIMESTAMP = new Date('2025-10-26T00:00:00+09:00').getTime();
@@ -288,6 +290,7 @@ function setupRealtimeListener() {
     if (unsubscribe) {
         unsubscribe();
     }
+    displayedAppointments.clear();
     const localDateStr = dateFilter.value;
     if (!localDateStr) return;
     // JSTの日付を明示的に指定
@@ -307,10 +310,14 @@ function setupRealtimeListener() {
           if (!active) return;
           const previousFocus = window.sosListUI?.captureFocus();
           const appointments = [];
+          displayedAppointments.clear();
           const now = new Date();
           querySnapshot.forEach(doc => {
               const data = doc.data();
-              if (!waitingMode || isAwaitingResults(data, now)) appointments.push({ id: doc.id, ...data });
+              if (!waitingMode || isAwaitingResults(data, now)) {
+                  displayedAppointments.set(doc.id, data);
+                  appointments.push({ ...data, id: doc.id });
+              }
           });
           // ソート前に各アポイントメントの補正済み日時を計算・付与する
           appointments.forEach(appointment => {
@@ -392,8 +399,8 @@ function setupRealtimeListener() {
               const displayAge = age ? `${age}` : '不明';
               const ageCellClass = data.isAgePink ? 'age-cell pink' : 'age-cell';
               const servicesCellClass = 'col-services';
-              const editableServices = SOSLIST_TARGET.servicesCellClass.includes('services-cell');
-              const servicesHTML = buildServicesPreviewHTML(data.services || [], displayServicesText, editableServices, expandedServices.has(docId));
+              const hasClaimDetails = SOSLIST_TARGET.servicesCellClass.includes('services-cell');
+              const servicesHTML = buildServicesPreviewHTML(data.services || [], displayServicesText, hasClaimDetails, expandedServices.has(docId));
               const referralCellsHTML = SOSLIST_TARGET.perReferralStatus
                   ? `<td colspan="4" class="col-referral-status">${buildMobileReferralStatusHTML(data, referralDests)}${buildReferralReviewHTML(data)}</td>`
                   : `<td class="col-referral">${referralHTML}</td><td class="${visitdateCellClass}">${visitdateHTML}</td><td class="${receivedCellClass}">${receivedHTML}</td><td class="${completedCellClass}">${completedHTML}</td>`;
@@ -431,7 +438,7 @@ function setupRealtimeListener() {
                           </div>
                       </div>
                       <div class="appointment-card-meta"><span>${mobileDateText}</span><button type="button" class="card-expand" aria-expanded="${expandedCardId === docId}">${expandedCardId === docId ? '折りたたむ' : '詳細を展開'}</button></div>
-                      <div class="appointment-card-services">${escapeHtml(displayServicesText || '検査内容なし')}</div>
+                      ${hasClaimDetails ? `<button type="button" class="appointment-card-services services-cell" title="Claim詳細を開く" aria-haspopup="dialog">${escapeHtml(displayServicesText || '検査内容なし')}</button><button type="button" class="claim-detail-link services-cell" aria-haspopup="dialog">Claim詳細</button>` : `<div class="appointment-card-services">${escapeHtml(displayServicesText || '検査内容なし')}</div>`}
                       <div class="appointment-card-compact-extra">
                           ${mobileReferralStatusHTML || `
                               <div><span class="appointment-card-label">紹介先</span><div class="appointment-card-referrals compact-referrals">${referralHTML || '<span class="appointment-card-empty">なし</span>'}</div></div>
@@ -508,7 +515,7 @@ async function toggleAppointmentStatus(target, docId, field, destKey = null) {
 }
 
 // Presentation only: the original service text and referral routing stay intact.
-function buildServicesPreviewHTML(services, displayText, editable = false, expanded = false) {
+function buildServicesPreviewHTML(services, displayText, hasClaimDetails = false, expanded = false) {
     const tokens = normalizeServiceTokens(services);
     const labels = [];
     // Audiologist Examination is the stored label for a standalone hearing DBQ.
@@ -523,11 +530,14 @@ function buildServicesPreviewHTML(services, displayText, editable = false, expan
     if (!labels.length) labels.push('検査');
     const badges = `<span class="service-labels">${labels.map(label => `<span>${label}</span>`).join('')}</span>`;
     const text = escapeHtml(displayText || '検査内容なし');
-    const editButton = editable ? '<button type="button" class="services-cell service-edit">検査内容を編集</button>' : '';
-    if (displayText.length <= 110) return `${badges}<div class="service-text">${text}</div>${editButton}`;
+    const editButton = hasClaimDetails ? '<button type="button" class="services-cell service-edit" aria-haspopup="dialog">Claim詳細</button>' : '';
+    const serviceText = (className) => hasClaimDetails
+        ? `<button type="button" class="services-cell service-claim-open ${className}" title="Claim詳細を開く" aria-haspopup="dialog">${text}</button>`
+        : `<span class="${className}">${text}</span>`;
+    if (displayText.length <= 110) return `${badges}${serviceText('service-text')}${editButton}`;
     return `<details class="services-preview"${expanded ? ' open' : ''}>
-        <summary>${badges}<span class="service-excerpt">${text}</span><span class="service-expand-label">全文を表示／折りたたむ</span></summary>
-        <div class="service-text">${text}</div>
+        <summary>${badges}${serviceText('service-excerpt')}<span class="service-expand-label">全文を表示／折りたたむ</span></summary>
+        ${serviceText('service-text')}
     </details>${editButton}`;
 }
 
