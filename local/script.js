@@ -383,8 +383,10 @@ tableBody.addEventListener('click', (e) => {
         const handler = window.webkit?.messageHandlers?.openDBQProcessor;
         if (!handler) { alert('DBQ ProcessorはSOSList Localアプリから開いてください。'); return; }
         dbqButton.disabled = true;
-        db.collection('appointments').doc(docId).get().then(doc => {
-            if (!doc.exists) throw new Error('予約が見つかりません。');
+        // The realtime list has already loaded this record, including its memo.
+        // A default get() can wait indefinitely for the network even with a visible row.
+        db.collection('appointments').doc(docId).get({ source: 'cache' }).then(doc => {
+            if (!doc.exists) throw new Error('予約を読み込めません。「再接続」後に開き直してください。');
             handler.postMessage(buildDetailsPayload(docId, doc.data()));
         }).catch(error => alert(error.message || 'DBQ Processorを開けませんでした。'))
             .finally(() => { dbqButton.disabled = false; });
