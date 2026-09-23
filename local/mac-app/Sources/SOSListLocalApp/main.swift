@@ -115,7 +115,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         }
         isCDMonitoringEnabled = UserDefaults.standard.bool(forKey: cdMonitoringDefaultsKey)
         applyCDMonitoringState(isCDMonitoringEnabled, resetProcessedVolumes: false)
-        ensureDailyBriefDirectories()
+        // Reading the Summary configuration can wait on filesystem access.
+        // It must not block the appointment UI or native handoff buttons at launch.
+        DispatchQueue.global(qos: .utility).async { [self] in
+            ensureDailyBriefDirectories()
+        }
     }
 
     private func runCodexScheduledSummaryAndTerminate() {
