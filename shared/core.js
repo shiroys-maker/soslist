@@ -439,7 +439,7 @@ function setupRealtimeListener() {
                           </div>
                       </div>
                       <div class="appointment-card-meta"><span>${mobileDateText}</span><button type="button" class="card-expand" aria-expanded="${expandedCardId === docId}">${expandedCardId === docId ? '折りたたむ' : '詳細を展開'}</button></div>
-                      <div class="appointment-card-services">${escapeHtml(displayServicesText || '検査内容なし')}</div>
+                      ${hasClaimDetails ? `<button type="button" class="appointment-card-services services-cell" title="Claim詳細を開く" aria-haspopup="dialog">${escapeHtml(displayServicesText || '検査内容なし')}</button><button type="button" class="claim-detail-link services-cell" aria-haspopup="dialog">Claim詳細</button>` : `<div class="appointment-card-services">${escapeHtml(displayServicesText || '検査内容なし')}</div>`}
                       <div class="appointment-card-compact-extra">
                           ${mobileReferralStatusHTML || `
                               <div><span class="appointment-card-label">紹介先</span><div class="appointment-card-referrals compact-referrals">${referralHTML || '<span class="appointment-card-empty">なし</span>'}</div></div>

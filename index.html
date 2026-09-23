@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SOS Appointment Viewer</title>
-    <link rel="stylesheet" href="style.css?v=20260915-results1">
-    <link rel="stylesheet" href="shared/ui.css?v=20260915-results1">
+    <link rel="stylesheet" href="style.css?v=20260923-claims1">
+    <link rel="stylesheet" href="shared/ui.css?v=20260923-claims1">
     <style>
         /* メインアプリを最初は非表示にする */
         #main-app-container { display: none; }
@@ -13,7 +13,7 @@
         .date-cell:hover { cursor: pointer; background-color: #f0f8ff; }
         .visitdate-cell:hover { cursor: pointer; background-color: #f0f8ff; }
     </style>
-    <link rel="stylesheet" href="shared/pdf-viewer.css?v=20260915-results1">
+    <link rel="stylesheet" href="shared/pdf-viewer.css?v=20260923-claims1">
 </head>
 <body>
 
@@ -155,6 +155,18 @@
       </div>
     </div>
     
+    <div id="claimDetailModal" class="modal">
+      <div class="modal-content claim-detail-content">
+        <h3>Claim詳細</h3>
+        <p id="claimDetailIdentity" class="claim-detail-identity"></p>
+        <label for="claimDetailText">Claim detail（閲覧専用）</label>
+        <textarea id="claimDetailText" rows="22" readonly placeholder="Claim詳細は未入力です。"></textarea>
+        <div class="modal-actions">
+          <button id="closeClaimDetailButton">閉じる</button>
+        </div>
+      </div>
+    </div>
+
     <div id="searchResultsModal" class="modal">
       <div class="modal-content">
         <h3>検索結果</h3>
@@ -224,11 +236,11 @@
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-storage-compat.js"></script>
     
-    <script src="shared/core.js?v=20260915-results1"></script>
-    <script src="connection.js?v=20260915-results1"></script>
-    <script src="script.js?v=20260915-results1"></script>
+    <script src="shared/core.js?v=20260923-claims1"></script>
+    <script src="connection.js?v=20260923-claims1"></script>
+    <script src="script.js?v=20260923-claims1"></script>
 
-    <script src="shared/ui.js?v=20260915-results1"></script>
-    <script src="shared/pdf-viewer.js?v=20260915-results1"></script>
+    <script src="shared/ui.js?v=20260923-claims1"></script>
+    <script src="shared/pdf-viewer.js?v=20260923-claims1"></script>
 </body>
 </html>
