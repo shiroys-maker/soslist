@@ -1596,6 +1596,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let markdownFilename = vaRecordMarkdownFilename(details: details)
         let markdownURL = folderURL.appendingPathComponent(markdownFilename)
         try markdown.write(to: markdownURL, atomically: true, encoding: .utf8)
+        let claimFilename = markdownFilename == "Audiology.md" ? "Claim-Aud.md" : "Claim-Gen.md"
+        let claimURL = folderURL.appendingPathComponent(claimFilename)
+        try buildClaimMarkdown(details: details).write(to: claimURL, atomically: true, encoding: .utf8)
         return folderName
     }
 
@@ -1669,6 +1672,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
         ## メモ
         \(notesBlock)
+        """
+    }
+
+    private func buildClaimMarkdown(details: [String: Any]) -> String {
+        let claimantName = sanitizeMarkdownInline(stringValue(details["claimantName"]))
+        let contractNumber = sanitizeMarkdownInline(stringValue(details["contractNumber"]))
+        let appointmentDate = formattedAppointmentDate(details["appointmentDateTimeMs"])
+        let claimDetail = stringValue(details["claimDetail"])
+
+        return """
+        # Claim Details
+
+        - 氏名: \(claimantName)
+        - 契約番号: \(contractNumber)
+        - 予約日時: \(appointmentDate)
+
+        ## Claim detail
+        \(claimDetail.isEmpty ? "なし" : claimDetail)
         """
     }
 

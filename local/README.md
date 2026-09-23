@@ -53,6 +53,14 @@ Run recovery regression checks: `node --test local/tests/connection.test.cjs`.
 保存はトランザクションで同時編集を検出し、失敗時は入力を保持する。メモ `notes` は従来どおり独立。
 開く際は一覧で取得済みのメモリ上のデータを使い、データベースへの問い合わせなしで表示する。一覧データがない場合は再接続を案内する。
 
+予約詳細の `Folder` ボタンは、VA Records内の従来の個人フォルダへ次の組を保存する。
+
+- General: `General.md` と `Claim-Gen.md`
+- Audiology: `Audiology.md` と `Claim-Aud.md`
+
+Claimファイルには氏名・契約番号・予約日時と `claimDetail` の全文を改行を保持して書き出す（未入力時は「なし」）。
+再度押すと該当する組を更新する。従来の予約詳細ファイルの内容と、もう一方の検査種別のファイルは維持する。
+
 既存データの移行は `ops/migrate-claim-detail.cjs` を使用する（既定対象: 予約日2026-09-15 JST以降）。
 `--preview PRIVATE_PLAN_PATH FIREBASE_ADMIN_MODULE_PATH` で私有領域へ変更前全データと計画を保存し、
 同じ引数の `--apply` で対象不変確認・原子的更新・全件再読込検証を実行する。
