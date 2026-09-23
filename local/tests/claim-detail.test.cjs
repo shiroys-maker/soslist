@@ -30,9 +30,9 @@ test('migration starts at JST September 15, preserves existing detail and is ide
 });
 
 const source = fs.readFileSync(path.join(__dirname, '../script.js'), 'utf8');
-const modalFunctions = source.slice(source.indexOf('async function openClaimDetailModal('), source.indexOf('// ===== 紹介先 分類ロジック ====='));
+const modalFunctions = source.slice(source.indexOf('function openClaimDetailModal('), source.indexOf('// ===== 紹介先 分類ロジック ====='));
 const clickListener = source.slice(source.indexOf("tableBody.addEventListener('click'"), source.indexOf("confirmEditBtn.addEventListener('click'"));
-function harness({ failure = false, cacheMissing = false, cacheError = false, stalledServer = false } = {}) {
+function harness({ failure = false, cacheMissing = false, stalledServer = false } = {}) {
     const data = { claimantName: 'TEST, SYNTHETIC', contractNumber: 'TEST.1.2', services: ['Focused Requiring 1-5 DBQs'], claimDetail: 'Old claim', notes: 'Preserved memo' };
     const elements = Object.fromEntries(['claimDetailIdentity', 'claimDetailServices', 'claimDetailStatus'].map(id => [id, { textContent: '' }]));
     const writes = [], docIds = [], alerts = [], reads = [];
@@ -40,14 +40,14 @@ function harness({ failure = false, cacheMissing = false, cacheError = false, st
     const ref = { get: async options => {
         reads.push(options?.source);
         if (options?.source === 'cache') {
-            if (cacheError) throw new Error('cache unavailable');
             return { exists: !cacheMissing, data: () => data };
         }
         if (stalledServer) return new Promise(() => {});
         return snapshot();
     } };
     const ctx = vm.createContext({ console: { error() {} }, Intl, Date, Error,
-        claimDetailLoading: false, claimDetailSaving: false, editingClaimDetailDocId: null, originalClaimDetail: '',
+        displayedAppointments: new Map(cacheMissing ? [] : [['synthetic-doc', { ...data }]]),
+        claimDetailSaving: false, editingClaimDetailDocId: null, originalClaimDetail: '',
         claimDetailTextarea: { value: '', disabled: false }, claimDetailModal: { style: { display: 'none' } },
         saveClaimDetailBtn: { disabled: false }, cancelClaimDetailBtn: { disabled: false },
         normalizeAppointmentDateTimeMs: () => Date.parse('2026-09-15T09:00:00+09:00'),
@@ -65,23 +65,21 @@ function harness({ failure = false, cacheMissing = false, cacheError = false, st
     return { ctx, data, elements, writes, docIds, alerts, reads };
 }
 
-test('Claim detail opens from the displayed record even when the server never responds', async () => {
+test('Claim detail opens synchronously without any database read while the server is stalled', () => {
     const h = harness({ stalledServer: true });
-    await h.ctx.openClaimDetailModal('synthetic-doc');
-    assert.deepEqual(h.reads, ['cache']);
+    h.ctx.openClaimDetailModal('synthetic-doc');
+    assert.deepEqual(h.reads, []);
     assert.equal(h.ctx.claimDetailModal.style.display, 'flex');
     assert.equal(h.ctx.claimDetailTextarea.value, 'Old claim');
-    assert.equal(h.ctx.claimDetailLoading, false);
 });
 
-test('missing or unavailable cache releases the opener and asks for reconnection without a server wait', async () => {
-    for (const options of [{ cacheMissing: true }, { cacheError: true }]) {
+test('a record no longer in the list asks for reconnection without a server wait', async () => {
+    for (const options of [{ cacheMissing: true }]) {
         const h = harness(options);
         await h.ctx.openClaimDetailModal('synthetic-doc');
-        assert.deepEqual(h.reads, ['cache']);
+        assert.deepEqual(h.reads, []);
         assert.equal(h.ctx.claimDetailModal.style.display, 'none');
-        assert.equal(h.ctx.claimDetailLoading, false);
-        assert.equal(h.ctx.editingClaimDetailDocId, null);
+            assert.equal(h.ctx.editingClaimDetailDocId, null);
         assert.match(h.alerts[0], /再接続/);
         assert.equal(h.writes.length, 0);
     }

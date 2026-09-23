@@ -22,6 +22,8 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 const storage = firebase.storage();
+// Exact records currently rendered in the list; editors can open synchronously.
+const displayedAppointments = new Map();
 
 // 2025-10-26 以前に登録されたレコードはUTC相当で保存されているため表示時に-9h補正する
 const APPOINTMENT_TRANSITION_TIMESTAMP = new Date('2025-10-26T00:00:00+09:00').getTime();
@@ -288,6 +290,7 @@ function setupRealtimeListener() {
     if (unsubscribe) {
         unsubscribe();
     }
+    displayedAppointments.clear();
     const localDateStr = dateFilter.value;
     if (!localDateStr) return;
     // JSTの日付を明示的に指定
@@ -307,10 +310,14 @@ function setupRealtimeListener() {
           if (!active) return;
           const previousFocus = window.sosListUI?.captureFocus();
           const appointments = [];
+          displayedAppointments.clear();
           const now = new Date();
           querySnapshot.forEach(doc => {
               const data = doc.data();
-              if (!waitingMode || isAwaitingResults(data, now)) appointments.push({ id: doc.id, ...data });
+              if (!waitingMode || isAwaitingResults(data, now)) {
+                  displayedAppointments.set(doc.id, data);
+                  appointments.push({ ...data, id: doc.id });
+              }
           });
           // ソート前に各アポイントメントの補正済み日時を計算・付与する
           appointments.forEach(appointment => {

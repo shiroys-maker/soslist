@@ -77,7 +77,6 @@ let logoutTimer;
 let editingDateTimeDocId = null;
 let editingClaimDetailDocId = null;
 let originalClaimDetail = '';
-let claimDetailLoading = false;
 let claimDetailSaving = false;
 let editingPhoneDocId = null;
 let unsubscribe;
@@ -280,6 +279,7 @@ auth.onAuthStateChanged(user => {
 
         startLogoutTimer();
     } else {
+        displayedAppointments.clear();
         setResultsWaitingMode(false, false);
         window.sosPdfViewer?.close();
         window.sosConnection.stop();
@@ -728,15 +728,13 @@ function clearPendingDeleteState(docId) {
     pendingDeleteButtons.delete(docId);
 }
 
-async function openClaimDetailModal(docId) {
-    if (claimDetailLoading || editingClaimDetailDocId) return;
-    claimDetailLoading = true;
+function openClaimDetailModal(docId) {
+    if (editingClaimDetailDocId) return;
     try {
-        // The realtime list already loaded this record. Opening the editor must
-        // not wait for a server round trip; the save transaction checks freshness.
-        const doc = await db.collection('appointments').doc(docId).get({ source: 'cache' });
-        if (!doc.exists) throw new Error('保存済みデータが見つかりません。');
-        const data = doc.data();
+        // No database request, including IndexedDB, on the opening path.
+        // The save transaction still checks for conflicting server edits.
+        const data = displayedAppointments.get(docId);
+        if (!data) throw new Error('一覧のデータが見つかりません。');
         originalClaimDetail = data.claimDetail || '';
         claimDetailTextarea.value = originalClaimDetail;
         const date = normalizeAppointmentDateTimeMs(data.appointmentDateTime);
@@ -752,8 +750,6 @@ async function openClaimDetailModal(docId) {
     } catch (error) {
         console.error('Claim詳細の表示エラー:', error);
         alert('Claim詳細を取得できませんでした。再接続後に開き直してください。');
-    } finally {
-        claimDetailLoading = false;
     }
 }
 
@@ -784,6 +780,8 @@ async function saveClaimDetail() {
             }
             transaction.update(ref, { claimDetail: value });
         });
+        const displayed = displayedAppointments.get(editingClaimDetailDocId);
+        if (displayed) displayedAppointments.set(editingClaimDetailDocId, { ...displayed, claimDetail: value });
         originalClaimDetail = value;
         statusLabel.textContent = '保存しました';
         claimDetailSaving = false;
