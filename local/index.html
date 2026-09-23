@@ -156,15 +156,22 @@
       </div>
     </div>
     
-    <div id="editServicesModal" class="modal">
-        <div class="modal-content">
-          <h3>検査内容の編集</h3>
-          <label for="servicesTextarea">検査内容 (カンマ区切りで入力):</label>
-          <textarea id="servicesTextarea" rows="5" style="width: 100%; box-sizing: border-box; margin-top: 5px;"></textarea>
-          <br><br>
-          <div class="modal-actions" style="text-align: right;">
-            <button id="confirmServicesEdit">更新</button>
-            <button id="cancelServicesEdit">キャンセル</button>
+    <div id="claimDetailModal" class="modal">
+        <div class="modal-content claim-detail-content">
+          <h3>Claim詳細</h3>
+          <p id="claimDetailIdentity" class="claim-detail-identity"></p>
+          <details class="claim-detail-services">
+            <summary>検査内容（Service Bill・編集不可）</summary>
+            <p id="claimDetailServices"></p>
+          </details>
+          <label for="claimDetailTextarea">Claim detail</label>
+          <textarea id="claimDetailTextarea" rows="22" placeholder="Claim内容や関連情報を入力してください。" spellcheck="false"></textarea>
+          <div class="claim-detail-footer">
+            <span id="claimDetailStatus" role="status" aria-live="polite"></span>
+            <div class="modal-actions">
+              <button id="saveClaimDetail">保存</button>
+              <button id="cancelClaimDetail">閉じる</button>
+            </div>
           </div>
         </div>
     </div>

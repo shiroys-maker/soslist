@@ -210,6 +210,7 @@ async function fetchAppointments(range) {
       sex: sexFromFlag(d.isAgePink),
       services: Array.isArray(d.services) ? d.services : [],
       notes: d.notes || '',
+      claimDetail: d.claimDetail || '',
       isAudiology: isAudiology(d.services),
     });
   });
@@ -533,7 +534,8 @@ function buildGeminiPrompt(appts, ymd) {
           「診断(評価)が前回から変わったか=悪化/改善の有無」が焦点。
       II. それ以外(過去にrejectされている、または初回claim): IMOが必要。
 
-# メモ(notes)の読み込み(最重要)
+# Claim詳細とメモの読み込み(最重要)
+- claimDetail は検査内容から分離したClaim詳細。claim・IMOの情報としてnotesと併せて読み、両者に相違があれば相違を明記する。
 - claim内容(主訴・対象部位)とIMOの有無は notes の先頭に書かれている。判定はnotesを最優先の根拠にする。
 - notes 先頭から、claim名と IMO 種類を抽出すること。IMO 種類は Direct / 2ndly / TERA を優先して拾い、
   無い場合だけ「IMO不要」とみなす。
@@ -802,7 +804,8 @@ async function generateBrief(openai, appts, ymd) {
           「診断(評価)が前回から変わったか=悪化/改善の有無」が焦点。
       II. それ以外(過去にrejectされている、または初回claim): IMOが必要。
 
-# メモ(notes)の読み込み(最重要)
+# Claim詳細とメモの読み込み(最重要)
+- claimDetail は検査内容から分離したClaim詳細。claim・IMOの情報としてnotesと併せて読み、両者に相違があれば相違を明記する。
 - claim内容(主訴・対象部位)とIMOの有無は notes の先頭に書かれている。判定はnotesを最優先の根拠にする。
 - notes 先頭から、claim名と IMO 種類を抽出すること。IMO 種類は Direct / 2ndly / TERA を優先して拾い、
   無い場合だけ「IMO不要」とみなす。

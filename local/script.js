@@ -6,7 +6,7 @@ const SOSLIST_TARGET = {
     deleteColumn: true,                           // 削除ボタン列あり
     dbqProcessor: true,                           // DBQ Processor を起動
     perReferralStatus: true,                      // 紹介先ごとに受診日・受・済を管理
-    servicesCellClass: 'col-services services-cell', // 検査内容セルは編集可
+    servicesCellClass: 'col-services services-cell', // 検査内容クリックでClaim詳細を開く
     referralHeaderDateMode: 'visitDate',
     stampSrc: '../stamp.png'
 };
@@ -47,11 +47,11 @@ const searchButton = document.getElementById('searchButton');
 const searchResultsModal = document.getElementById('searchResultsModal');
 const searchResultsList = document.getElementById('searchResultsList');
 const closeSearchResultsButton = document.getElementById('closeSearchResultsButton');
-// 検査内容編集モーダル用の要素取得
-const editServicesModal = document.getElementById('editServicesModal');
-const servicesTextarea = document.getElementById('servicesTextarea');
-const confirmServicesEditBtn = document.getElementById('confirmServicesEdit');
-const cancelServicesEditBtn = document.getElementById('cancelServicesEdit');
+// Claim詳細モーダル
+const claimDetailModal = document.getElementById('claimDetailModal');
+const claimDetailTextarea = document.getElementById('claimDetailTextarea');
+const saveClaimDetailBtn = document.getElementById('saveClaimDetail');
+const cancelClaimDetailBtn = document.getElementById('cancelClaimDetail');
 // 電話番号編集モーダル用の要素取得
 const editPhoneModal = document.getElementById('editPhoneModal');
 const phoneInput = document.getElementById('phoneInput');
@@ -75,7 +75,10 @@ const cancelVisitDateBtn  = document.getElementById('cancelVisitDateBtn');
 // --- グローバル変数 ---
 let logoutTimer;
 let editingDateTimeDocId = null;
-let editingServicesDocId = null;
+let editingClaimDetailDocId = null;
+let originalClaimDetail = '';
+let claimDetailLoading = false;
+let claimDetailSaving = false;
 let editingPhoneDocId = null;
 let unsubscribe;
 const CD_MONITOR_ENABLED_KEY = 'soslist-cd-monitor-enabled';
@@ -349,8 +352,9 @@ tableBody.addEventListener('click', (e) => {
         openEditModal(docId);
         return;
     }
-    if (target.classList.contains('services-cell')) {
-        openServicesEditModal(docId);
+    if (target.closest('.services-cell')) {
+        e.preventDefault();
+        openClaimDetailModal(docId);
         return;
     }
     const referralTarget = target.closest('.referral-dest');
@@ -451,8 +455,8 @@ summaryNextDateButton?.addEventListener('click', () => jumpToAdjacentSummaryRese
 generateSummaryButton?.addEventListener('click', handleSummaryGenerate);
 showSummaryButton?.addEventListener('click', handleSummaryShow);
 cdMonitorToggleButton?.addEventListener('click', toggleCDMonitor);
-confirmServicesEditBtn.addEventListener('click', saveServices);
-cancelServicesEditBtn.addEventListener('click', closeServicesEditModal);
+saveClaimDetailBtn.addEventListener('click', saveClaimDetail);
+cancelClaimDetailBtn.addEventListener('click', closeClaimDetailModal);
 confirmPhoneEditBtn.addEventListener('click', savePhone);
 cancelPhoneEditBtn.addEventListener('click', closePhoneEditModal);
 saveShokaijyoBtn.addEventListener('click', saveShokaijyo);
@@ -531,6 +535,7 @@ function buildDetailsPayload(docId, data) {
         visitDate: data.visitDate || '',
         referenceUrl: data.referenceUrl || '',
         notes: data.notes || '',
+        claimDetail: data.claimDetail || '',
         services: Array.isArray(data.services) ? data.services : [],
         referralDests,
         referrals: sanitizedReferrals,
@@ -723,50 +728,71 @@ function clearPendingDeleteState(docId) {
     pendingDeleteButtons.delete(docId);
 }
 
-function openServicesEditModal(docId) {
-    db.collection('appointments').doc(docId).get().then(doc => {
-        if (!doc.exists) {
-            alert('データが見つかりません');
-            return;
-        }
+async function openClaimDetailModal(docId) {
+    if (claimDetailLoading || editingClaimDetailDocId) return;
+    claimDetailLoading = true;
+    try {
+        const doc = await db.collection('appointments').doc(docId).get();
+        if (!doc.exists) throw new Error('データが見つかりません。');
         const data = doc.data();
-        const currentServices = (data.services || []).join(', ');
-        servicesTextarea.value = currentServices;
-        
-        editingServicesDocId = docId;
-        editServicesModal.style.display = 'flex';
+        originalClaimDetail = data.claimDetail || '';
+        claimDetailTextarea.value = originalClaimDetail;
+        const date = normalizeAppointmentDateTimeMs(data.appointmentDateTime);
+        document.getElementById('claimDetailIdentity').textContent = [
+            data.claimantName, data.contractNumber,
+            date ? new Intl.DateTimeFormat('ja-JP', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Asia/Tokyo' }).format(new Date(date)) : ''
+        ].filter(Boolean).join(' ｜ ');
+        document.getElementById('claimDetailServices').textContent = (data.services || []).join(', ');
+        document.getElementById('claimDetailStatus').textContent = '';
+        editingClaimDetailDocId = docId;
+        claimDetailModal.style.display = 'flex';
         document.body.classList.add('modal-open');
-    }).catch(error => {
-        console.error('検査内容編集モーダルの表示エラー:', error);
-        alert('データの取得に失敗しました。');
-    });
+    } catch (error) {
+        console.error('Claim詳細の表示エラー:', error);
+        alert('Claim詳細を取得できませんでした。再接続後に開き直してください。');
+    } finally {
+        claimDetailLoading = false;
+    }
 }
 
-function closeServicesEditModal() {
-    editServicesModal.style.display = 'none';
-    editingServicesDocId = null;
+function closeClaimDetailModal() {
+    if (claimDetailSaving) return;
+    if (claimDetailTextarea.value !== originalClaimDetail && !confirm('Claim詳細の変更を保存せずに閉じますか？')) return;
+    claimDetailModal.style.display = 'none';
+    editingClaimDetailDocId = null;
     document.body.classList.remove('modal-open');
 }
 
-function saveServices() {
-    if (!editingServicesDocId) return;
-
-    const newServicesString = servicesTextarea.value;
-    const newServicesArray = newServicesString.split(',')
-                                            .map(s => s.trim())
-                                            .filter(s => s !== '');
-
-    db.collection('appointments').doc(editingServicesDocId).update({
-        services: newServicesArray
-    })
-    .then(() => {
-        console.log('検査内容を更新しました。');
-        closeServicesEditModal();
-    })
-    .catch(error => {
-        console.error('検査内容の更新エラー:', error);
-        alert('検査内容の更新に失敗しました。');
-    });
+async function saveClaimDetail() {
+    if (!editingClaimDetailDocId || claimDetailSaving) return;
+    const ref = db.collection('appointments').doc(editingClaimDetailDocId);
+    const value = claimDetailTextarea.value;
+    claimDetailSaving = true;
+    saveClaimDetailBtn.disabled = cancelClaimDetailBtn.disabled = claimDetailTextarea.disabled = true;
+    const statusLabel = document.getElementById('claimDetailStatus');
+    statusLabel.textContent = '保存中…';
+    try {
+        // Do not overwrite a newer edit made in another window/device.
+        await db.runTransaction(async transaction => {
+            const current = await transaction.get(ref);
+            if (!current.exists) throw new Error('予約が削除されています。');
+            const saved = current.data().claimDetail || '';
+            if (saved !== originalClaimDetail && saved !== value) {
+                throw new Error('別の画面でClaim詳細が更新されています。入力内容をコピーしてから開き直してください。');
+            }
+            transaction.update(ref, { claimDetail: value });
+        });
+        originalClaimDetail = value;
+        statusLabel.textContent = '保存しました';
+        claimDetailSaving = false;
+        closeClaimDetailModal();
+    } catch (error) {
+        console.error('Claim詳細の保存エラー:', error);
+        statusLabel.textContent = error.message || '保存できませんでした。入力内容は保持されています。';
+    } finally {
+        claimDetailSaving = false;
+        saveClaimDetailBtn.disabled = cancelClaimDetailBtn.disabled = claimDetailTextarea.disabled = false;
+    }
 }
 
 // ===== 紹介先 分類ロジック =====

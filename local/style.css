@@ -754,3 +754,37 @@ td.col-received, td.col-completed { padding: 0 2px; }
 #reconnectButton { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 4px; border: 1px solid #ffffff66; border-radius: 5px; background: transparent; color: white; text-shadow: none; flex-shrink: 0; }
 #reconnectButton:hover { background: #ffffff26; }
 #reconnectButton:active { background: #ffffff40; }
+
+/* Claim details use the same generous editing space as appointment memos. */
+#claimDetailModal .claim-detail-content {
+    width: min(1200px, 94vw);
+    height: 88vh;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    text-align: left;
+}
+.claim-detail-content h3, .claim-detail-identity { margin: 0; }
+.claim-detail-identity { color: #555; font-size: 14px; }
+.claim-detail-services { font-size: 13px; color: #555; }
+.claim-detail-services p { max-height: 12vh; overflow: auto; white-space: pre-wrap; }
+#claimDetailTextarea {
+    flex: 1;
+    min-height: 160px;
+    width: 100%;
+    box-sizing: border-box;
+    resize: none;
+    padding: 14px;
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, sans-serif;
+    border: 1px solid #aab3c3;
+    border-radius: 6px;
+}
+.claim-detail-footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+#claimDetailStatus { white-space: pre-wrap; color: #555; }
+#appointmentsTable .service-claim-open {
+    width: 100%; border: 0; background: transparent; color: inherit;
+    padding: 0; margin: 0; font: inherit; text-align: left; text-shadow: none;
+    cursor: pointer;
+}
+#appointmentsTable .service-claim-open:hover { text-decoration: underline; }

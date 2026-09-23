@@ -1637,6 +1637,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let visitDate = sanitizeMarkdownInline(stringValue(details["visitDate"]))
         let referenceUrl = sanitizeMarkdownInline(stringValue(details["referenceUrl"]))
         let notes = stringValue(details["notes"])
+        let claimDetail = stringValue(details["claimDetail"])
         let services = ((details["services"] as? [String]) ?? []).map { sanitizeMarkdownInline($0) }
         let referralDests = (details["referralDests"] as? [String]) ?? []
 
@@ -1662,6 +1663,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
         ## 検査内容
         \(serviceLines)
+
+        ## Claim detail
+        \(claimDetail.isEmpty ? "なし" : claimDetail)
 
         ## メモ
         \(notesBlock)

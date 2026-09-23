@@ -392,8 +392,8 @@ function setupRealtimeListener() {
               const displayAge = age ? `${age}` : '不明';
               const ageCellClass = data.isAgePink ? 'age-cell pink' : 'age-cell';
               const servicesCellClass = 'col-services';
-              const editableServices = SOSLIST_TARGET.servicesCellClass.includes('services-cell');
-              const servicesHTML = buildServicesPreviewHTML(data.services || [], displayServicesText, editableServices, expandedServices.has(docId));
+              const hasClaimDetails = SOSLIST_TARGET.servicesCellClass.includes('services-cell');
+              const servicesHTML = buildServicesPreviewHTML(data.services || [], displayServicesText, hasClaimDetails, expandedServices.has(docId));
               const referralCellsHTML = SOSLIST_TARGET.perReferralStatus
                   ? `<td colspan="4" class="col-referral-status">${buildMobileReferralStatusHTML(data, referralDests)}${buildReferralReviewHTML(data)}</td>`
                   : `<td class="col-referral">${referralHTML}</td><td class="${visitdateCellClass}">${visitdateHTML}</td><td class="${receivedCellClass}">${receivedHTML}</td><td class="${completedCellClass}">${completedHTML}</td>`;
@@ -509,7 +509,7 @@ async function toggleAppointmentStatus(target, docId, field, destKey = null) {
 }
 
 // Presentation only: the original service text and referral routing stay intact.
-function buildServicesPreviewHTML(services, displayText, editable = false, expanded = false) {
+function buildServicesPreviewHTML(services, displayText, hasClaimDetails = false, expanded = false) {
     const tokens = normalizeServiceTokens(services);
     const labels = [];
     // Audiologist Examination is the stored label for a standalone hearing DBQ.
@@ -524,11 +524,14 @@ function buildServicesPreviewHTML(services, displayText, editable = false, expan
     if (!labels.length) labels.push('検査');
     const badges = `<span class="service-labels">${labels.map(label => `<span>${label}</span>`).join('')}</span>`;
     const text = escapeHtml(displayText || '検査内容なし');
-    const editButton = editable ? '<button type="button" class="services-cell service-edit">検査内容を編集</button>' : '';
-    if (displayText.length <= 110) return `${badges}<div class="service-text">${text}</div>${editButton}`;
+    const editButton = hasClaimDetails ? '<button type="button" class="services-cell service-edit" aria-haspopup="dialog">Claim詳細</button>' : '';
+    const serviceText = (className) => hasClaimDetails
+        ? `<button type="button" class="services-cell service-claim-open ${className}" title="Claim詳細を開く" aria-haspopup="dialog">${text}</button>`
+        : `<span class="${className}">${text}</span>`;
+    if (displayText.length <= 110) return `${badges}${serviceText('service-text')}${editButton}`;
     return `<details class="services-preview"${expanded ? ' open' : ''}>
-        <summary>${badges}<span class="service-excerpt">${text}</span><span class="service-expand-label">全文を表示／折りたたむ</span></summary>
-        <div class="service-text">${text}</div>
+        <summary>${badges}${serviceText('service-excerpt')}<span class="service-expand-label">全文を表示／折りたたむ</span></summary>
+        ${serviceText('service-text')}
     </details>${editButton}`;
 }
 
