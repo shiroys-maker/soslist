@@ -51,6 +51,7 @@ Run recovery regression checks: `node --test local/tests/connection.test.cjs`.
 検査内容の文字または「Claim詳細」をクリックすると、大きなClaim detail編集画面が開く。
 `appointments.claimDetail` は改行を保持した文字列。検査内容 `services` はService Bill由来の表示専用で、ここでは変更しない。
 保存はトランザクションで同時編集を検出し、失敗時は入力を保持する。メモ `notes` は従来どおり独立。
+開く際は一覧で取得済みのローカルキャッシュを使い、サーバー応答を待たない。キャッシュがない場合は再接続を案内する。
 
 既存データの移行は `ops/migrate-claim-detail.cjs` を使用する（既定対象: 予約日2026-09-15 JST以降）。
 `--preview PRIVATE_PLAN_PATH FIREBASE_ADMIN_MODULE_PATH` で私有領域へ変更前全データと計画を保存し、

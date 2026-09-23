@@ -732,8 +732,10 @@ async function openClaimDetailModal(docId) {
     if (claimDetailLoading || editingClaimDetailDocId) return;
     claimDetailLoading = true;
     try {
-        const doc = await db.collection('appointments').doc(docId).get();
-        if (!doc.exists) throw new Error('データが見つかりません。');
+        // The realtime list already loaded this record. Opening the editor must
+        // not wait for a server round trip; the save transaction checks freshness.
+        const doc = await db.collection('appointments').doc(docId).get({ source: 'cache' });
+        if (!doc.exists) throw new Error('保存済みデータが見つかりません。');
         const data = doc.data();
         originalClaimDetail = data.claimDetail || '';
         claimDetailTextarea.value = originalClaimDetail;
