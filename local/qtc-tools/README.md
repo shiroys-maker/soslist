@@ -6,7 +6,7 @@ ChatGPT authentication, an ephemeral session, read-only sandbox, and a JSON
 schema for Findings and Impression. It does not use an OpenAI API key or fall
 back to the API. Images are still processed by OpenAI through Codex.
 
-Default model: `gpt-5.6-sol`, reasoning effort `high`. Optional server environment
+XR/CD default model: `gpt-6-astra`, reasoning effort `high`. Optional server environment
 overrides: `XRAY_CODEX_MODEL`, `XRAY_CODEX_BIN`. Limits: 12 images, 80 MiB request,
 240 seconds per execution, two concurrent executions across report windows.
 Temporary image and report files are removed on completion or failure.
@@ -28,8 +28,9 @@ now posts `imageDataUrl` to `/api/audiogram-report`. The AUD endpoint accepts on
 image and extracts the same exam date, right/left thresholds, tinnitus, and
 audiometer fields. The existing patient fields, editable report, and printing
 flow are preserved. The old browser-side OpenAI API key and request are removed.
-`AUDIOGRAM_CODEX_MODEL` and `AUDIOGRAM_CODEX_BIN` optionally override the same
-default model and executable as XR. Both routes use `codex_images.py` for
+`AUDIOGRAM_CODEX_MODEL` and `AUDIOGRAM_CODEX_BIN` optionally override the AUD
+model and executable. AUD retains `gpt-5.6-sol` / `high`; Astra is used only by the
+XR/CD reading window. Both routes use `codex_images.py` for
 ChatGPT authentication, temporary image handling, execution limits, and errors.
 
 Checks: `python3 -B -m unittest discover -s local/qtc-tools -p 'test_*.py'` and

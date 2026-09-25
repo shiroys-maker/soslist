@@ -32,7 +32,7 @@ def generate_report(payload):
     region = str(payload.get('region') or 'CHEST XR').strip()[:120]
     report = run_image_report(
         images, prompt=report_prompt(len(images), region), schema=REPORT_SCHEMA,
-        model=os.environ.get('XRAY_CODEX_MODEL', 'gpt-5.6-sol'),
+        model=os.environ.get('XRAY_CODEX_MODEL', 'gpt-6-astra'),
         executable=os.environ.get('XRAY_CODEX_BIN', CODEX_BIN),
     )
     if not isinstance(report, dict) or any(
