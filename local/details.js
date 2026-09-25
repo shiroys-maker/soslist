@@ -181,7 +181,6 @@ function saveNotes(targetDocId, options = {}) {
     const referenceUrlInput = document.getElementById('referenceUrlInput');
     const saveButton = document.getElementById('saveNotesButton');
     const statusText = document.getElementById('statusText');
-    const originalLabel = saveButton.textContent;
 
     if (activeSaveRequestId) {
         pendingCloseAfterSave = pendingCloseAfterSave || closeAfterSave;
@@ -212,20 +211,20 @@ function saveNotes(targetDocId, options = {}) {
         localStorage.setItem(DETAIL_SAVE_REQUEST_KEY, JSON.stringify(savePayload));
     }
 
+    const requestId = activeSaveRequestId;
     window.setTimeout(() => {
-        if (!activeSaveRequestId) {
+        if (activeSaveRequestId !== requestId) {
             return;
         }
         statusText.textContent = '保存応答を待っています...';
     }, 1500);
 
     window.setTimeout(() => {
-        if (activeSaveRequestId === null) {
+        if (activeSaveRequestId !== requestId) {
             return;
         }
-        statusText.textContent = '保存に時間がかかっています。';
-        saveButton.disabled = false;
-        saveButton.textContent = originalLabel;
+        statusText.textContent = '保存完了を確認できていません。メイン画面の「再接続」を利用できます。入力内容を保持して応答を待っています。';
+        saveButton.textContent = '保存確認中…';
     }, 5000);
 }
 

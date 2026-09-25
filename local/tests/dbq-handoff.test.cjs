@@ -20,14 +20,10 @@ function harness({ exists = true, error, bridge = true } = {}) {
         window: { webkit: { messageHandlers: bridge ? { openDBQProcessor: { postMessage: value => messages.push(value) } } : {} } },
         tableBody: { addEventListener: (_, handler) => { click = handler; } },
         determineReferralDests: () => [],
-        db: { collection: name => { assert.equal(name, 'appointments'); return { doc: id => ({
-            get: options => {
-                reads.push({ id, source: options?.source });
-                // Reproduce a stalled server while the list's local copy is available.
-                if (options?.source !== 'cache') return new Promise(() => {});
-                return error ? Promise.reject(error) : Promise.resolve({ exists, data: () => record });
-            }
-        }) }; } }
+        readInteractionAppointment: id => {
+            reads.push(id);
+            return error ? Promise.reject(error) : Promise.resolve({ exists, data: () => record });
+        }
     };
     vm.runInNewContext(payloadSource + listenerSource, ctx);
     return { button, reads, messages, alerts, record, click() {
@@ -40,7 +36,7 @@ test('DBQ opens with the displayed appointment and memo while the server is stal
     const h = harness(); h.click();
     assert.equal(h.button.disabled, true);
     await flush();
-    assert.deepEqual(h.reads, [{ id: 'synthetic-appointment', source: 'cache' }]);
+    assert.deepEqual(h.reads, ['synthetic-appointment']);
     assert.equal(h.messages.length, 1);
     assert.equal(h.messages[0].docId, 'synthetic-appointment');
     assert.equal(h.messages[0].contractNumber, h.record.contractNumber);

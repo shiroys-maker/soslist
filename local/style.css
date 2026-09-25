@@ -788,3 +788,11 @@ td.col-received, td.col-completed { padding: 0 2px; }
     cursor: pointer;
 }
 #appointmentsTable .service-claim-open:hover { text-decoration: underline; }
+
+/* Keep delayed-operation feedback visible above modal editors. */
+#interactionStatus:not([hidden]) {
+    position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+    max-width: min(680px, 90vw); padding: 10px 18px; border-radius: 8px;
+    background: #18344e; color: white; z-index: 20000; pointer-events: none;
+    box-shadow: 0 2px 10px #0003; font-size: 14px;
+}

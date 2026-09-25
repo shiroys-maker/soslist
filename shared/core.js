@@ -1,3 +1,13 @@
+// Public viewer keeps its existing reads; Local supplies immediate list snapshots.
+function readInteractionAppointment(docId) {
+    if (typeof window !== 'undefined' && window.sosInteraction) return window.sosInteraction.read(docId);
+    return db.collection('appointments').doc(docId).get();
+}
+function saveInteraction(key, root, operation) {
+    if (typeof window !== 'undefined' && window.sosInteraction) return window.sosInteraction.save(key, root, operation);
+    return operation();
+}
+
 // soslist 共通コア
 // Web版(/script.js)とローカル版(/local/script.js)の両方から読み込まれる。
 // 各ターゲットのscript.jsは、このファイルの後に読み込まれ、
@@ -286,11 +296,11 @@ function isAwaitingResults(data, now = new Date()) {
     });
 }
 
-function setupRealtimeListener() {
+function setupRealtimeListener({ preserveRows = false } = {}) {
     if (unsubscribe) {
         unsubscribe();
     }
-    displayedAppointments.clear();
+    if (!preserveRows) displayedAppointments.clear();
     const localDateStr = dateFilter.value;
     if (!localDateStr) return;
     // JSTの日付を明示的に指定
@@ -303,9 +313,9 @@ function setupRealtimeListener() {
     else query = query.where('appointmentDateTime', '>=', filterDate).orderBy('appointmentDateTime').limit(300);
     // No row limit within the requested two-month window: don't omit pending referrals.
     let active = true, latestSnapshot, refreshTimer;
-    tableBody.innerHTML = `<tr><td colspan="${SOSLIST_TARGET.deleteColumn ? 12 : 11}" class="appointments-empty">読み込み中…</td></tr>`;
+    if (!preserveRows) tableBody.innerHTML = `<tr><td colspan="${SOSLIST_TARGET.deleteColumn ? 12 : 11}" class="appointments-empty">読み込み中…</td></tr>`;
     const pendingMobileList = SOSLIST_TARGET.mobileUI ? document.getElementById('mobileAppointmentsList') : null;
-    if (pendingMobileList) pendingMobileList.innerHTML = '<p class="mobile-empty">読み込み中…</p>';
+    if (pendingMobileList && !preserveRows) pendingMobileList.innerHTML = '<p class="mobile-empty">読み込み中…</p>';
     const renderSnapshot = querySnapshot => {
           if (!active) return;
           const previousFocus = window.sosListUI?.captureFocus();
@@ -487,24 +497,27 @@ function setupRealtimeListener() {
 }
 
 async function toggleAppointmentStatus(target, docId, field, destKey = null) {
-    if (target.disabled) return;
+    const operationKey = `status:${docId}:${destKey || ''}:${field}`;
+    if (target.disabled || (typeof window !== 'undefined' && window.sosInteraction?.isPending(operationKey))) return;
     const previousFocus = typeof window !== 'undefined' ? window.sosListUI?.captureFocus() : null;
     target.disabled = true;
     target.setAttribute('aria-busy', 'true');
     try {
-        const ref = db.collection('appointments').doc(docId);
-        const doc = await ref.get();
-        if (!doc.exists) throw new Error('Appointment not found');
-        const data = doc.data();
-        const destIndex = destKey ? determineReferralDests(data.services || [], null, data).indexOf(destKey) : -1;
-        const current = destKey
-            ? getReferralStateValue(data, destKey, field, field, destIndex) === true
-            : data[field] === true;
-        const key = destKey ? `referrals.${destKey}.${field}` : field;
-        await ref.update({ [key]: !current });
-        target.setAttribute('aria-pressed', String(!current));
-        target.classList.toggle('is-active', !current);
-        target.textContent = field === 'isShown' ? (!current ? '✅' : '未') : `${field === 'isReceived' ? '受診' : '完了'}${!current ? '✓' : ''}`;
+        await saveInteraction(operationKey, null, async () => {
+            const ref = db.collection('appointments').doc(docId);
+            const doc = await readInteractionAppointment(docId);
+            if (!doc.exists) throw new Error('Appointment not found');
+            const data = doc.data();
+            const destIndex = destKey ? determineReferralDests(data.services || [], null, data).indexOf(destKey) : -1;
+            const current = destKey
+                ? getReferralStateValue(data, destKey, field, field, destIndex) === true
+                : data[field] === true;
+            const key = destKey ? `referrals.${destKey}.${field}` : field;
+            await ref.update({ [key]: !current });
+            target.setAttribute('aria-pressed', String(!current));
+            target.classList.toggle('is-active', !current);
+            target.textContent = field === 'isShown' ? (!current ? '✅' : '未') : `${field === 'isReceived' ? '受診' : '完了'}${!current ? '✓' : ''}`;
+        });
     } catch (error) {
         console.error('状態の更新に失敗しました:', error);
         alert('状態を更新できませんでした。もう一度お試しください。');
@@ -558,7 +571,7 @@ function startLogoutTimer() {
 function handleViewPdf(docId) {
     return window.sosPdfViewer.open(async () => {
         const sourceError = message => Object.assign(new Error(message), { pdfSourceError: true });
-        const doc = await db.collection('appointments').doc(docId).get();
+        const doc = await readInteractionAppointment(docId);
         if (!doc.exists) throw sourceError('データベースにレコードが見つかりません。');
         const fileName = doc.data().originalFileName;
         if (!fileName) throw sourceError('このレコードにPDFファイルは関連付けられていません。');
@@ -572,7 +585,7 @@ function handleViewPdf(docId) {
 }
 
 function openEditModal(docId) {
-  db.collection('appointments').doc(docId).get().then(doc => {
+  readInteractionAppointment(docId).then(doc => {
     if (!doc.exists) return;
     const data = doc.data();
     if (data.appointmentDateTime) {
@@ -944,7 +957,7 @@ function generateNewInvoiceHTML(audiologyRecords, dayRateList, from, to) {
 }
 
 function openPhoneEditModal(docId) {
-    db.collection('appointments').doc(docId).get().then(doc => {
+    readInteractionAppointment(docId).then(doc => {
         if (!doc.exists) {
             alert('データが見つかりません');
             return;
@@ -972,9 +985,9 @@ function savePhone() {
 
     const newPhone = phoneInput.value.trim();
 
-    db.collection('appointments').doc(editingPhoneDocId).update({
+    return saveInteraction(`phone:${editingPhoneDocId}`, editPhoneModal, () => db.collection('appointments').doc(editingPhoneDocId).update({
         japanCellPhone: newPhone
-    })
+    }))
     .then(() => {
         console.log('電話番号を更新しました。');
         closePhoneEditModal();
@@ -1587,7 +1600,7 @@ function saveShokaijyo() {
     const get = name => { const el = sheet.querySelector(`[name="${name}"]`); return el ? el.value : ''; };
     const selectedGender = sheet.querySelector('.sex-option.selected');
     const fieldPath = `referrals.${shokaijyoEditingDest}`;
-    db.collection('appointments').doc(shokaijyoEditingDocId).update({
+    return saveInteraction(`referral:${shokaijyoEditingDocId}:${shokaijyoEditingDest}`, shokaijyoModal, () => db.collection('appointments').doc(shokaijyoEditingDocId).update({
         [`${fieldPath}.name_kana`]: get('name_kana'),
         [`${fieldPath}.name_en`]: get('name_en'),
         [`${fieldPath}.gender`]: selectedGender ? selectedGender.dataset.gender : 'M',
@@ -1600,7 +1613,7 @@ function saveShokaijyo() {
         [`${fieldPath}.clinical`]: get('clinical'),
         [`${fieldPath}.message`]: get('message'),
         [`${fieldPath}.savedAt`]: firebase.firestore.FieldValue.serverTimestamp()
-    })
+    }))
     .then(() => closeShokaijyoModal())
     .catch(err => { console.error(err); alert('保存に失敗しました'); });
 }
@@ -1701,7 +1714,7 @@ function openVisitDateModal(docId, destKey = null) {
         visitTimeInput.value = '09:00';
     }
 
-    db.collection('appointments').doc(docId).get().then(doc => {
+    readInteractionAppointment(docId).then(doc => {
         if (!doc.exists) {
             visitDateModal.style.display = 'flex';
             document.body.classList.add('modal-open');
@@ -1719,8 +1732,9 @@ function openVisitDateModal(docId, destKey = null) {
         document.body.classList.add('modal-open');
     }).catch(err => {
         console.error(err);
-        visitDateModal.style.display = 'flex';
-        document.body.classList.add('modal-open');
+        visitDateEditingDocId = null;
+        visitDateEditingDest = null;
+        alert('データを取得できませんでした。再接続後に開き直してください。');
     });
 }
 
@@ -1745,7 +1759,7 @@ function saveVisitDate() {
         ? { [`referrals.${visitDateEditingDest}.visitDate`]: visitDateValue }
         : { visitDate: visitDateValue };
 
-    db.collection('appointments').doc(visitDateEditingDocId).update(updatePayload)
+    return saveInteraction(`visit:${visitDateEditingDocId}:${visitDateEditingDest}`, visitDateModal, () => db.collection('appointments').doc(visitDateEditingDocId).update(updatePayload))
         .then(() => closeVisitDateModal())
         .catch(err => { console.error(err); alert('保存に失敗しました'); });
 }

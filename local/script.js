@@ -387,9 +387,8 @@ tableBody.addEventListener('click', (e) => {
         const handler = window.webkit?.messageHandlers?.openDBQProcessor;
         if (!handler) { alert('DBQ ProcessorはSOSList Localアプリから開いてください。'); return; }
         dbqButton.disabled = true;
-        // The realtime list has already loaded this record, including its memo.
-        // A default get() can wait indefinitely for the network even with a visible row.
-        db.collection('appointments').doc(docId).get({ source: 'cache' }).then(doc => {
+        // Use the rendered record without waiting for network or IndexedDB.
+        readInteractionAppointment(docId).then(doc => {
             if (!doc.exists) throw new Error('予約を読み込めません。「再接続」後に開き直してください。');
             handler.postMessage(buildDetailsPayload(docId, doc.data()));
         }).catch(error => alert(error.message || 'DBQ Processorを開けませんでした。'))
@@ -406,9 +405,10 @@ tableBody.addEventListener('click', (e) => {
         return;
     }
     if (target.classList.contains('age-cell')) {
+        if (window.sosInteraction?.isPending(`age:${docId}`)) return;
         const docRef = db.collection('appointments').doc(docId);
         const isPink = target.classList.toggle('pink');
-        docRef.update({ isAgePink: isPink }).catch(error => {
+        saveInteraction(`age:${docId}`, null, () => docRef.update({ isAgePink: isPink })).catch(error => {
             // 書き込み失敗時は先行して切り替えた表示を元に戻す
             target.classList.toggle('pink', !isPink);
             console.error('性別フラグの更新エラー:', error);
@@ -440,7 +440,7 @@ confirmEditBtn.addEventListener('click', () => {
         processedAt: processedAt // 処理日時を記録（タイムスタンプ判定用）
     };
     
-    db.collection('appointments').doc(editingDateTimeDocId).update(dataToUpdate)
+    saveInteraction(`date:${editingDateTimeDocId}`, editModal, () => db.collection('appointments').doc(editingDateTimeDocId).update(dataToUpdate))
       .then(() => closeEditModal())
       .catch(error => {
           console.error('更新エラー:', error);
@@ -487,7 +487,7 @@ activityEvents.forEach(eventName => { window.addEventListener(eventName, resetLo
 // 保存形式: "JONES, JONATHAN"（姓, 名、大文字）
 // 対応: 姓のみ / 名のみ / 姓名 / 名姓 / カンマあり / 大文字小文字不問
 function openDetailsModal(docId) {
-    db.collection('appointments').doc(docId).get().then(doc => {
+    readInteractionAppointment(docId).then(doc => {
         if (!doc.exists) {
             alert('データが見つかりません');
             return;
@@ -586,10 +586,10 @@ function handleDetailSaveRequest(rawValue) {
 
     handledDetailSaveRequests.add(request.requestId);
 
-    db.collection('appointments').doc(request.docId).update({
+    saveInteraction(`notes:${request.docId}`, null, () => db.collection('appointments').doc(request.docId).update({
         notes: request.notes || '',
         referenceUrl: request.referenceUrl || ''
-    })
+    }))
         .then(() => {
             const payloadKey = `${DETAIL_PAYLOAD_PREFIX}${request.docId}`;
             const existingPayload = localStorage.getItem(payloadKey);
@@ -632,10 +632,10 @@ window.__sosApplyDetailsSave = function(request) {
         }
     };
 
-    db.collection('appointments').doc(request.docId).update({
+    saveInteraction(`notes:${request.docId}`, null, () => db.collection('appointments').doc(request.docId).update({
         notes: request.notes || '',
         referenceUrl: request.referenceUrl || ''
-    })
+    }))
         .then(() => reply('success', '保存しました。'))
         .catch((error) => {
             console.error('details保存エラー:', error);
@@ -771,7 +771,7 @@ async function saveClaimDetail() {
     statusLabel.textContent = '保存中…';
     try {
         // Do not overwrite a newer edit made in another window/device.
-        await db.runTransaction(async transaction => {
+        const saveTransaction = () => db.runTransaction(async transaction => {
             const current = await transaction.get(ref);
             if (!current.exists) throw new Error('予約が削除されています。');
             const saved = current.data().claimDetail || '';
@@ -780,6 +780,7 @@ async function saveClaimDetail() {
             }
             transaction.update(ref, { claimDetail: value });
         });
+        await (typeof window !== 'undefined' && window.sosInteraction ? window.sosInteraction.save(`claim:${editingClaimDetailDocId}`, null, () => saveTransaction()) : saveTransaction());
         const displayed = displayedAppointments.get(editingClaimDetailDocId);
         if (displayed) displayedAppointments.set(editingClaimDetailDocId, { ...displayed, claimDetail: value });
         originalClaimDetail = value;
@@ -800,7 +801,7 @@ async function saveClaimDetail() {
 function openShokaijyoModal(docId, destKey) {
     if (!REFERRAL_FULL[destKey]) return;
 
-    db.collection('appointments').doc(docId).get().then(doc => {
+    readInteractionAppointment(docId).then(doc => {
         if (!doc.exists) return;
         const data = doc.data();
         const saved = data.referrals && data.referrals[destKey];

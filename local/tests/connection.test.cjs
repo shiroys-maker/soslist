@@ -33,7 +33,7 @@ test('permission error does not loop; offline waits; online reconnects',async()=
 });
 test('logout cancels startup and retry; automatic attempts bounded',async()=>{
  const h=harness();const p=h.c.sosConnection.start();h.c.sosConnection.stop();h.fire(8000);await p;assert.equal(h.calls,0);
- const j=harness(async()=>({empty:true}));await j.c.sosConnection.start();for(let i=0;i<5;i++){j.fire(15000);j.fire(1000*2**i)}j.fire(15000);if ('status' in j.c.sosConnection) { j.fire(60000);assert.equal(j.calls,7);j.c.sosConnection.stop();assert.equal(j.tasks.size,0); } else { assert.equal(j.tasks.size,0);assert.match(j.status,/回復できません/); }
+ const j=harness(async()=>({empty:true}));await j.c.sosConnection.start();for(let i=0;i<5;i++){j.fire(15000);j.fire(1000*2**i)}j.fire(15000);j.fire(60000);assert.equal(j.calls,7);j.c.sosConnection.stop();assert.equal(j.tasks.size,0);
 });
 
 test('mobile foreground return reconnects, hidden and logged-out pages do not',async()=>{
@@ -51,4 +51,17 @@ if (!process.env.CONNECTION_SOURCE) test('banner reconnect restarts the listener
  h.events['reconnect-click']();assert.equal(h.calls,2);
  assert.match(h.status,/読み込んでいます/);
  h.c.sosConnection.stop();h.events['reconnect-click']();assert.equal(h.calls,2);
+});
+
+if (!process.env.CONNECTION_SOURCE) test('click checks keep existing rows, throttle retries and respect terminal errors', async () => {
+ const h=harness(async()=>({empty:true}));await h.c.sosConnection.start();
+ const token=h.c.sosConnection.begin();h.c.sosConnection.snapshot(token,{metadata:{fromCache:false}});
+ let options;h.c.setupRealtimeListener=value=>{options=value;};
+ h.c.sosConnection.check();assert.equal(options,undefined);
+ h.c.sosConnection.check(true);assert.equal(options.preserveRows,true);
+ options=undefined;h.c.sosConnection.check(true);assert.equal(options,undefined);
+ const j=harness(async()=>({empty:true}));await j.c.sosConnection.start();
+ j.c.sosConnection.error(j.c.sosConnection.begin(),{code:'permission-denied'});
+ const calls=j.calls;j.c.sosConnection.check(true);assert.equal(j.calls,calls);
+ j.c.sosConnection.stop();j.c.sosConnection.check(true);assert.equal(j.calls,calls);
 });

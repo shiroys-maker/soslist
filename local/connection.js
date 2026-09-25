@@ -7,6 +7,7 @@
     if (!Array.isArray(logs)) logs = [];
     let active = false, generation = 0, authGeneration = 0;
     let deadline, retryTimer, attempts = 0, lastSuccess = null;
+    let lastCheck = 0, terminalError = false;
     const clearTimers = () => { clearTimeout(deadline); clearTimeout(retryTimer); deadline = null; retryTimer = null; };
     function log(event, code = '') {
         logs.push({ time: new Date().toISOString(), event, code });
@@ -21,22 +22,30 @@
         log(reason, code);
         if (!active) return;
         if (['permission-denied', 'unauthenticated', 'failed-precondition', 'invalid-argument'].includes(code)) {
+            terminalError = true;
             show(`読み込みエラー: ${code}。ログイン状態を確認して再接続してください。`);
             return;
         }
         if (!navigator.onLine) { show('オフラインです。接続の復帰を待っています。'); return; }
-        if (attempts >= 5) { show('接続を回復できませんでした。「再接続」を押してください。'); return; }
-        const delay = Math.min(30000, 1000 * 2 ** attempts++);
+        const delay = attempts >= 5 ? 60000 : Math.min(30000, 1000 * 2 ** attempts++);
         show(`接続を確認しています。${delay / 1000}秒後に再試行します。`);
-        retryTimer = setTimeout(() => { if (active) setupRealtimeListener(); }, delay);
+        retryTimer = setTimeout(() => { if (active) setupRealtimeListener({ preserveRows: true }); }, delay);
     }
     function reconnect() {
         if (!active) return;
-        attempts = 0;
+        attempts = 0; terminalError = false; lastCheck = Date.now();
         log('manual-or-resume-reconnect');
-        setupRealtimeListener();
+        setupRealtimeListener({ preserveRows: true });
     }
     window.sosConnection = {
+        check(force = false) {
+            if (!active || !navigator.onLine || terminalError || deadline || retryTimer) return;
+            const now = Date.now();
+            if (now - lastCheck < 60000) return;
+            if (!force && lastSuccess && now - lastSuccess.getTime() < 60000) return;
+            lastCheck = now;
+            reconnect();
+        },
         begin() {
             clearTimers();
             const token = ++generation;
@@ -62,7 +71,7 @@
             if (active && token === generation) retry('listen-error', error.code || 'unknown');
         },
         async start() {
-            active = true; attempts = 0;
+            active = true; attempts = 0; terminalError = false; lastCheck = 0; lastSuccess = null;
             const session = ++authGeneration;
             const initialDate = formatDateInputValue(new Date());
             dateFilter.value = initialDate;
