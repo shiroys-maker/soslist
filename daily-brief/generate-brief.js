@@ -1259,6 +1259,12 @@ async function synthesizePodcastWithAivis(dialogue, outBaseNoExt) {
 // ----------------------------- 音声生成 (OpenAI TTS / macOS say) -----------------------------
 async function synthesizePodcast(openai, dialogue, outBaseNoExt) {
   if (usesAivisTts()) {
+    const { prepareSpeechDialogue } = require('./prepare-speech');
+    dialogue = await prepareSpeechDialogue(dialogue, path.dirname(outBaseNoExt), { log });
+  }
+  // Keep existing audio until the new reading script is ready (CLI/auth failures are retryable).
+  removeExistingAudioArtifacts(path.dirname(outBaseNoExt));
+  if (usesAivisTts()) {
     return synthesizePodcastWithAivis(dialogue, outBaseNoExt);
   }
   if (!usesOpenAITts()) {
@@ -1454,7 +1460,6 @@ async function finalizeManualImport(opts = {}) {
 
   let audioFile = null;
   if (!opts.noAudio) {
-    removeExistingAudioArtifacts(outDir);
     if (usesOpenAITts() && !process.env.OPENAI_API_KEY) {
       throw new Error("環境変数 'OPENAI_API_KEY' が設定されていません。");
     }
@@ -1537,7 +1542,6 @@ async function run(opts = {}) {
   if (opts.noAudio) {
     log('noAudio: 音声生成をスキップ');
   } else {
-    removeExistingAudioArtifacts(outDir);
     log(
       usesOpenAITts()
         ? `音声生成中 (engine=openai, model=${TTS_MODEL}, voices=${TTS_VOICE_A}/${TTS_VOICE_B}, speed=${PODCAST_SPEED}) ...`
@@ -1565,6 +1569,7 @@ async function run(opts = {}) {
 }
 
 module.exports = {
+  synthesizePodcast,
   run,
   getExistingBriefResult,
   saveBriefToFirestore,

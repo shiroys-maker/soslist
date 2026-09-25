@@ -73,6 +73,20 @@ Storage には対象日が新しい2件だけを残し、cloud viewer の Summar
 | `podcast.mp3` / `podcast.wav` | 二人対話のポッドキャスト音声(約1.4倍速) |
 | `podcast-script.txt` | 読み上げ台本(テキスト) |
 | `dialogue.json` | 台本の構造化データ |
+| `podcast-speech.txt` | Codexで読みを補正したAivisSpeech専用の台本 |
+| `podcast-speech.json` | 読みの置換内容・検証結果・元台本に紐づくキャッシュ |
+
+### AivisSpeechの読み補正
+
+AivisSpeechで音声を作る前に、ChatGPT認証のCodex CLIが、一般語・医学用語・英語・略語・単位記号の読みを文脈に合わせて仮名に変換します。手動・定時・取り込み・API生成の共通音声処理に適用されます。`--no-audio` では呼び出しません。
+
+全文を書き直させず、元の発話に一致する語句の読みだけを置換します。数字、左右、否定・陰性・陽性・未確認・疑いなどの保護対象と重なる置換、不正な位置、重複する置換は採用せず、その部分の原文を残します。`brief.md`、`podcast-script.txt`、`dialogue.json` は変更しません。これは内容変更を抑える検証であり、読みの正しさを完全に保証するものではありません。
+
+同じ台本・設定の再生成では変換結果を再利用します。台本やモデルを変えると再変換します。読みを再試行したい場合は対象日の `podcast-speech.json` を削除します。Codexの起動・認証・接続・タイムアウトなどで変換できない場合は処理をエラーで止め、既存音声は削除しません。過去のMP3は自動的には変更されません。
+
+既定モデルは `gpt-6-sol`、待ち時間の上限は5分です。`PODCAST_SPEECH_MODEL`、`PODCAST_SPEECH_TIMEOUT_MS`、`PODCAST_SPEECH_CODEX_BIN` で変更できます。APIキーは渡さず、既存のCodexログインを使います。台本は標準入力で渡し、作業用ディレクトリは処理後に削除します。
+
+CLI連携は [Codex公式の非対話モード・構造化出力仕様](https://developers.openai.com/codex/noninteractive/) に基づきます。
 
 ---
 
