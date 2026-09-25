@@ -84,3 +84,6 @@ acknowledgements preserve any newer draft text. No page reload is used.
 
 Verify with `node --test local/tests/*.test.cjs`. The interaction tests use synthetic
 records and stalled reads/writes, including late acknowledgements and duplicate clicks.
+
+Name, date, phone, PDF and age actions also accept clicks on the surrounding cell
+padding, not only on the text-sized button. Keyboard button activation is unchanged.

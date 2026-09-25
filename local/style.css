@@ -796,3 +796,7 @@ td.col-received, td.col-completed { padding: 0 2px; }
     background: #18344e; color: white; z-index: 20000; pointer-events: none;
     box-shadow: 0 2px 10px #0003; font-size: 14px;
 }
+
+#appointmentsTable td:is(.col-name, .col-date, .col-phone, .col-contract, .col-age) {
+    cursor: pointer;
+}

@@ -128,3 +128,19 @@ test('detail save timers belong to their request and a slow acknowledgement neve
     assert.equal(c.currentDetailsData.notes,'two');assert.equal(elements.notesTextarea.value,'newer draft');
     assert.match(elements.statusText.textContent,/未保存/);assert.equal(elements.saveNotesButton.disabled,false);
 });
+
+
+test('cell padding and nested text route to the same name, date, phone and PDF actions',()=>{
+    const source=load('../script.js');
+    const listener=source.slice(source.indexOf("tableBody.addEventListener('click'"),source.indexOf("confirmEditBtn.addEventListener('click'"));
+    for (const [selector,action] of [['.name-cell, .col-name','openDetailsModal'],['.date-cell, .col-date','openEditModal'],['.phone-cell, .col-phone','openPhoneEditModal'],['.contract-cell, .col-contract','handleViewPdf']]) {
+        const calls=[];let click;
+        const c={tableBody:{addEventListener(type,fn){click=fn;}},[action]:id=>calls.push(id)};
+        vm.runInNewContext(listener,c);
+        click({target:{classList:{contains(){return false;}},closest(value){
+            if(value==='tr')return {dataset:{id:'fixture'}};
+            return value===selector ? {} : null;
+        }}});
+        assert.deepEqual(calls,['fixture'],selector);
+    }
+});

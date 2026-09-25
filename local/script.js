@@ -340,7 +340,7 @@ tableBody.addEventListener('click', (e) => {
     const docId = tr.dataset.id;
     if (!docId) return;
 
-    if (target.classList.contains('name-cell')) {
+    if (target.closest('.name-cell, .col-name')) {
         openDetailsModal(docId);
         return;
     }
@@ -348,7 +348,7 @@ tableBody.addEventListener('click', (e) => {
         toggleAppointmentStatus(target, docId, 'isShown');
         return;
     }
-    if (target.closest('.date-cell')) {
+    if (target.closest('.date-cell, .col-date')) {
         openEditModal(docId);
         return;
     }
@@ -378,7 +378,7 @@ tableBody.addEventListener('click', (e) => {
         toggleAppointmentStatus(completedTarget, docId, 'isCompleted', completedTarget.dataset.dest || null);
         return;
     }
-    if (target.classList.contains('contract-cell')) {
+    if (target.closest('.contract-cell, .col-contract')) {
         handleViewPdf(docId);
         return;
     }
@@ -400,17 +400,18 @@ tableBody.addEventListener('click', (e) => {
         handleDeleteButtonClick(deleteButton, docId);
         return;
     }
-    if (target.classList.contains('phone-cell')) {
+    if (target.closest('.phone-cell, .col-phone')) {
         openPhoneEditModal(docId);
         return;
     }
-    if (target.classList.contains('age-cell')) {
+    const ageTarget = target.closest('.age-cell') || target.closest('.col-age')?.querySelector('.age-cell');
+    if (ageTarget) {
         if (window.sosInteraction?.isPending(`age:${docId}`)) return;
         const docRef = db.collection('appointments').doc(docId);
-        const isPink = target.classList.toggle('pink');
+        const isPink = ageTarget.classList.toggle('pink');
         saveInteraction(`age:${docId}`, null, () => docRef.update({ isAgePink: isPink })).catch(error => {
             // 書き込み失敗時は先行して切り替えた表示を元に戻す
-            target.classList.toggle('pink', !isPink);
+            ageTarget.classList.toggle('pink', !isPink);
             console.error('性別フラグの更新エラー:', error);
             alert('性別フラグの更新に失敗しました。');
         });
