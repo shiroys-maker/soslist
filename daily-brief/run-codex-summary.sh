@@ -85,6 +85,8 @@ prompt="入力として読むファイルは ${CONTEXT_FILE} だけ。メモリ�
 
 "$CODEX_BIN" exec \
   --ephemeral \
+  --model gpt-6-astra \
+  --config 'model_reasoning_effort="high"' \
   --sandbox workspace-write \
   --cd "$ROOT_DIR" \
   --add-dir "$out_dir" \

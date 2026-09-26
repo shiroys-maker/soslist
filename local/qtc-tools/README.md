@@ -29,7 +29,7 @@ image and extracts the same exam date, right/left thresholds, tinnitus, and
 audiometer fields. The existing patient fields, editable report, and printing
 flow are preserved. The old browser-side OpenAI API key and request are removed.
 `AUDIOGRAM_CODEX_MODEL` and `AUDIOGRAM_CODEX_BIN` optionally override the AUD
-model and executable. AUD retains `gpt-5.6-sol` / `high`; Astra is used only by the
+model and executable. AUD uses `gpt-6-sol` / `high`; Astra is used only by the
 XR/CD reading window. Both routes use `codex_images.py` for
 ChatGPT authentication, temporary image handling, execution limits, and errors.
 
@@ -46,3 +46,8 @@ sharing the runner. The served AUD page was tested through its real file chooser
 with one synthetic audiometry form (no patient information). All 14 thresholds,
 including zero and a negative value, exam date, tinnitus selection, make/model,
 and calibration date appeared correctly. Actual clinical forms remain untested.
+
+Model routing check (2026-09-26): both `gpt-5.6-sol` and `gpt-6-sol` at `high`
+matched all expected fields on the same synthetic form, including zero/negative
+thresholds, NR and >100 as null, hearing-date selection, tinnitus, and equipment.
+This is a synthetic transcription check, not a clinical accuracy benchmark.

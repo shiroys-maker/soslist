@@ -38,7 +38,9 @@ cp .env.example .env        # ANTHROPIC_API_KEY と GOOGLE_APPLICATION_CREDENTIA
 
 `ffmpeg` 推奨(mp3化と速度変更に使用): `brew install ffmpeg`
 
-既定の要約モデルは Anthropic の `claude-sonnet-5` です。
+SOSList Localの手動・定時Summaryは `run-codex-summary.sh` からCodex CLIを呼び、`gpt-6-astra` / `high` を起動引数で指定します。`brief.md` と `podcast-script.txt` は同じ呼び出しで生成し、Codex共通設定の変更に影響されません。
+
+以下のAPI経由で直接生成する場合の既定の要約モデルは Anthropic の `claude-sonnet-5` です。
 必要に応じて `.env` で `LLM_PROVIDER`、`PODCAST_MODEL`、`PODCAST_FALLBACK_MODEL` を上書きできます。
 
 ---

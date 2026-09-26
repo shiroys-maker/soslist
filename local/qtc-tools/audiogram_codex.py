@@ -59,7 +59,7 @@ def generate_report(payload):
     images = decode_images(payload, max_count=1)
     return validate_report(run_image_report(
         images, prompt=report_prompt(), schema=REPORT_SCHEMA,
-        model=os.environ.get('AUDIOGRAM_CODEX_MODEL', 'gpt-5.6-sol'),
+        model=os.environ.get('AUDIOGRAM_CODEX_MODEL', 'gpt-6-sol'),
         executable=os.environ.get('AUDIOGRAM_CODEX_BIN', CODEX_BIN),
     ))
 

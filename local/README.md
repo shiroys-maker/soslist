@@ -31,10 +31,15 @@ cd local/mac-app
 
 ### Summary flow
 
+Manual and scheduled Summary generation both use `daily-brief/run-codex-summary.sh`.
+It explicitly selects `gpt-6-astra` / `high` for the joint `brief.md` and
+`podcast-script.txt` generation, independently of the user's global Codex settings.
+The later pronunciation-only conversion uses `gpt-6-sol` / `medium`.
+
 - `作成` is handled only by the native app.
-- The app runs `daily-brief/generate-brief.js` directly for the selected date.
-- `brief.md` and `podcast-script.txt` are generated through the API flow already used by `daily-brief`.
-- Audio is synthesized automatically through the configured local engine, currently AivisSpeech.
+- The app runs `daily-brief/run-codex-summary.sh` for the selected date.
+- Codex generates `brief.md` and `podcast-script.txt`; `generate-brief.js --finalize-prepared` then performs the existing post-processing.
+- Audio is synthesized automatically through the configured engine, currently Gemini TTS.
 - Progress is pushed back to the main local viewer while the job runs.
 - `表示` still opens the existing Summary only.
 
