@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { splitDialogue, buildRequest, extractWav, requestAudio, synthesizeGemini } = require('../gemini-tts');
 
-const config = { model: 'gemini-3.8-flash-tts', voiceA: 'Kore', voiceB: 'Puck',
+const config = { model: 'gemini-3.8-flash-tts', voiceA: 'Aoede', voiceB: 'Charon',
   style: '自然で明瞭な日本語。', apiKey: 'synthetic-secret', timeoutMs: 1000 };
 function wav() {
   const b = Buffer.alloc(48);
@@ -29,7 +29,7 @@ test('Gemini request separates exact transcript from two-speaker Japanese delive
   assert.deepEqual(req.input[0].content.map(c => c.annotations[0].speaker), ['A', 'B']);
   assert.equal(req.input[0].content[0].annotations[0].style, config.style);
   assert.deepEqual(req.generation_config.speech_config.speakers,
-    [{ speaker: 'A', voice: 'Kore' }, { speaker: 'B', voice: 'Puck' }]);
+    [{ speaker: 'A', voice: 'Aoede' }, { speaker: 'B', voice: 'Charon' }]);
   assert.equal(req.response_format.mime_type, 'audio/wav');
 });
 
@@ -66,7 +66,7 @@ test('credentials go in headers, HTTP errors do not echo secrets, and requests t
   })), /秒以内/);
 });
 
-test('failed later chunks retain existing audio; success atomically publishes 1.2x MP3 and cleans staging', async t => {
+test('failed later chunks retain existing audio; success atomically publishes 1.3x MP3 and cleans staging', async t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gemini-tts-test-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const previous = process.env.GEMINI_API_KEY;
@@ -77,14 +77,14 @@ test('failed later chunks retain existing audio; success atomically publishes 1.
   fs.writeFileSync(base + '.wav', 'original-wav');
   let calls = 0;
   await assert.rejects(synthesizeGemini([{ speaker: 'A', text: '検査。'.repeat(800) }], base, {
-    speed: 1.2, log() {}, runLocalTool() { assert.fail('Must not encode partial dialogue'); },
+    speed: 1.3, log() {}, runLocalTool() { assert.fail('Must not encode partial dialogue'); },
     fetchImpl: async () => ++calls === 1 ? { ok: true, json: async () => payload() } : { ok: false, status: 429 },
   }), /429/);
   assert.equal(fs.readFileSync(base + '.mp3', 'utf8'), 'original');
   assert.equal(fs.readFileSync(base + '.wav', 'utf8'), 'original-wav');
   const result = await synthesizeGemini([{ speaker: 'A', text: '確認。' }], base, {
-    speed: 1.2, log() {}, fetchImpl: async () => ({ ok: true, json: async () => payload() }),
-    runLocalTool(cmd, args) { assert.equal(cmd, 'ffmpeg'); assert.ok(args.includes('atempo=1.2')); fs.writeFileSync(args.at(-1), 'new-mp3'); },
+    speed: 1.3, log() {}, fetchImpl: async () => ({ ok: true, json: async () => payload() }),
+    runLocalTool(cmd, args) { assert.equal(cmd, 'ffmpeg'); assert.ok(args.includes('atempo=1.3')); fs.writeFileSync(args.at(-1), 'new-mp3'); },
   });
   assert.equal(result.mp3Path, base + '.mp3');
   assert.equal(fs.readFileSync(result.mp3Path, 'utf8'), 'new-mp3');

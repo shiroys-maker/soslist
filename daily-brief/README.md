@@ -2,7 +2,7 @@
 
 日付を入れて「作成」ボタンを押すと、その日(JST)の予約を Firestore から取得し、
 検査内容(`services`)・Claim詳細(`claimDetail`)・メモ(`notes`)を判定ルールに沿って要約。
-日本語テキストのブリーフと、**二人対話形式のポッドキャスト音声(約1.2倍速)**を生成し、
+日本語テキストのブリーフと、**二人対話形式のポッドキャスト音声(約1.3倍速)**を生成し、
 ブラウザ上で表示・再生できます。
 
 データは Firebase(Firestore)にあるため、この処理は **あなたの Mac 上の Node**で動かします
@@ -70,7 +70,7 @@ Storage には対象日が新しい2件だけを残し、cloud viewer の Summar
 | ファイル | 内容 |
 |---|---|
 | `brief.md` | 日本語テキストの要約(時刻順・分類・IMO要否・確認項目) |
-| `podcast.mp3` / `podcast.wav` | 二人対話のポッドキャスト音声(約1.2倍速) |
+| `podcast.mp3` / `podcast.wav` | 二人対話のポッドキャスト音声(約1.3倍速) |
 | `podcast-script.txt` | 読み上げ台本(テキスト) |
 | `dialogue.json` | 台本の構造化データ |
 | `podcast-speech.txt` | Codexで読みを補正した音声専用の台本 |
@@ -78,9 +78,9 @@ Storage には対象日が新しい2件だけを残し、cloud viewer の Summar
 
 ### Gemini 3.8 Flash TTS（既定）
 
-音声は `gemini-3.8-flash-tts` で生成します。`GEMINI_API_KEY`（または `GOOGLE_API_KEY`）を `.env` に設定してください。進行役は `Kore`、専門役は `Puck`。話者と「自然で落ち着いた日本語の会話。明瞭に。」という話し方の指定を `speech_metadata` に付け、台本本文とは分けて送ります。本文の書き換えや追加説明は行いません。
+音声は `gemini-3.8-flash-tts` で生成します。`GEMINI_API_KEY`（または `GOOGLE_API_KEY`）を `.env` に設定してください。進行役は女性の `Aoede`、専門役は男性の `Charon`。話者と「自然で落ち着いた日本語の会話。明瞭に。」という話し方の指定を `speech_metadata` に付け、台本本文とは分けて送ります。本文の書き換えや追加説明は行いません。
 
-二人の発話をまとめて生成し、長い台本は最大1200文字のまとまりに分割します。生成したWAVを結合して、ffmpegで1.2倍速のMP3へ変換します。Geminiでの速度変更は `PODCAST_SPEED`（0.5〜2、既定1.2）です。全区間の生成・MP3変換に成功してから音声を入れ替えるため、APIエラー時も既存音声を維持します。他モデルへの自動フォールバックはしません。
+二人の発話をまとめて生成し、長い台本は最大1200文字のまとまりに分割します。生成したWAVを結合して、ffmpegで1.3倍速のMP3へ変換します。Geminiでの速度変更は `PODCAST_SPEED`（0.5〜2、既定1.3）です。全区間の生成・MP3変換に成功してから音声を入れ替えるため、APIエラー時も既存音声を維持します。他モデルへの自動フォールバックはしません。
 
 `GEMINI_TTS_MODEL`、`GEMINI_TTS_VOICE_A`、`GEMINI_TTS_VOICE_B`、`GEMINI_TTS_STYLE`、`GEMINI_TTS_TIMEOUT_MS`（区間ごと、既定240000）で調整できます。以前のAivisSpeechへ戻す場合は `PODCAST_AUDIO_ENGINE=aivis` を設定します。Gemini利用時はAivisSpeechを起動・終了しません。
 
@@ -116,11 +116,11 @@ npm run sync-audio                       # 既存mp3のうち新しい2件をFir
 
 主な環境変数(`.env`):
 `ANTHROPIC_API_KEY`(必須) / `OPENAI_API_KEY`(OpenAIモデルまたはOpenAI TTS使用時) / `GOOGLE_APPLICATION_CREDENTIALS`(必須) /
-`PODCAST_SPEED`(再生速度・既定 1.2) / `PODCAST_MINUTES`(台本の目安尺・既定 12) /
+`PODCAST_SPEED`(再生速度・既定 1.3) / `PODCAST_MINUTES`(台本の目安尺・既定 12) /
 `PODCAST_AUDIO_ENGINE`(既定 `gemini`) / `AIVIS_ENGINE_URL`(既定 `http://127.0.0.1:10101`) /
 `AIVIS_STYLE_ID_A`(既定 `1937616896`, にせ) / `AIVIS_STYLE_ID_B`(既定 `1388823424`, 凛音エル) /
 `SAY_VOICE_A`(say 利用時。既定 `Kyoko`) / `SAY_VOICE_B`(say 利用時。既定 `Reed (日本語（日本）)`) /
 `TTS_MODEL` `TTS_VOICE_A` `TTS_VOICE_B`(OpenAI TTS に戻す場合) /
 `LLM_PROVIDER`(既定 `anthropic`) / `PODCAST_MODEL`(既定 `claude-sonnet-5`) / `PODCAST_FALLBACK_MODEL` / `ANTHROPIC_EFFORT`(既定 `medium`) / `PODCAST_GENERATION_MAX_ATTEMPTS`(既定 `1`) / `FIREBASE_STORAGE_BUCKET` / `PORT`(既定 8790)。
 
-> ヒント: 1.2倍速だと再生時間は台本尺の約8割になります。長めにしたい場合は `PODCAST_MINUTES` を増やしてください。
+> ヒント: 1.3倍速だと再生時間は台本尺の約77%になります。長めにしたい場合は `PODCAST_MINUTES` を増やしてください。

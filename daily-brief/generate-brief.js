@@ -118,8 +118,8 @@ const AIVIS_STYLE_ID_A = Number(process.env.AIVIS_STYLE_ID_A || 1937616896);
 const AIVIS_STYLE_ID_B = Number(process.env.AIVIS_STYLE_ID_B || 1388823424);
 const AIVIS_APP_PATH = process.env.AIVIS_APP_PATH || '/Applications/AivisSpeech.app';
 const PODCAST_MINUTES = Number(process.env.PODCAST_MINUTES || 12);
-// 読み上げ速度(1.0=等速)。ユーザー希望により既定 1.2 倍速。
-const PODCAST_SPEED = Number(process.env.PODCAST_SPEED || 1.2);
+// 読み上げ速度(1.0=等速)。ユーザー希望により既定 1.3 倍速。
+const PODCAST_SPEED = Number(process.env.PODCAST_SPEED || 1.3);
 const LOCAL_TTS_TIMEOUT_MS = Number(process.env.LOCAL_TTS_TIMEOUT_MS || 60000);
 const AIVIS_STARTUP_TIMEOUT_MS = Number(process.env.AIVIS_STARTUP_TIMEOUT_MS || 20000);
 
