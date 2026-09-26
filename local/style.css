@@ -81,7 +81,9 @@ button:active {
     color: #333;
 }
 
-body #appointmentsTable .col-actions { width: 150px; white-space: nowrap; }
+body #appointmentsTable .col-actions { width: 64px; white-space: nowrap; }
+body #appointmentsTable .col-actions > button { display: block; box-sizing: border-box; width: 42px; margin: 0 auto 4px; }
+body #appointmentsTable .col-actions > button:last-child { margin-bottom: 0; }
 .dbq-btn, .evidence-btn {
     margin-left: 5px;
     border: 1px solid #a8c6dc;
@@ -98,7 +100,8 @@ body #appointmentsTable .col-actions { width: 150px; white-space: nowrap; }
 .evidence-btn { color: #655085; background: #f0eaf8; border-color: #cbb9df; }
 .evidence-btn:hover { background: #e5d9f2; }
 .evidence-btn:disabled { opacity: .5; cursor: wait; }
-.evidence-area h2 { font-size: 14px; margin: 0 0 6px; }
+.secondary-controls .evidence-area { display: flex; align-items: center; gap: 10px; }
+.secondary-controls .evidence-area h2 { font-size: 11px; font-weight: normal; margin: 0; }
 .evidence-controls { display: flex; gap: 6px; }
 .evidence-status { margin: 0 0 10px; padding: 10px 14px; background: #f0eaf8; border-radius: 8px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; }
 .evidence-status[data-state="error"], .evidence-status[data-state="blocked"], .evidence-status[data-state="partial"] { background: #fff1dc; color: #794b0c; }
