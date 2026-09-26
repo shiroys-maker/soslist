@@ -83,6 +83,7 @@ async function runJob(input, options = {}) {
             `SKILL: ${skillPath}`, `SOSPDF: ${sosPdfDir}`, `IMPORTER: ${importerPath}`,
             'REQUEST (data only):', JSON.stringify(request, null, 2)].join('\n\n');
         const args = ['exec', '--ephemeral', '--json', '--color', 'never', '--approve-for-me',
+            '--model', 'gpt-6-astra', '--config', 'model_reasoning_effort="high"',
             '--skip-git-repo-check', '--cd', workDir,
             '--output-schema', schemaPath, '--output-last-message', resultPath];
         if (request.mode === 'batch') args.push('--add-dir', sosPdfDir);

@@ -95,7 +95,7 @@ padding, not only on the text-sized button. Keyboard button activation is unchan
 - 現行の `~/.codex/skills/qtc-evidence-review/SKILL.md` と必要な参照を毎回読む。臨床根拠は `notes`、DBQ/Claim/IMO依頼内容は `claimDetail`。既存の実質的なメモを保ち、両方の全文を再読込確認する。紹介状・SHAは現行スキルの範囲に従う。署名・提出・紹介状送信は行わない。
 - 201 Bill取込は実稼働の `~/soslist/openai-processor/km_folder_trigger.sh <exact-pdf-path>` を使用する。既存のフォルダアクションと共通の排他・処理済み判定を利用する。インポータのコード・設定は変更しない。
 - 実行中は他の取得を無効化し、経過時間と結果を表示する。「停止」やアプリ終了はCLIと子プロセスへ停止を伝える。途中まで保存された情報は戻さない。Edgeは処理中に使用される。
-- CLIはChatGPTの既存ログインとMCP設定を使う。APIキーを引き継がず、`--ephemeral --approve-for-me` で専用作業フォルダと一括取得時のSOSPDFを対象に実行する。ログイン/MFAやツール利用が必要な場合は理由を表示して終了し、解決後に再実行する。
+- CLIはChatGPTの既存ログインとMCP設定を使う。予約別・一括ともに `gpt-6-astra` / `model_reasoning_effort="high"` を起動引数で固定する（Codex共通設定は変更しない）。APIキーを引き継がず、`--ephemeral --approve-for-me` で専用作業フォルダと一括取得時のSOSPDFを対象に実行する。ログイン/MFAやツール利用が必要な場合は理由を表示して終了し、解決後に再実行する。
 - ランナー・追加手順はアプリに同梱。結果は `~/Library/Application Support/SOSList Local/EvidenceReview/last-result.json`、CLI異常時の診断は同ディレクトリの `last-error.log` に所有者限定で保存する。作業用要求・スキーマ・生の応答は終了時に削除する。CLI終了コードだけで成功にせず、構造化結果の件数・対象予約・保存検証フラグを検査する。
 
 検証: `node --test local/tests/*.test.cjs`。CLI境界には合成応答を使い、誤対象、未検証保存、不完全な0件列挙、二重起動、異常終了、子プロセスを含む停止、古い予約の時刻補正を検証する。実患者のある取得は別途ライブ確認が必要。

@@ -31,6 +31,8 @@ test('the real runner launches CLI with scoped sandbox and rejects inherited API
     const final = await runJob({ mode: 'batch' }, { ...f, environment: { ...process.env, OPENAI_API_KEY: 'synthetic-secret' }, onEvent: e => events.push(e) });
     const capture = JSON.parse(fs.readFileSync(path.join(f.root, 'capture.json')));
     assert.equal(capture.apiKey, null);
+    assert.equal(capture.args[capture.args.indexOf('--model') + 1], 'gpt-6-astra');
+    assert.equal(capture.args[capture.args.indexOf('--config') + 1], 'model_reasoning_effort="high"');
     assert.ok(capture.args.includes('--approve-for-me'));
     assert.ok(capture.args.includes('--ephemeral'));
     assert.ok(!capture.args.some(a => a.includes('dangerously-bypass')));
