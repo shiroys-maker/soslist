@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { splitDialogue, buildRequest, extractWav, requestAudio, synthesizeGemini } = require('../gemini-tts');
 
-const config = { model: 'gemini-3.8-flash-tts', voiceA: 'Aoede', voiceB: 'Charon',
+const config = { model: 'gemini-3.8-flash-tts', voiceA: 'Kore', voiceB: 'Alnilam',
   style: '自然で明瞭な日本語。', apiKey: 'synthetic-secret', timeoutMs: 1000 };
 function wav() {
   const b = Buffer.alloc(48);
@@ -29,7 +29,7 @@ test('Gemini request separates exact transcript from two-speaker Japanese delive
   assert.deepEqual(req.input[0].content.map(c => c.annotations[0].speaker), ['A', 'B']);
   assert.equal(req.input[0].content[0].annotations[0].style, config.style);
   assert.deepEqual(req.generation_config.speech_config.speakers,
-    [{ speaker: 'A', voice: 'Aoede' }, { speaker: 'B', voice: 'Charon' }]);
+    [{ speaker: 'A', voice: 'Kore' }, { speaker: 'B', voice: 'Alnilam' }]);
   assert.equal(req.response_format.mime_type, 'audio/wav');
 });
 

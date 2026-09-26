@@ -8,8 +8,8 @@ const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/interactions'
 function settings() {
   return {
     model: process.env.GEMINI_TTS_MODEL || 'gemini-3.8-flash-tts',
-    voiceA: process.env.GEMINI_TTS_VOICE_A || 'Aoede',
-    voiceB: process.env.GEMINI_TTS_VOICE_B || 'Charon',
+    voiceA: process.env.GEMINI_TTS_VOICE_A || 'Kore',
+    voiceB: process.env.GEMINI_TTS_VOICE_B || 'Alnilam',
     style: process.env.GEMINI_TTS_STYLE || '自然で落ち着いた日本語の会話。明瞭に。',
     apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY,
     timeoutMs: Number(process.env.GEMINI_TTS_TIMEOUT_MS || 240000),
