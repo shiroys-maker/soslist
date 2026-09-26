@@ -36,6 +36,15 @@ cleanup() {
 }
 trap cleanup EXIT
 
+quit_aivis_if_used() {
+  (
+    source "$DAILY_BRIEF_DIR/.env"
+    if [[ "${PODCAST_AUDIO_ENGINE:-gemini}" == "aivis" ]]; then
+      osascript -e 'tell application "AivisSpeech" to quit' || true
+    fi
+  )
+}
+
 if [[ ! -x "$NODE_BIN" || ! -x "$CODEX_BIN" ]]; then
   print -u2 "Node または Codex CLI が見つかりません。"
   exit 1
@@ -59,7 +68,7 @@ fi
 
 if [[ "$action" == "finalize" ]]; then
   (cd "$DAILY_BRIEF_DIR" && source .env && "$NODE_BIN" generate-brief.js --finalize-prepared --date "$ymd")
-  osascript -e 'tell application "AivisSpeech" to quit' || true
+  quit_aivis_if_used
   print "[$(date -Iseconds)] ${ymd}: 後段処理を完了しました。"
   exit 0
 fi
@@ -92,5 +101,5 @@ if [[ ! -s "$out_dir/brief.md" || ! -s "$out_dir/podcast-script.txt" ]]; then
 fi
 
 (cd "$DAILY_BRIEF_DIR" && source .env && "$NODE_BIN" generate-brief.js --finalize-prepared --date "$ymd")
-osascript -e 'tell application "AivisSpeech" to quit' || true
+quit_aivis_if_used
 print "[$(date -Iseconds)] ${ymd}: Codex Summary の後段処理を完了しました。"

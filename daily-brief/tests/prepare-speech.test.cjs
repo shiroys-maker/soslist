@@ -67,7 +67,7 @@ function generatorHarness(prepare) {
   const file = path.resolve(__dirname, '../generate-brief.js');
   const ctx = vm.createContext({ require: name => name === './prepare-speech'
     ? { prepareSpeechDialogue: prepare } : require(name), module: { exports: {} },
-  __dirname: path.dirname(file), process: { argv: [], env: {} }, console: { error() {} } });
+  __dirname: path.dirname(file), process: { argv: [], env: { PODCAST_AUDIO_ENGINE: 'aivis' } }, console: { error() {} } });
   vm.runInContext(fs.readFileSync(file, 'utf8'), ctx, { filename: file });
   return ctx;
 }

@@ -29,7 +29,9 @@
  *   ANTHROPIC_EFFORT (default medium)           … Claude API の出力工数(low / medium / high / xhigh / max)
  *   PODCAST_GENERATION_MAX_ATTEMPTS (default 1) … 同一モデルでの再生成回数。2以上は明示時のみ
  *   PODCAST_REASONING_EFFORT (default medium)   … gpt-5系 Responses API の reasoning effort
- *   PODCAST_AUDIO_ENGINE (default aivis)         … aivis / say / openai
+ *   PODCAST_AUDIO_ENGINE (default gemini)        … gemini / aivis / say / openai
+ *   GEMINI_API_KEY                             … Gemini TTS用APIキー
+ *   GEMINI_TTS_MODEL (default gemini-3.8-flash-tts)
  *   TTS_MODEL        (default tts-1)             … OpenAI TTS使用時の音声合成モデル
  *   TTS_VOICE_A      (default alloy)             … OpenAI TTS使用時のホストAの声
  *   TTS_VOICE_B      (default onyx)              … OpenAI TTS使用時のホストBの声
@@ -104,7 +106,7 @@ const ANTHROPIC_EFFORT = process.env.ANTHROPIC_EFFORT || 'medium';
 const PODCAST_REASONING_EFFORT = process.env.PODCAST_REASONING_EFFORT || 'medium';
 const PODCAST_GENERATION_MAX_ATTEMPTS = Math.max(1, Number(process.env.PODCAST_GENERATION_MAX_ATTEMPTS || 1));
 const PODCAST_TEMPERATURE = Number(process.env.PODCAST_TEMPERATURE || 0.4);
-const PODCAST_AUDIO_ENGINE = process.env.PODCAST_AUDIO_ENGINE || 'aivis';
+const PODCAST_AUDIO_ENGINE = process.env.PODCAST_AUDIO_ENGINE || 'gemini';
 // tts-1 は speed パラメータ(0.25〜4.0)に対応するため既定にしている。
 const TTS_MODEL = process.env.TTS_MODEL || 'tts-1';
 const TTS_VOICE_A = process.env.TTS_VOICE_A || 'alloy';
@@ -116,8 +118,8 @@ const AIVIS_STYLE_ID_A = Number(process.env.AIVIS_STYLE_ID_A || 1937616896);
 const AIVIS_STYLE_ID_B = Number(process.env.AIVIS_STYLE_ID_B || 1388823424);
 const AIVIS_APP_PATH = process.env.AIVIS_APP_PATH || '/Applications/AivisSpeech.app';
 const PODCAST_MINUTES = Number(process.env.PODCAST_MINUTES || 12);
-// 読み上げ速度(1.0=等速)。ユーザー希望により既定 1.4 倍速。
-const PODCAST_SPEED = Number(process.env.PODCAST_SPEED || 1.4);
+// 読み上げ速度(1.0=等速)。ユーザー希望により既定 1.2 倍速。
+const PODCAST_SPEED = Number(process.env.PODCAST_SPEED || 1.2);
 const LOCAL_TTS_TIMEOUT_MS = Number(process.env.LOCAL_TTS_TIMEOUT_MS || 60000);
 const AIVIS_STARTUP_TIMEOUT_MS = Number(process.env.AIVIS_STARTUP_TIMEOUT_MS || 20000);
 
@@ -1002,6 +1004,20 @@ function usesAivisTts() {
   return String(PODCAST_AUDIO_ENGINE).toLowerCase() === 'aivis';
 }
 
+function usesGeminiTts() {
+  return String(PODCAST_AUDIO_ENGINE).toLowerCase() === 'gemini';
+}
+
+function audioDescription() {
+  if (usesGeminiTts()) {
+    const { model, voiceA, voiceB } = require('./gemini-tts').settings();
+    return `engine=gemini, model=${model}, voices=${voiceA}/${voiceB}, speed=${PODCAST_SPEED}`;
+  }
+  if (usesAivisTts()) return `engine=aivis, styles=${AIVIS_STYLE_ID_A}/${AIVIS_STYLE_ID_B}, speed=${PODCAST_SPEED}`;
+  if (usesOpenAITts()) return `engine=openai, model=${TTS_MODEL}, voices=${TTS_VOICE_A}/${TTS_VOICE_B}, speed=${PODCAST_SPEED}`;
+  return `engine=say, voices=${SAY_VOICE_A}/${SAY_VOICE_B}, speed=${PODCAST_SPEED}`;
+}
+
 function normalizeSpeechText(text) {
   return String(text || '').trim().replace(/\s*\n+\s*/g, ' ');
 }
@@ -1256,11 +1272,20 @@ async function synthesizePodcastWithAivis(dialogue, outBaseNoExt) {
   }
 }
 
-// ----------------------------- 音声生成 (OpenAI TTS / macOS say) -----------------------------
+// ----------------------------- 音声生成 -----------------------------
 async function synthesizePodcast(openai, dialogue, outBaseNoExt) {
-  if (usesAivisTts()) {
+  if (!['gemini', 'aivis', 'openai', 'say'].includes(String(PODCAST_AUDIO_ENGINE).toLowerCase())) {
+    throw new Error(`未対応の音声エンジンです: ${PODCAST_AUDIO_ENGINE}`);
+  }
+  if (usesGeminiTts()) require('./gemini-tts').validateSettings();
+  if (usesAivisTts() || usesGeminiTts()) {
     const { prepareSpeechDialogue } = require('./prepare-speech');
     dialogue = await prepareSpeechDialogue(dialogue, path.dirname(outBaseNoExt), { log });
+  }
+  if (usesGeminiTts()) {
+    return require('./gemini-tts').synthesizeGemini(dialogue, outBaseNoExt, {
+      runLocalTool, speed: PODCAST_SPEED, log,
+    });
   }
   // Keep existing audio until the new reading script is ready (CLI/auth failures are retryable).
   removeExistingAudioArtifacts(path.dirname(outBaseNoExt));
@@ -1466,13 +1491,7 @@ async function finalizeManualImport(opts = {}) {
     const openai = usesOpenAITts()
       ? new (require('openai'))({ apiKey: process.env.OPENAI_API_KEY })
       : null;
-    log(
-      usesOpenAITts()
-        ? `音声生成中 (engine=openai, model=${TTS_MODEL}, voices=${TTS_VOICE_A}/${TTS_VOICE_B}, speed=${PODCAST_SPEED}) ...`
-        : usesAivisTts()
-          ? `音声生成中 (engine=aivis, styles=${AIVIS_STYLE_ID_A}/${AIVIS_STYLE_ID_B}, speed=${PODCAST_SPEED}) ...`
-          : `音声生成中 (engine=say, voices=${SAY_VOICE_A}/${SAY_VOICE_B}, rate=${Math.max(120, Math.min(360, Math.round(175 * PODCAST_SPEED)))}) ...`
-    );
+    log(`音声生成中 (${audioDescription()}) ...`);
     const synthesized = await synthesizePodcast(openai, dialogue, path.join(outDir, 'podcast'));
     audioFile = synthesized.mp3Path || synthesized.wavPath;
   } else {
@@ -1542,13 +1561,7 @@ async function run(opts = {}) {
   if (opts.noAudio) {
     log('noAudio: 音声生成をスキップ');
   } else {
-    log(
-      usesOpenAITts()
-        ? `音声生成中 (engine=openai, model=${TTS_MODEL}, voices=${TTS_VOICE_A}/${TTS_VOICE_B}, speed=${PODCAST_SPEED}) ...`
-        : usesAivisTts()
-          ? `音声生成中 (engine=aivis, styles=${AIVIS_STYLE_ID_A}/${AIVIS_STYLE_ID_B}, speed=${PODCAST_SPEED}) ...`
-          : `音声生成中 (engine=say, voices=${SAY_VOICE_A}/${SAY_VOICE_B}, rate=${Math.max(120, Math.min(360, Math.round(175 * PODCAST_SPEED)))}) ...`
-    );
+    log(`音声生成中 (${audioDescription()}) ...`);
     const res = await synthesizePodcast(openai, brief.podcastDialogue, path.join(outDir, 'podcast'));
     audioFile = res.mp3Path || res.wavPath;
   }
