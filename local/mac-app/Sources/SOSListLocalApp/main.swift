@@ -84,6 +84,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private var dailyBriefProcess: Process?
     private var didAutoStartDailyBrief = false
     private var summaryGenerationProcess: Process?
+    private let evidenceReview = EvidenceReviewProcess()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if CommandLine.arguments.contains("--run-codex-scheduled-summary") {
@@ -92,6 +93,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         }
 
         webView = makeWebView()
+        evidenceReview.onStatus = { [weak self] status in
+            guard let self else { return }
+            self.relayJSON(status, toFunction: "window.__sosEvidenceStatus", in: self.webView)
+        }
 
         window = NSWindow(
             contentRect: NSRect(x: 120, y: 120, width: 1440, height: 960),
@@ -149,11 +154,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        evidenceReview.stop()
         summaryGenerationProcess?.terminate()
         stopDailyBriefProcess()
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        if ["startEvidenceReview", "stopEvidenceReview", "getEvidenceReviewStatus"].contains(message.name) {
+            guard message.webView === webView, message.frameInfo.isMainFrame,
+                  let currentURL = message.webView?.url, currentURL.isFileURL,
+                  let resources = Bundle.main.resourceURL?.appendingPathComponent("local-web"),
+                  currentURL.standardizedFileURL == resources.appendingPathComponent("local/index.html").standardizedFileURL,
+                  let payload = message.body as? [String: Any] else { return }
+            if message.name == "startEvidenceReview" {
+                evidenceReview.start(payload, nodePath: dailyBriefNodePath, resources: resources)
+            } else if message.name == "stopEvidenceReview" {
+                evidenceReview.stop(jobID: payload["jobId"] as? String)
+            } else if let status = evidenceReview.status {
+                relayJSON(status, toFunction: "window.__sosEvidenceStatus", in: webView)
+            }
+            return
+        }
         if message.name == "saveConnectionLog", let text = message.body as? String, text.utf8.count < 100_000 {
             let panel = NSSavePanel()
             panel.nameFieldStringValue = "soslist-connection-log.json"
@@ -480,6 +501,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         configuration.userContentController.add(self, name: "openQtcTool")
         configuration.userContentController.add(self, name: "runUtilityTool")
         configuration.userContentController.add(self, name: "openDBQProcessor")
+        configuration.userContentController.add(self, name: "startEvidenceReview")
+        configuration.userContentController.add(self, name: "stopEvidenceReview")
+        configuration.userContentController.add(self, name: "getEvidenceReviewStatus")
         configuration.userContentController.add(self, name: "printHTML")
         configuration.userContentController.add(self, name: "openExternalURL")
         configuration.userContentController.add(self, name: "loadPdfBytes")

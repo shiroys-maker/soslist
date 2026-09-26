@@ -5,6 +5,7 @@ const SOSLIST_TARGET = {
     mobileUI: false,                              // モバイルUIなし
     deleteColumn: true,                           // 削除ボタン列あり
     dbqProcessor: true,                           // DBQ Processor を起動
+    evidenceReview: true,                         // Codex CLIでQTC Evidence Review
     perReferralStatus: true,                      // 紹介先ごとに受診日・受・済を管理
     servicesCellClass: 'col-services services-cell', // 検査内容クリックでClaim詳細を開く
     referralHeaderDateMode: 'visitDate',
@@ -97,6 +98,36 @@ const handledDetailSaveRequests = new Set();
 const handledDetailReferralRequests = new Set();
 const pendingDeleteButtons = new Map();
 let didBackfillReferralHeaderDates = false;
+
+const evidenceController = window.SOSEvidenceReview.createController({
+    send: request => {
+        const handler = window.webkit?.messageHandlers?.startEvidenceReview;
+        if (!handler) throw new Error('取得はSOSList Localアプリから実行してください。');
+        handler.postMessage(request);
+    },
+    onState: state => {
+        const status = document.getElementById('evidenceStatus');
+        status.hidden = !state.message;
+        status.textContent = state.message;
+        status.dataset.state = state.state;
+        const stop = document.getElementById('stopEvidenceButton');
+        stop.hidden = !state.busy;
+        stop.disabled = state.state === 'cancelling';
+        document.getElementById('fetchEvidenceButton').textContent = state.busy ? '取得中…' : '取得';
+        syncEvidenceButtons(state.busy);
+    }
+});
+function syncEvidenceButtons(busy = evidenceController.state.busy) {
+    document.querySelectorAll('#fetchEvidenceButton, .evidence-btn').forEach(button => { button.disabled = busy; });
+}
+// Firestore can replace rows while a job is running; the lock survives that render.
+new MutationObserver(() => syncEvidenceButtons()).observe(tableBody, { childList: true });
+window.__sosEvidenceStatus = status => evidenceController.receive(status);
+document.getElementById('fetchEvidenceButton').addEventListener('click', () => evidenceController.start('batch'));
+document.getElementById('stopEvidenceButton').addEventListener('click', () => {
+    window.webkit?.messageHandlers?.stopEvidenceReview?.postMessage({ jobId: evidenceController.state.jobId });
+});
+window.webkit?.messageHandlers?.getEvidenceReviewStatus?.postMessage({});
 
 function syncCDMonitorSettingWithNative() {
     const nativeHandler = window.webkit?.messageHandlers?.setCDMonitoringEnabled;
@@ -380,6 +411,18 @@ tableBody.addEventListener('click', (e) => {
     }
     if (target.closest('.contract-cell, .col-contract')) {
         handleViewPdf(docId);
+        return;
+    }
+    const evidenceButton = target.closest('.evidence-btn');
+    if (evidenceButton) {
+        if (evidenceController.state.busy) return;
+        evidenceButton.disabled = true;
+        readInteractionAppointment(docId).then(doc => {
+            if (!doc.exists) throw new Error('予約を読み込めません。再接続後に取得してください。');
+            const data = doc.data();
+            evidenceController.start('single', { ...buildDetailsPayload(docId, data),
+                appointmentDateTimeMs: getCorrectedAppointmentDate(data)?.getTime() ?? null });
+        }).catch(error => alert(error.message)).finally(() => syncEvidenceButtons());
         return;
     }
     const dbqButton = target.closest('.dbq-btn');

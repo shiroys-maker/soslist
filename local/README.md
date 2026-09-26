@@ -87,3 +87,15 @@ records and stalled reads/writes, including late acknowledgements and duplicate 
 
 Name, date, phone, PDF and age actions also accept clicks on the surrounding cell
 padding, not only on the text-sized button. Keyboard button activation is unchanged.
+
+### QTC「取得」 / Evidence Review
+
+- 各行の「取得」: その予約だけをCodex CLIで処理する。画面と同じ補正済み予約日時・氏名・完全な契約番号・検査内容・Firestore文書IDを渡し、ポータルで照合する。
+- 上部QTCの「取得」: EdgeのProvider PortalでData Entry全件を列挙し、201 BillをSOSPDFへ保存・取込確認した後、Evidence Reviewを行う。既存PDFは内容またはリンク元で予約を照合し、再保存しない。0件ならファイル・予約を書き換えず終了する。
+- 現行の `~/.codex/skills/qtc-evidence-review/SKILL.md` と必要な参照を毎回読む。臨床根拠は `notes`、DBQ/Claim/IMO依頼内容は `claimDetail`。既存の実質的なメモを保ち、両方の全文を再読込確認する。紹介状・SHAは現行スキルの範囲に従う。署名・提出・紹介状送信は行わない。
+- 201 Bill取込は実稼働の `~/soslist/openai-processor/km_folder_trigger.sh <exact-pdf-path>` を使用する。既存のフォルダアクションと共通の排他・処理済み判定を利用する。インポータのコード・設定は変更しない。
+- 実行中は他の取得を無効化し、経過時間と結果を表示する。「停止」やアプリ終了はCLIと子プロセスへ停止を伝える。途中まで保存された情報は戻さない。Edgeは処理中に使用される。
+- CLIはChatGPTの既存ログインとMCP設定を使う。APIキーを引き継がず、`--ephemeral --approve-for-me` で専用作業フォルダと一括取得時のSOSPDFを対象に実行する。ログイン/MFAやツール利用が必要な場合は理由を表示して終了し、解決後に再実行する。
+- ランナー・追加手順はアプリに同梱。結果は `~/Library/Application Support/SOSList Local/EvidenceReview/last-result.json`、CLI異常時の診断は同ディレクトリの `last-error.log` に所有者限定で保存する。作業用要求・スキーマ・生の応答は終了時に削除する。CLI終了コードだけで成功にせず、構造化結果の件数・対象予約・保存検証フラグを検査する。
+
+検証: `node --test local/tests/*.test.cjs`。CLI境界には合成応答を使い、誤対象、未検証保存、不完全な0件列挙、二重起動、異常終了、子プロセスを含む停止、古い予約の時刻補正を検証する。実患者のある取得は別途ライブ確認が必要。

@@ -81,8 +81,8 @@ button:active {
     color: #333;
 }
 
-body #appointmentsTable .col-actions { width: 88px; white-space: nowrap; }
-.dbq-btn {
+body #appointmentsTable .col-actions { width: 130px; white-space: nowrap; }
+.dbq-btn, .evidence-btn {
     margin-left: 5px;
     border: 1px solid #a8c6dc;
     border-radius: 5px;
@@ -95,6 +95,14 @@ body #appointmentsTable .col-actions { width: 88px; white-space: nowrap; }
 }
 .dbq-btn:hover { background: #d9ebfa; }
 .dbq-btn:disabled { opacity: .5; }
+.evidence-btn { color: #655085; background: #f0eaf8; border-color: #cbb9df; }
+.evidence-btn:hover { background: #e5d9f2; }
+.evidence-btn:disabled { opacity: .5; cursor: wait; }
+.evidence-area h2 { font-size: 14px; margin: 0 0 6px; }
+.evidence-controls { display: flex; gap: 6px; }
+.evidence-status { margin: 0 0 10px; padding: 10px 14px; background: #f0eaf8; border-radius: 8px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; }
+.evidence-status[data-state="error"], .evidence-status[data-state="blocked"], .evidence-status[data-state="partial"] { background: #fff1dc; color: #794b0c; }
+.evidence-status[data-state="completed"] { background: #e6f3ed; color: #246143; }
 
 #main-app-container h1 {
     background: linear-gradient(to right, #3c355e, #933495);
