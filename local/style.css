@@ -793,12 +793,6 @@ td.col-received, td.col-completed { padding: 0 2px; }
 }
 .claim-detail-footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 #claimDetailStatus { white-space: pre-wrap; color: #555; }
-#appointmentsTable .service-claim-open {
-    width: 100%; border: 0; background: transparent; color: inherit;
-    padding: 0; margin: 0; font: inherit; text-align: left; text-shadow: none;
-    cursor: pointer;
-}
-#appointmentsTable .service-claim-open:hover { text-decoration: underline; }
 
 /* Keep delayed-operation feedback visible above modal editors. */
 #interactionStatus:not([hidden]) {

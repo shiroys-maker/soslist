@@ -546,9 +546,9 @@ function buildServicesPreviewHTML(services, displayText, hasClaimDetails = false
     const badges = `<span class="service-labels">${labels.map(label => `<span>${label}</span>`).join('')}</span>`;
     const text = escapeHtml(displayText || '検査内容なし');
     const editButton = hasClaimDetails ? '<button type="button" class="services-cell service-edit" aria-haspopup="dialog">Claim詳細</button>' : '';
-    const serviceText = (className) => hasClaimDetails
-        ? `<button type="button" class="services-cell service-claim-open ${className}" title="Claim詳細を開く" aria-haspopup="dialog">${text}</button>`
-        : `<span class="${className}">${text}</span>`;
+    // Keep text non-interactive; the dedicated Claim詳細 button opens the editor.
+    // WebKit cannot reliably line-clamp text directly on a button element.
+    const serviceText = (className) => `<span class="${className}">${text}</span>`;
     if (displayText.length <= 110) return `${badges}${serviceText('service-text')}${editButton}`;
     return `<details class="services-preview"${expanded ? ' open' : ''}>
         <summary>${badges}${serviceText('service-excerpt')}<span class="service-expand-label">全文を表示／折りたたむ</span></summary>

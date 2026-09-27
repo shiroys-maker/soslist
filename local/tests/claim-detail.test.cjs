@@ -119,7 +119,7 @@ test('concurrent edits and failed saves keep the draft open and do not overwrite
     }
 });
 
-test('clicking service text routes to the matching Claim detail and keeps expansion independent', () => {
+test('clicking the dedicated Claim detail button routes to the matching appointment', () => {
     const calls = []; let handler; let prevented = false;
     const ctx = { tableBody: { addEventListener: (_, fn) => { handler = fn; } }, openClaimDetailModal: id => calls.push(id) };
     vm.runInNewContext(clickListener, ctx);
