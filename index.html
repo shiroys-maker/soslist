@@ -157,13 +157,13 @@
     
     <div id="claimDetailModal" class="modal">
       <div class="modal-content claim-detail-content">
-        <h3>Claim詳細</h3>
-        <p id="claimDetailIdentity" class="claim-detail-identity"></p>
-        <label for="claimDetailText">Claim detail（閲覧専用）</label>
-        <textarea id="claimDetailText" rows="22" readonly placeholder="Claim詳細は未入力です。"></textarea>
-        <div class="modal-actions">
-          <button id="closeClaimDetailButton">閉じる</button>
+        <div class="claim-detail-header">
+          <h3>Claim詳細</h3>
+          <button type="button" id="closeClaimDetailButton">閉じる</button>
         </div>
+        <p id="claimDetailIdentity" class="claim-detail-identity"></p>
+        <p id="claimDetailLabel">Claim detail（閲覧専用）</p>
+        <div id="claimDetailText" role="region" aria-labelledby="claimDetailLabel" tabindex="0" data-placeholder="Claim詳細は未入力です。"></div>
       </div>
     </div>
 

@@ -1431,15 +1431,28 @@ td.col-received, td.col-completed { padding: 0 2px; }
     flex-direction: column;
     gap: 12px;
     text-align: left;
+    overflow: hidden;
 }
-.claim-detail-content h3, .claim-detail-identity { margin: 0; }
+.claim-detail-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-shrink: 0;
+}
+.claim-detail-content h3, .claim-detail-identity, #claimDetailLabel { margin: 0; }
+.claim-detail-identity, #claimDetailLabel { flex-shrink: 0; }
 .claim-detail-identity { color: #555; font-size: 14px; overflow-wrap: anywhere; }
+#closeClaimDetailButton { min-height: 44px; min-width: 72px; touch-action: manipulation; }
 #claimDetailText {
     flex: 1;
-    min-height: 100px;
+    min-height: 0;
     width: 100%;
     box-sizing: border-box;
-    resize: none;
+    overflow: auto;
+    overscroll-behavior: contain;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
     padding: 14px;
     font: 16px/1.6 -apple-system, BlinkMacSystemFont, sans-serif;
     border: 1px solid #aab3c3;
@@ -1447,6 +1460,7 @@ td.col-received, td.col-completed { padding: 0 2px; }
     color: #243047;
     background: #fff;
 }
+#claimDetailText:empty::before { content: attr(data-placeholder); color: #777; }
 #appointmentsTable .service-claim-open, button.appointment-card-services {
     width: 100%; border: 0; background: transparent; color: inherit;
     padding: 0; text-align: left; text-shadow: none; cursor: pointer;
