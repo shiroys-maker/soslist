@@ -24,7 +24,7 @@ function context() {
         window: {}, unsubscribe: null, tableBody, mobileAppointmentsList: mobile,
         dateFilter: { value: '2026-09-24' }, shokaijyoEditingDocId: null,
         document: { querySelector: () => null, querySelectorAll: () => [], getElementById: () => mobile, body: { classList: { add() {}, remove() {} } } },
-        claimDetailModal: { style: { display: 'none' } }, claimDetailText: { value: '', setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }, claimDetailIdentity: { textContent: '' },
+        claimDetailModal: { style: { display: 'none' } }, claimDetailText: { textContent: '' }, claimDetailIdentity: { textContent: '' },
         alert: text => alerts.push(text), MOBILE_CARD_ACTIONABLE_SELECTOR: 'button',
         toggleAppointmentCardExpansion() { throw new Error('Claim click must not expand its card'); }
     });
@@ -37,21 +37,21 @@ test('Web Claim detail reads current list data immediately and preserves literal
     const h = context(); const before = JSON.stringify(h.record);
     h.ctx.openClaimDetailModal('exact-web-doc');
     assert.equal(h.ctx.claimDetailModal.style.display, 'flex');
-    assert.equal(h.ctx.claimDetailText.value, h.record.claimDetail);
-    assert.equal(h.ctx.claimDetailText.selectionStart, 0);
+    assert.equal(h.ctx.claimDetailText.textContent, h.record.claimDetail);
+    assert.equal(h.ctx.claimDetailText.scrollTop, 0);
     assert.match(h.ctx.claimDetailIdentity.textContent, /SYNTHETIC\.1\.2/);
     assert.equal(JSON.stringify(h.record), before);
     h.ctx.closeClaimDetailModal();
     assert.equal(h.ctx.claimDetailModal.style.display, 'none');
-    assert.equal(h.ctx.claimDetailText.value, '');
+    assert.equal(h.ctx.claimDetailText.textContent, '');
     h.record.claimDetail = 'Updated on Local'; h.emit();
     h.ctx.openClaimDetailModal('exact-web-doc');
-    assert.equal(h.ctx.claimDetailText.value, 'Updated on Local');
+    assert.equal(h.ctx.claimDetailText.textContent, 'Updated on Local');
 });
 
 test('both desktop and mobile expose claim buttons and route nested clicks to the exact appointment', () => {
     const h = context();
-    assert.match(h.tableBody.innerHTML, /services-cell service-claim-open/);
+    assert.match(h.tableBody.innerHTML, /<button[^>]*class="[^"]*services-cell[^>]*aria-haspopup="dialog"/);
     assert.match(h.mobile.innerHTML, /appointment-card-services services-cell/);
     assert.match(h.mobile.innerHTML, /claim-detail-link services-cell/);
     for (const layout of ['table', 'mobile']) {
@@ -62,14 +62,14 @@ test('both desktop and mobile expose claim buttons and route nested clicks to th
         h.events[layout]({ target, preventDefault() { prevented = true; } });
         assert.equal(prevented, true);
         assert.equal(h.ctx.claimDetailModal.style.display, 'flex');
-        assert.equal(h.ctx.claimDetailText.value, h.record.claimDetail);
+        assert.equal(h.ctx.claimDetailText.textContent, h.record.claimDetail);
     }
 });
 
 test('empty claims stay empty and records outside the current list cannot open', () => {
     const h = context(); h.record.claimDetail = ''; h.emit();
     h.ctx.openClaimDetailModal('exact-web-doc');
-    assert.equal(h.ctx.claimDetailText.value, '');
+    assert.equal(h.ctx.claimDetailText.textContent, '');
     h.ctx.closeClaimDetailModal(); h.ctx.openClaimDetailModal('unknown');
     assert.equal(h.ctx.claimDetailModal.style.display, 'none');
     assert.match(h.alerts[0], /再接続/);
@@ -78,7 +78,8 @@ test('empty claims stay empty and records outside the current list cannot open',
 test('Web viewer is read-only and has no save or database mutation path', () => {
     const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
     const modal = html.slice(html.indexOf('<div id="claimDetailModal"'), html.indexOf('<div id="searchResultsModal"'));
-    assert.match(modal, /<textarea[^>]*id="claimDetailText"[^>]*\breadonly\b/);
+    assert.match(modal, /<div[^>]*id="claimDetailText"[^>]*role="region"/);
+    assert.doesNotMatch(modal, /<textarea|contenteditable/);
     assert.doesNotMatch(modal, /保存|save/i);
     assert.doesNotMatch(viewer, /\bdb\.|\.update\(|\.set\(|runTransaction/);
 });

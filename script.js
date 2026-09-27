@@ -524,16 +524,16 @@ function openClaimDetailModal(docId) {
         dateStyle: 'short', timeStyle: 'short', timeZone: 'Asia/Tokyo'
     }).format(date) : '';
     claimDetailIdentity.textContent = [data.claimantName, data.contractNumber, dateText].filter(Boolean).join(' ｜ ');
-    claimDetailText.value = data.claimDetail || '';
-    claimDetailText.setSelectionRange(0, 0);
-    claimDetailText.scrollTop = 0;
+    // A text region avoids native textarea focus/selection handling on iOS.
+    claimDetailText.textContent = data.claimDetail || '';
     claimDetailModal.style.display = 'flex';
+    claimDetailText.scrollTop = 0;
     document.body.classList.add('modal-open');
 }
 
 function closeClaimDetailModal() {
     claimDetailModal.style.display = 'none';
-    claimDetailText.value = '';
+    claimDetailText.textContent = '';
     claimDetailIdentity.textContent = '';
     document.body.classList.remove('modal-open');
 }
