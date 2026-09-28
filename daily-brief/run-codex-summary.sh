@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="/Users/shungohiroyasu/Documents/GitHub/soslist"
-CODEX_BIN="/Applications/ChatGPT.app/Contents/Resources/codex"
+CODEX_BIN="/Users/shungohiroyasu/.local/bin/codex"
 NODE_BIN="/Users/shungohiroyasu/.nvm/versions/node/v22.14.0/bin/node"
 DAILY_BRIEF_DIR="$ROOT_DIR/daily-brief"
 RUNTIME_DIR="$DAILY_BRIEF_DIR/.runtime"
