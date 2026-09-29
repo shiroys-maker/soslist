@@ -165,3 +165,12 @@ test('reopen accepts pending-start owner without turnId and rejects unknown clea
         store.owner({ threadId: 'thread', sessionId: 'session' });
     }
 });
+
+test('partial reports cannot claim a field was verified without a saved readback checkpoint', t => {
+    const store = ReviewStore.create(setup(t), { mode: 'single', appointment: identity });
+    store.queue({ enumerationComplete: true, appointments: [identity] });
+    const result = { outcome:'partial',found:1,completed:0,incomplete:1,skipped:0,enumerationComplete:true,summary:'incomplete',appointments:[{docId:identity.docId,contractNumber:identity.contractNumber,outcome:'incomplete',notesVerified:true,claimDetailVerified:false,reason:'Pending evidence'}] };
+    assert.throws(() => store.finish(result), /unverified/);
+    result.appointments[0].notesVerified = false;
+    assert.equal(store.finish(result).outcome, 'partial');
+});

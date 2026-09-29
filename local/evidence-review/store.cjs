@@ -170,6 +170,8 @@ class ReviewStore {
         for (const row of result.appointments) {
             const a = this.appointment(row.contractNumber);
             if (row.docId !== a.docId) throw Error('Result identity mismatch');
+            if ((row.notesVerified === true && !a.verified.notes) ||
+                (row.claimDetailVerified === true && !a.verified.claimDetail)) throw Error('Result claims an unverified saved field');
             if (row.outcome === 'completed' && (!a.verified.notes || !a.verified.claimDetail || (a.sha && !a.verified.sha) || (a.referralRequired && !a.verified.referral))) throw Error('Not all required fields are verified');
         }
         if (this.data.owner) throw Error('Browser cleanup not confirmed');
