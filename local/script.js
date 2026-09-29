@@ -106,27 +106,45 @@ const evidenceController = window.SOSEvidenceReview.createController({
         handler.postMessage(request);
     },
     onState: state => {
+        renderEvidenceStatus(state);
+    }
+});
+function renderEvidenceStatus(state = evidenceController.state) {
         const status = document.getElementById('evidenceStatus');
         status.hidden = !state.message;
-        status.textContent = state.message;
+        let progressTime = state.lastProgressAt && (typeof state.lastProgressAt === 'number'
+            ? state.lastProgressAt : Date.parse(state.lastProgressAt));
+        if (progressTime && progressTime < 1e12) progressTime *= 1000;
+        const elapsedMinutes = progressTime && Number.isFinite(progressTime)
+            ? Math.max(0, Math.floor((Date.now() - progressTime) / 60000)) : null;
+        const details = [];
+        if (state.phase) details.push(`段階: ${state.phase}`);
+        if (state.busy && elapsedMinutes !== null) details.push(`最終進捗: ${elapsedMinutes < 1 ? '1分未満' : `${elapsedMinutes}分前`}`);
+        status.textContent = [state.message, ...details].filter(Boolean).join('\n');
         status.dataset.state = state.state;
         const stop = document.getElementById('stopEvidenceButton');
         stop.hidden = !state.busy;
         stop.disabled = state.state === 'cancelling';
+        const resume = document.getElementById('resumeEvidenceButton');
+        resume.hidden = state.busy || !state.resumeId;
+        resume.disabled = state.busy;
         document.getElementById('fetchEvidenceButton').textContent = state.busy ? '取得中…' : '取得';
-        syncEvidenceButtons(state.busy);
-    }
-});
-function syncEvidenceButtons(busy = evidenceController.state.busy) {
-    document.querySelectorAll('#fetchEvidenceButton, .evidence-btn').forEach(button => { button.disabled = busy; });
+        syncEvidenceButtons(state.busy || !!state.resumeId);
+}
+function syncEvidenceButtons(locked = evidenceController.state.busy || !!evidenceController.state.resumeId) {
+    document.querySelectorAll('#fetchEvidenceButton, .evidence-btn').forEach(button => { button.disabled = locked; });
 }
 // Firestore can replace rows while a job is running; the lock survives that render.
 new MutationObserver(() => syncEvidenceButtons()).observe(tableBody, { childList: true });
 window.__sosEvidenceStatus = status => evidenceController.receive(status);
 document.getElementById('fetchEvidenceButton').addEventListener('click', () => evidenceController.start('batch'));
+document.getElementById('resumeEvidenceButton').addEventListener('click', () => {
+    if (evidenceController.state.resumeId) evidenceController.start('resume', { resumeId: evidenceController.state.resumeId });
+});
 document.getElementById('stopEvidenceButton').addEventListener('click', () => {
     window.webkit?.messageHandlers?.stopEvidenceReview?.postMessage({ jobId: evidenceController.state.jobId });
 });
+setInterval(() => { if (evidenceController.state.busy) renderEvidenceStatus(); }, 60_000);
 window.webkit?.messageHandlers?.getEvidenceReviewStatus?.postMessage({});
 
 function syncCDMonitorSettingWithNative() {
