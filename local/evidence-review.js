@@ -1,7 +1,13 @@
 (function (root) {
     'use strict';
     function buildRequest(mode, value) {
-        if (!['single', 'batch'].includes(mode)) throw new Error('取得方法が不正です。');
+        if (!['single', 'batch', 'resume'].includes(mode)) throw new Error('取得方法が不正です。');
+        if (mode === 'resume') {
+            if (!value || typeof value.resumeId !== 'string' || !/^[a-f0-9]{64}$/i.test(value.resumeId)) {
+                throw new Error('再開情報が不正です。アプリを再起動して状態を確認してください。');
+            }
+            return { mode, resumeId: value.resumeId };
+        }
         if (mode === 'batch') return { mode };
         if (!value || !['docId', 'claimantName', 'contractNumber'].every(key => typeof value[key] === 'string' && value[key].trim()) ||
             !Number.isFinite(value.appointmentDateTimeMs) || value.appointmentDateTimeMs <= 0 ||
@@ -36,21 +42,26 @@
         }
         if (Object.keys(counts).some(key => counts[key] !== result[key])) fail();
         if (request.mode === 'single' && result.found > 1) fail();
-        if (result.outcome === 'no_records' && (request.mode !== 'batch' || result.found !== 0 || !result.enumerationComplete)) fail();
+        if (result.outcome === 'no_records' && (request.mode === 'single' || result.found !== 0 || !result.enumerationComplete)) fail();
         if (result.outcome === 'completed' && (!result.enumerationComplete || !result.found || result.incomplete || !result.completed)) fail();
         return result;
     }
 
     function createController({ send, onState }) {
-        let state = { busy: false, jobId: null, state: 'idle', message: '' };
+        let state = { busy: false, jobId: null, state: 'idle', message: '', resumeId: null, phase: null, lastProgressAt: null };
         const publish = update => { state = { ...state, ...update }; onState(state); };
         return {
             get state() { return state; },
             start(mode, appointment) {
                 if (state.busy) return null;
+                if (state.resumeId && mode !== 'resume') {
+                    publish({ message: '未完了の取得があります。「再開」から確認してください。' });
+                    return null;
+                }
                 try {
                     const request = { ...buildRequest(mode, appointment), jobId: root.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}` };
-                    publish({ busy: true, jobId: request.jobId, state: 'starting', message: '取得を開始しています…' });
+                    publish({ busy: true, jobId: request.jobId, state: 'starting', message: mode === 'resume' ? '再開しています…' : '取得を開始しています…',
+                        resumeId: mode === 'resume' ? request.resumeId : null, phase: null, lastProgressAt: null });
                     send(request);
                     return request;
                 } catch (error) {
@@ -59,8 +70,17 @@
                 }
             },
             receive(update) {
-                if (!update || !update.jobId || (state.jobId && update.jobId !== state.jobId)) return;
-                publish({ ...update, busy: ['starting', 'running', 'progress', 'cancelling'].includes(update.state) });
+                if (!update || typeof update.state !== 'string') return;
+                // Persisted startup status has no jobId. It must never replace a live job.
+                if (!update.jobId && (state.jobId || state.busy)) return;
+                if (update.jobId && state.jobId && update.jobId !== state.jobId) return;
+                const busy = ['starting', 'running', 'progress', 'recovering', 'cancelling'].includes(update.state);
+                const resumable = busy || ['paused', 'blocked', 'partial', 'error', 'cancelled'].includes(update.state);
+                const resumeId = resumable && typeof update.resumeId === 'string' && /^[a-f0-9]{64}$/i.test(update.resumeId)
+                    ? update.resumeId : (busy ? state.resumeId : null);
+                publish({ ...update, busy, resumeId,
+                    phase: typeof update.phase === 'string' ? update.phase : null,
+                    lastProgressAt: update.lastProgressAt || null });
             }
         };
     }

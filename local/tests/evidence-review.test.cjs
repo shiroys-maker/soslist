@@ -20,6 +20,14 @@ test('single requests keep exact identity without copying clinical notes or unre
     assert.throws(() => buildRequest('unknown', appointment));
 });
 
+test('resume requests carry only the validated checkpoint ID', () => {
+    const resumeId = 'a'.repeat(64);
+    assert.deepEqual(buildRequest('resume', { resumeId, notes: 'private memo' }), { mode: 'resume', resumeId });
+    for (const candidate of ['', 'a'.repeat(63), 'g'.repeat(64), '../checkpoint']) {
+        assert.throws(() => buildRequest('resume', { resumeId: candidate }));
+    }
+});
+
 test('completion requires saved-field verification and the exact selected document', () => {
     const request = buildRequest('single', appointment);
     assert.equal(validateResult(request, result()).outcome, 'completed');
@@ -50,6 +58,28 @@ test('the controller prevents duplicate launch and ignores stale job updates', a
     assert.equal(controller.state.message, 'Edgeでログインしてください');
     controller.start('batch');
     assert.equal(sent.length, 2);
+});
+
+test('restored incomplete state allows only explicit resume and ignores old callbacks', () => {
+    const sent = [], controller = createController({ send: value => sent.push(value), onState: () => {} });
+    const resumeId = 'b'.repeat(64);
+    controller.receive({ state: 'paused', message: '中断', resumeId, phase: 'collecting' });
+    assert.equal(controller.state.busy, false);
+    assert.equal(controller.state.resumeId, resumeId);
+    assert.equal(controller.start('batch'), null);
+    assert.equal(sent.length, 0);
+    const resumed = controller.start('resume', { resumeId });
+    assert.equal(sent[0].resumeId, resumeId);
+    assert.equal(controller.state.busy, true);
+    controller.receive({ state: 'paused', message: 'stale persisted', resumeId });
+    controller.receive({ jobId: 'old-job', state: 'completed', message: 'stale completion' });
+    assert.equal(controller.state.jobId, resumed.jobId);
+    assert.equal(controller.state.busy, true);
+    controller.receive({ jobId: resumed.jobId, state: 'recovering', message: 'cleanup', resumeId });
+    assert.equal(controller.state.busy, true);
+    controller.receive({ jobId: resumed.jobId, state: 'completed', message: '完了' });
+    assert.equal(controller.state.resumeId, null);
+    assert.equal(controller.state.busy, false);
 });
 
 test('a failed bridge launch releases the lock and reports the error', () => {

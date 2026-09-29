@@ -153,8 +153,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         false
     }
 
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard evidenceReview.isActive else { return .terminateNow }
+        evidenceReview.stopForQuit {
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
-        evidenceReview.stop()
         summaryGenerationProcess?.terminate()
         stopDailyBriefProcess()
     }
@@ -170,7 +177,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                 evidenceReview.start(payload, nodePath: dailyBriefNodePath, resources: resources)
             } else if message.name == "stopEvidenceReview" {
                 evidenceReview.stop(jobID: payload["jobId"] as? String)
-            } else if let status = evidenceReview.status {
+            } else if let status = evidenceReview.currentStatus {
                 relayJSON(status, toFunction: "window.__sosEvidenceStatus", in: webView)
             }
             return
