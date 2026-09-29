@@ -112,6 +112,10 @@ function renderDetails(targetDocId, data) {
                 <span class="detail-label">検査内容</span>
                 <div class="detail-value">${escapeHtml(services)}</div>
             </section>
+            <section class="detail-card full-span">
+                <span class="detail-label">文書ID（予約照合用）</span>
+                <div id="appointmentDocumentId" class="detail-value">${escapeHtml(targetDocId)}</div>
+            </section>
         </div>
 
         <section class="notes-card">
