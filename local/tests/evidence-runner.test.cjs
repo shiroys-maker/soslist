@@ -110,3 +110,11 @@ test('interrupt acknowledgement without turn completion retains the cleanup obli
  const s=JSON.parse(fs.readFileSync(path.join(f.runRoot,'checkpoints',checkpoints(f)[0])));assert.equal(s.owner.sessionId,'actual-session');
  assert.ok(!readWire(f).some(m=>m.method==='mcpServer/tool/call'));
 });
+
+test('disabled MCP servers have transports even without machine-local definitions',async t=>{
+ const f=fixture(t);await runJob({mode:'batch'},f);
+ const args=JSON.parse(fs.readFileSync(path.join(f.root,'capture.json'))).args;
+ const mcp=args.find(a=>a.startsWith('mcp_servers='));
+ for(const name of ['node_repl','computer-use'])assert.ok(mcp.includes('"'+name+'"={"command"="/usr/bin/false","enabled"=false}'));
+ assert.ok(!args.some(a=>/^mcp_servers\.[^.]+\.enabled=/.test(a)));
+});

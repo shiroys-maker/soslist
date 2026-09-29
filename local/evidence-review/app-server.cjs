@@ -22,13 +22,15 @@ class AppServer {
     constructor({ codex, cwd, cua, onEvent, onFailure, timeoutMs = 120000, environment = process.env }) {
         this.pending = new Map(); this.sequence = 0; this.closed = false; this.timeoutMs = timeoutMs;
         this.onEvent = onEvent; this.onFailure = onFailure;
+        // Disabled entries still need a transport to pass Codex config validation.
+        // Do not depend on another Mac having saved MCP server definitions.
         const config = { forced_login_method: 'chatgpt', model_provider: 'openai', project_doc_max_bytes: 0, web_search: 'disabled',
-            mcp_servers: { cua_repl: { ...cua, enabled: true, required: true, enabled_tools: ['js', 'js_reset', 'turn_ended'], startup_timeout_sec: 120, tool_timeout_sec: 180 } },
+            mcp_servers: { node_repl: { command: '/usr/bin/false', enabled: false }, 'computer-use': { command: '/usr/bin/false', enabled: false }, cua_repl: { ...cua, enabled: true, required: true, enabled_tools: ['js', 'js_reset', 'turn_ended'], startup_timeout_sec: 120, tool_timeout_sec: 180 } },
             'features.plugins': false, 'features.apps': false, 'features.hooks': false, 'features.memories': false, 'features.chronicle': false,
             'features.shell_tool': false, 'features.unified_exec': false, 'features.multi_agent': false, 'features.multi_agent_v2': false,
             'features.skip_host_skill_discovery': true, 'features.browser_use': false, 'features.browser_use_external': false,
             'features.computer_use': false, 'features.in_app_browser': false, 'features.image_generation': false, 'features.goals': false,
-            'features.skill_search': false, 'mcp_servers.node_repl.enabled': false, 'mcp_servers.computer-use.enabled': false };
+            'features.skill_search': false };
         const args = ['app-server', '--stdio', ...Object.entries(config).flatMap(([k, v]) => ['-c', `${k}=${toml(v)}`])];
         this.child = spawn(codex, args, { cwd, detached: true, env: {
             HOME: os.homedir(), PATH: `${path.dirname(process.execPath)}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`,
