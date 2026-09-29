@@ -118,3 +118,27 @@ test('disabled MCP servers have transports even without machine-local definition
  for(const name of ['node_repl','computer-use'])assert.ok(mcp.includes('"'+name+'"={"command"="/usr/bin/false","enabled"=false}'));
  assert.ok(!args.some(a=>/^mcp_servers\.[^.]+\.enabled=/.test(a)));
 });
+
+
+test('single recovery uses the original explicit selection instead of the batch transition gate', async t => {
+ const f=fixture(t),{ReviewStore}=require('../evidence-review/store.cjs');
+ const appointment={docId:'synthetic-selected',claimantName:'SYNTHETIC',contractNumber:'TEST.1.2',appointmentDateTimeMs:1791248400000,services:['SHA'],sha:true};
+ const store=ReviewStore.create(f.runRoot,{mode:'single',appointment});
+ store.queue({enumerationComplete:true,appointments:[appointment]});
+ store.progress({contractNumber:appointment.contractNumber,phase:'blocked'});
+ // The transport's empty batch result is deliberately invalid for this selection.
+ await assert.rejects(runJob({mode:'resume',resumeId:store.id},f));
+ const start=readWire(f).find(m=>m.method==='thread/start');
+ assert.match(start.params.developerInstructions,/HOST-RESOLVED SCOPE: original mode=single/);
+ assert.match(start.params.developerInstructions,/historical Edit-transition evidence alone is NOT a blocker/);
+ const retained=ReviewStore.open(f.runRoot,store.id);
+ assert.equal(retained.data.appointments[0].shaEditStarted,undefined);
+ assert.equal(retained.data.appointments[0].docId,appointment.docId);
+ assert.deepEqual(retained.data.appointments[0].verified,{});
+});
+
+test('batch status scope still requires its own SHA transition and rejects unknown original modes',()=>{
+ const {scopeInstructions}=require('../evidence-review/runner.cjs');
+ assert.match(scopeInstructions({mode:'batch'}),/requires the recorded own SHA Edit transition/);
+ assert.throws(()=>scopeInstructions({mode:'resume'}));
+});

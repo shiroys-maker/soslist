@@ -70,6 +70,11 @@ function skillBody(skillPath) {
     }
     return body;
 }
+function scopeInstructions(request) {
+    if (request.mode === 'single') return 'HOST-RESOLVED SCOPE: original mode=single, including on resume. The user explicitly selected this exact appointment. Data Entry and Provider In Progress are both eligible starting statuses after fresh full identity, docId and access verification. Missing shaEditStarted or historical Edit-transition evidence alone is NOT a blocker. Begin with read-only inspection of existing answers and preserve them. Never invent transition history, take over another clinician ownership, bypass a lock, reopen a completed/submitted exam, or expand the selected scope. Perform only the current skill-authorized in-scope work and verify every save.';
+    if (request.mode === 'batch') return 'HOST-RESOLVED SCOPE: original mode=batch, including on resume. Initial enumeration is Data Entry only. A Provider In Progress queue member requires the recorded own SHA Edit transition and fresh identity/access verification. Never broaden the batch to other In Progress appointments.';
+    throw Error('取得対象の元のモードを確認できません。');
+}
 async function runJob(input, options = {}) {
     const initial = buildRequest(input.mode, input.mode === 'resume' ? input : input.appointment);
     const home = os.homedir();
@@ -123,7 +128,7 @@ async function runJob(input, options = {}) {
         const r = await server.rpc(previous ? 'thread/resume' : 'thread/start', { model: 'gpt-6-astra', modelProvider: 'openai', cwd: runRoot,
             approvalPolicy: 'on-request', approvalsReviewer: 'auto_review', sandbox: 'workspace-write',
             ...(previous ? { threadId: previous.threadId } : { ephemeral: false, dynamicTools }),
-            developerInstructions: fs.readFileSync(path.join(__dirname, 'workflow.md'), 'utf8') + '\n\nCURRENT SKILL AND REFERENCES (provided in full; no file reads needed):\n' + instructions,
+            developerInstructions: fs.readFileSync(path.join(__dirname, 'workflow.md'), 'utf8') + '\n\nCURRENT SKILL AND REFERENCES (provided in full; no file reads needed):\n' + instructions + '\n\n' + scopeInstructions(store.data.request),
         });
         thread = r.thread?.id; session = r.thread?.sessionId;
         if (!thread || !session) throw Error('Codexのsession IDを確認できないため操作を開始できません。');
@@ -341,4 +346,4 @@ if (require.main === module) {
         runJob(request, { onEvent: emit }).catch(error => { if (!reported) emit({ state: 'error', message: error.message, ...(/^[a-f0-9]{64}$/.test(request.resumeId || '') ? { resumeId: request.resumeId } : {}) }); process.exitCode = 1; });
     } catch (error) { emit({ state: 'error', message: error.message }); process.exitCode = 1; }
 }
-module.exports = { runJob, dynamicTools };
+module.exports = { runJob, dynamicTools, scopeInstructions };
