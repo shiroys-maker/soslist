@@ -130,6 +130,10 @@ test('single recovery uses the original explicit selection instead of the batch 
  await assert.rejects(runJob({mode:'resume',resumeId:store.id},f));
  const start=readWire(f).find(m=>m.method==='thread/start');
  assert.match(start.params.developerInstructions,/HOST-RESOLVED SCOPE: original mode=single/);
+ const turn=readWire(f).find(m=>m.method==='turn/start');
+ assert.equal(turn.params.additionalContext.soslist_workflow.kind,'application');
+ assert.equal(turn.params.additionalContext.soslist_workflow.value,start.params.developerInstructions);
+ assert.match(turn.params.additionalContext.soslist_workflow.value,/HOST-RESOLVED SCOPE: original mode=single/);
  assert.match(start.params.developerInstructions,/historical Edit-transition evidence alone is NOT a blocker/);
  const retained=ReviewStore.open(f.runRoot,store.id);
  assert.equal(retained.data.appointments[0].shaEditStarted,undefined);

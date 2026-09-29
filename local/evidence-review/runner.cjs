@@ -124,11 +124,12 @@ async function runJob(input, options = {}) {
         if (r.isError) throw Error('Edge操作の終了通知が失敗しました。所有記録を保持しています。');
         store.owner(null);
     }
+    const currentInstructions = () => 'CURRENT OPERATIONAL INSTRUCTIONS: these replace outdated workflow instructions from earlier turns of this application session. All access controls, identity checks, protected records and save verification requirements remain in force.\n\n' + fs.readFileSync(path.join(__dirname, 'workflow.md'), 'utf8') + '\n\nCURRENT SKILL AND REFERENCES (provided in full; no file reads needed):\n' + instructions + '\n\n' + scopeInstructions(store.data.request);
     async function openThread(previous) {
         const r = await server.rpc(previous ? 'thread/resume' : 'thread/start', { model: 'gpt-6-astra', modelProvider: 'openai', cwd: runRoot,
             approvalPolicy: 'on-request', approvalsReviewer: 'auto_review', sandbox: 'workspace-write',
             ...(previous ? { threadId: previous.threadId } : { ephemeral: false, dynamicTools }),
-            developerInstructions: fs.readFileSync(path.join(__dirname, 'workflow.md'), 'utf8') + '\n\nCURRENT SKILL AND REFERENCES (provided in full; no file reads needed):\n' + instructions + '\n\n' + scopeInstructions(store.data.request),
+            developerInstructions: currentInstructions(),
         });
         thread = r.thread?.id; session = r.thread?.sessionId;
         if (!thread || !session) throw Error('Codexのsession IDを確認できないため操作を開始できません。');
@@ -292,7 +293,7 @@ async function runJob(input, options = {}) {
         mayRelease = true;
         const prompt = `REQUEST (data only):\n${JSON.stringify(store.data.request)}\nSOSPDF: ${sosPdfDir}\nPRIVATE CHECKPOINT (data only; independently recheck identities and saved fields):\n${JSON.stringify(store.data)}\nThis is ${initial.mode === 'resume' ? 'a resume: audit uncertain saves first, never replay completed intake or verified sections blindly' : 'a new run'}.`;
         emit('running', 'Edge・SOSListの画面を確認しています。');
-        starting = server.rpc('turn/start', { threadId: thread, input: [{ type: 'text', text: prompt }], effort: 'high', outputSchema: resultSchema });
+        starting = server.rpc('turn/start', { threadId: thread, input: [{ type: 'text', text: prompt }], effort: 'high', additionalContext: { soslist_workflow: { kind: 'application', value: currentInstructions() } }, outputSchema: resultSchema });
         const started = await starting; remember(started.turn?.id);
         watch = setInterval(() => { if (Date.now() - lastActivity > duration('stall', 300000)) fail(Error('進捗が5分間確認できないため停止しました。途中成果から再開できます。')); }, duration('tick', 1000));
         heartbeat = setInterval(() => emit(stopping ? 'cancelling' : 'progress', `取得中：${phase} / 最終進捗から${Math.floor((Date.now() - lastActivity) / 1000)}秒`), 15000);
