@@ -42,7 +42,8 @@ class AppServer {
         this.child.stdin.on('error', () => this.fail(Error('Codex操作接続が切断されました。')));
         this.child.on('exit', (code, signal) => { if (!this.closed) this.fail(Error(`Codex操作接続が終了しました（${code ?? signal}）。途中成果を保持しています。`)); });
         createInterface({ input: this.child.stdout }).on('line', line => {
-            try { if (line.length > 8_000_000) throw Error('Response limit'); this.receive(JSON.parse(line)); }
+            if (line.length > 8_000_000) { this.fail(Error('Codex応答が受信上限を超えました。途中成果を保持しています。')); return; }
+            try { this.receive(JSON.parse(line)); }
             catch (_) { this.fail(Error('Codex応答を解釈できません。途中成果を保持しています。')); }
         });
     }

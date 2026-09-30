@@ -128,7 +128,9 @@ async function runJob(input, options = {}) {
     async function openThread(previous) {
         const r = await server.rpc(previous ? 'thread/resume' : 'thread/start', { model: 'gpt-6-astra', modelProvider: 'openai', cwd: runRoot,
             approvalPolicy: 'on-request', approvalsReviewer: 'auto_review', sandbox: 'workspace-write',
-            ...(previous ? { threadId: previous.threadId } : { ephemeral: false, dynamicTools }),
+            // Full screenshot/tool history can exceed the transport frame limit.
+            // The server still restores model history; this only omits it from the RPC response.
+            ...(previous ? { threadId: previous.threadId, excludeTurns: true } : { ephemeral: false, dynamicTools }),
             developerInstructions: currentInstructions(),
         });
         thread = r.thread?.id; session = r.thread?.sessionId;

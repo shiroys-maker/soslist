@@ -26,6 +26,7 @@ function fixture(t, scenario='normal') {
  let r={};
  if(m.method==='account/read')r={account:{type:'chatgpt'}};
  if(['thread/start','thread/resume'].includes(m.method))r={thread:{id:'thread',sessionId:'actual-session'}};
+ if(m.method==='thread/resume'&&scenario==='large-history'&&!m.params.excludeTurns)r.thread.turns=[{syntheticScreenshot:'x'.repeat(8_100_000)}];
  if(m.method==='mcpServerStatus/list')r={data:[{name:'cua_repl',tools:{js:{name:'js'},turn_ended:{name:'turn_ended'}}}]};
  if(m.method==='mcpServer/tool/call'&&scenario==='cleanup-fail')r={isError:true};
  if(m.method==='turn/interrupt'&&scenario!=='no-ended')wire({method:'turn/completed',params:{threadId:'thread',turn:{id:'turn',status:'interrupted'}}});
@@ -145,4 +146,17 @@ test('batch status scope still requires its own SHA transition and rejects unkno
  const {scopeInstructions}=require('../evidence-review/runner.cjs');
  assert.match(scopeInstructions({mode:'batch'}),/requires the recorded own SHA Edit transition/);
  assert.throws(()=>scopeInstructions({mode:'resume'}));
+});
+
+
+test('large resumed history is omitted from the response without changing the persistent session',async t=>{
+ const f=fixture(t,'large-history'),{ReviewStore}=require('../evidence-review/store.cjs');
+ const store=ReviewStore.create(f.runRoot,{mode:'batch'});
+ store.setSession({threadId:'thread',sessionId:'actual-session'});
+ const result=await runJob({mode:'resume',resumeId:store.id},f);
+ assert.equal(result.outcome,'no_records');
+ const resume=readWire(f).find(m=>m.method==='thread/resume');
+ assert.equal(resume.params.threadId,'thread');assert.equal(resume.params.excludeTurns,true);
+ assert.ok(!Object.hasOwn(resume.params,'history'));
+ assert.equal(readWire(f).some(m=>m.method==='thread/start'),false);
 });
