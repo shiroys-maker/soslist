@@ -110,8 +110,8 @@ body #appointmentsTable .col-actions > button:last-child { margin-bottom: 0; }
 .evidence-status[data-state="error"], .evidence-status[data-state="blocked"], .evidence-status[data-state="partial"] { background: #fff1dc; color: #794b0c; }
 .evidence-status[data-state="completed"] { background: #e6f3ed; color: #246143; }
 .evidence-status[data-state="paused"], .evidence-status[data-state="recovering"], .evidence-status[data-state="cancelled"] { background: #fff1dc; color: #794b0c; }
-#resumeEvidenceButton { color: #655085; background: #f0eaf8; border: 1px solid #cbb9df; border-radius: 5px; cursor: pointer; }
-#resumeEvidenceButton:disabled { opacity: .5; cursor: wait; }
+#resumeEvidenceButton, .evidence-resume-btn { color: #655085; background: #f0eaf8; border: 1px solid #cbb9df; border-radius: 5px; cursor: pointer; }
+#resumeEvidenceButton:disabled, .evidence-resume-btn:disabled { opacity: .5; cursor: wait; }
 
 #main-app-container h1 {
     background: linear-gradient(to right, #3c355e, #933495);

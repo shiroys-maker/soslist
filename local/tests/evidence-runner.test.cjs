@@ -122,13 +122,14 @@ test('disabled MCP servers have transports even without machine-local definition
 
 
 test('single recovery uses the original explicit selection instead of the batch transition gate', async t => {
- const f=fixture(t),{ReviewStore}=require('../evidence-review/store.cjs');
+ const f=fixture(t),{ReviewStore}=require('../evidence-review/store.cjs'),events=[];
  const appointment={docId:'synthetic-selected',claimantName:'SYNTHETIC',contractNumber:'TEST.1.2',appointmentDateTimeMs:1791248400000,services:['SHA'],sha:true};
  const store=ReviewStore.create(f.runRoot,{mode:'single',appointment});
  store.queue({enumerationComplete:true,appointments:[appointment]});
  store.progress({contractNumber:appointment.contractNumber,phase:'blocked'});
  // The transport's empty batch result is deliberately invalid for this selection.
- await assert.rejects(runJob({mode:'resume',resumeId:store.id},f));
+ await assert.rejects(runJob({mode:'resume',resumeId:store.id},{...f,onEvent:e=>events.push(e)}));
+ assert.ok(events.length);assert.ok(events.every(e=>e.resumeDocId===appointment.docId));
  const start=readWire(f).find(m=>m.method==='thread/start');
  assert.match(start.params.developerInstructions,/HOST-RESOLVED SCOPE: original mode=single/);
  const turn=readWire(f).find(m=>m.method==='turn/start');

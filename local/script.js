@@ -141,18 +141,27 @@ function renderEvidenceStatus(state = evidenceController.state) {
 }
 function syncEvidenceButtons(locked = evidenceController.state.busy || !!evidenceController.state.resumeId) {
     document.querySelectorAll('#fetchEvidenceButton, .evidence-btn').forEach(button => { button.disabled = locked; });
+    const state = evidenceController.state;
+    document.querySelectorAll('.evidence-resume-btn').forEach(button => {
+        const matches = !!state.resumeId && !!state.resumeDocId && button.closest('tr')?.dataset.id === state.resumeDocId;
+        button.hidden = !matches;
+        button.disabled = state.busy || !matches;
+    });
 }
 // Firestore can replace rows while a job is running; the lock survives that render.
 new MutationObserver(() => syncEvidenceButtons()).observe(tableBody, { childList: true });
 window.__sosEvidenceStatus = status => evidenceController.receive(status);
 document.getElementById('fetchEvidenceButton').addEventListener('click', () => evidenceController.start('batch'));
-document.getElementById('resumeEvidenceButton').addEventListener('click', () => {
-    if (evidenceController.state.resumeId) {
+function resumeEvidenceReview(docId) {
+    const state = evidenceController.state;
+    if (state.busy || (docId && docId !== state.resumeDocId)) return;
+    if (state.resumeId) {
         const instruction = document.getElementById('resumeInstruction');
         evidenceController.start('resume', { resumeId: evidenceController.state.resumeId,
             userInstruction: instruction?.value || '' });
     }
-});
+}
+document.getElementById('resumeEvidenceButton').addEventListener('click', () => resumeEvidenceReview());
 document.getElementById('stopEvidenceButton').addEventListener('click', () => {
     window.webkit?.messageHandlers?.stopEvidenceReview?.postMessage({ jobId: evidenceController.state.jobId });
 });
@@ -443,9 +452,13 @@ tableBody.addEventListener('click', (e) => {
         handleViewPdf(docId);
         return;
     }
+    if (target.closest('.evidence-resume-btn')) {
+        resumeEvidenceReview(docId);
+        return;
+    }
     const evidenceButton = target.closest('.evidence-btn');
     if (evidenceButton) {
-        if (evidenceController.state.busy) return;
+        if (evidenceController.state.busy || evidenceController.state.resumeId) return;
         evidenceButton.disabled = true;
         readInteractionAppointment(docId).then(doc => {
             if (!doc.exists) throw new Error('予約を読み込めません。再接続後に取得してください。');

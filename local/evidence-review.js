@@ -54,7 +54,7 @@
     }
 
     function createController({ send, onState }) {
-        let state = { busy: false, jobId: null, state: 'idle', message: '', resumeId: null, phase: null, lastProgressAt: null };
+        let state = { busy: false, jobId: null, state: 'idle', message: '', resumeId: null, resumeDocId: null, phase: null, lastProgressAt: null };
         const publish = update => { state = { ...state, ...update }; onState(state); };
         return {
             get state() { return state; },
@@ -67,7 +67,8 @@
                 try {
                     const request = { ...buildRequest(mode, appointment), jobId: root.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}` };
                     publish({ busy: true, jobId: request.jobId, state: 'starting', message: mode === 'resume' ? '再開しています…' : '取得を開始しています…',
-                        resumeId: mode === 'resume' ? request.resumeId : null, phase: null, lastProgressAt: null });
+                        resumeId: mode === 'resume' ? request.resumeId : null,
+                        resumeDocId: mode === 'resume' ? state.resumeDocId : mode === 'single' ? request.appointment.docId : null, phase: null, lastProgressAt: null });
                     send(request);
                     return request;
                 } catch (error) {
@@ -84,7 +85,10 @@
                 const resumable = busy || ['paused', 'blocked', 'partial', 'error', 'cancelled'].includes(update.state);
                 const resumeId = resumable && typeof update.resumeId === 'string' && /^[a-f0-9]{64}$/i.test(update.resumeId)
                     ? update.resumeId : (busy ? state.resumeId : null);
-                publish({ ...update, busy, resumeId,
+                const resumeDocId = resumeId ? (Object.hasOwn(update, 'resumeDocId')
+                    ? (typeof update.resumeDocId === 'string' && update.resumeDocId.trim() ? update.resumeDocId : null)
+                    : state.resumeDocId) : null;
+                publish({ ...update, busy, resumeId, resumeDocId,
                     phase: typeof update.phase === 'string' ? update.phase : null,
                     lastProgressAt: update.lastProgressAt || null });
             }

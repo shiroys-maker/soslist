@@ -96,7 +96,7 @@ async function runJob(input, options = {}) {
     completion.catch(() => {});
     const duration = (name, fallback) => options.timeouts?.[name] ?? fallback;
     const emit = (state, message, extra = {}) => {
-        const update = { state, message, ...(store ? { resumeId: store.id } : {}), phase, lastProgressAt: new Date(lastActivity).toISOString(), ...extra };
+        const update = { state, message, ...(store ? { resumeId: store.id, resumeDocId: store.data.request.mode === 'single' ? store.data.request.appointment.docId : null } : {}), phase, lastProgressAt: new Date(lastActivity).toISOString(), ...extra };
         const diagnostic = path.join(runRoot, 'events.jsonl');
         if (fs.existsSync(diagnostic) && fs.statSync(diagnostic).size > 256000) fs.renameSync(diagnostic, diagnostic + '.previous');
         fs.appendFileSync(diagnostic, JSON.stringify({ at: new Date().toISOString(), state, phase, lastProgressAt: update.lastProgressAt }) + '\n', { mode: 0o600 });

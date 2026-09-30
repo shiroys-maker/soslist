@@ -115,3 +115,34 @@ test('resume accepts only explicit bounded user instructions without broadening 
  for (const value of [null, {}, 42, 'x'.repeat(4001)]) assert.throws(() => buildRequest('resume',{resumeId,userInstruction:value}));
  assert.equal(buildRequest('single',{...appointment,userInstruction:'unrelated'}).userInstruction,undefined);
 });
+
+
+test('row resume scope survives restart and clears on completion or batch recovery', () => {
+ const id='b'.repeat(64),controller=createController({send(){},onState(){}});
+ controller.receive({state:'paused',resumeId:id,resumeDocId:'selected'});
+ assert.equal(controller.state.resumeDocId,'selected');
+ const request=controller.start('resume',{resumeId:id});
+ controller.receive({state:'blocked',jobId:request.jobId,resumeId:id});
+ assert.equal(controller.state.resumeDocId,'selected');
+ controller.receive({state:'paused',jobId:request.jobId,resumeId:id,resumeDocId:null});
+ assert.equal(controller.state.resumeDocId,null);
+ controller.receive({state:'completed',jobId:request.jobId,resumeDocId:'selected'});
+ assert.equal(controller.state.resumeId,null);assert.equal(controller.state.resumeDocId,null);
+});
+
+test('row resume displays only for the original document and shares the toolbar request path', () => {
+ const fs=require('node:fs'),vm=require('node:vm');
+ const source=fs.readFileSync(require('node:path').join(__dirname,'../script.js'),'utf8');
+ const state={busy:false,resumeId:'c'.repeat(64),resumeDocId:'selected'},sent=[];
+ const buttons=['selected','other'].map(id=>({closest:()=>({dataset:{id}})}));
+ const ctx={evidenceController:{state,start:(...args)=>sent.push(args)},document:{querySelectorAll:sel=>sel==='.evidence-resume-btn'?buttons:[],getElementById:()=>({value:'scoped clarification'})}};
+ vm.createContext(ctx);
+ vm.runInContext(source.slice(source.indexOf('function syncEvidenceButtons('),source.indexOf('// Firestore can replace')),ctx);
+ vm.runInContext(source.slice(source.indexOf('function resumeEvidenceReview('),source.indexOf("document.getElementById('resumeEvidenceButton').addEventListener")),ctx);
+ ctx.syncEvidenceButtons();assert.equal(buttons[0].hidden,false);assert.equal(buttons[0].disabled,false);assert.equal(buttons[1].hidden,true);
+ ctx.resumeEvidenceReview('other');assert.equal(sent.length,0);
+ ctx.resumeEvidenceReview('selected');assert.equal(sent.length,1);assert.equal(sent[0][0],'resume');assert.equal(sent[0][1].resumeId,state.resumeId);assert.equal(sent[0][1].userInstruction,'scoped clarification');
+ state.busy=true;ctx.syncEvidenceButtons();assert.equal(buttons[0].disabled,true);ctx.resumeEvidenceReview('selected');assert.equal(sent.length,1);
+ state.busy=false;state.resumeDocId=null;ctx.syncEvidenceButtons();assert.ok(buttons.every(b=>b.hidden));
+ state.resumeId=null;ctx.syncEvidenceButtons();assert.ok(buttons.every(b=>b.hidden));
+});
