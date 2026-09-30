@@ -9,17 +9,19 @@ class AppApprovals {
         this.reader.on('line', line => {
             if (line.length > 4096) return;
             let answer; try { answer = JSON.parse(line); } catch (_) { return; }
-            if (answer.type !== 'appApproval' || !this.pending.has(answer.requestId)) return;
-            const resolve = this.pending.get(answer.requestId); this.pending.delete(answer.requestId);
-            resolve(answer.action === 'accept' ? 'accept' : 'decline');
+            const pending = this.pending.get(answer.requestId);
+            if (!pending || answer.type !== pending.type) return;
+            this.pending.delete(answer.requestId);
+            pending.resolve(answer.action === 'accept' ? 'accept' : 'decline');
         });
         this.reader.on('close', () => this.cancel());
     }
-    ask(request) {
+    ask(request, type = 'appApproval') {
+        if (!['appApproval', 'intakeApproval'].includes(type)) throw Error('Unknown approval type');
         const requestId = randomUUID();
-        return new Promise(resolve => { this.pending.set(requestId, resolve); this.emit({ type: 'appApproval', requestId, ...request }); });
+        return new Promise(resolve => { this.pending.set(requestId, { resolve, type }); this.emit({ ...request, type, requestId }); });
     }
-    cancel() { for (const resolve of this.pending.values()) resolve('decline'); this.pending.clear(); }
+    cancel() { for (const pending of this.pending.values()) pending.resolve('decline'); this.pending.clear(); }
     close() { this.cancel(); this.reader.close(); }
 }
 module.exports = { AppApprovals };

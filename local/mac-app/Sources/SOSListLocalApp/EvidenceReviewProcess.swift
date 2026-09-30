@@ -107,7 +107,7 @@ final class EvidenceReviewProcess {
                         buffer.removeSubrange(...newline)
                         guard line.count <= 65_536 else { continue }
                         guard var event = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any] else { continue }
-                        if event["type"] as? String == "appApproval" {
+                        if ["appApproval", "intakeApproval"].contains(event["type"] as? String ?? "") {
                             let request = event
                             DispatchQueue.main.async { self.requestAppApproval(request, child: child, answers: answers) }
                             continue
@@ -176,17 +176,27 @@ final class EvidenceReviewProcess {
         guard process === child, child.isRunning,
               let requestID = request["requestId"] as? String,
               UUID(uuidString: requestID) != nil,
-              let appName = request["appName"] as? String else { return }
+              let kind = request["type"] as? String,
+              ["appApproval", "intakeApproval"].contains(kind) else { return }
         let respond: (Bool) -> Void = { [weak self] accepted in
             guard self?.process === child, child.isRunning,
-                  let data = try? JSONSerialization.data(withJSONObject: ["type": "appApproval", "requestId": requestID, "action": accepted ? "accept" : "decline"]) else { return }
+                  let data = try? JSONSerialization.data(withJSONObject: ["type": kind, "requestId": requestID, "action": accepted ? "accept" : "decline"]) else { return }
             do { try answers.fileHandleForWriting.write(contentsOf: data + Data([10])) } catch { self?.stop() }
         }
         guard approvalAlert == nil, let window = NSApp.mainWindow ?? NSApp.keyWindow else { respond(false); return }
         let alert = NSAlert()
-        alert.messageText = "取得で\(appName)を使用することを許可しますか？"
-        alert.informativeText = "Codexの画面操作に必要な利用許可です。今回の取得セッションに適用されます。拒否した場合は途中状態を残して停止します。"
-        alert.addButton(withTitle: "許可")
+        if kind == "intakeApproval" {
+            guard let title = request["title"] as? String, let message = request["message"] as? String,
+                  title.count < 200, message.count < 4000 else { respond(false); return }
+            alert.messageText = title
+            alert.informativeText = message
+            alert.addButton(withTitle: "許可して続ける")
+        } else {
+            guard let appName = request["appName"] as? String, appName.count < 100 else { respond(false); return }
+            alert.messageText = "取得で\(appName)を使用することを許可しますか？"
+            alert.informativeText = "Codexの画面操作に必要な利用許可です。今回の取得セッションに適用されます。拒否した場合は途中状態を残して停止します。"
+            alert.addButton(withTitle: "許可")
+        }
         alert.addButton(withTitle: "許可しない")
         approvalAlert = alert
         NSApp.activate(ignoringOtherApps: true)

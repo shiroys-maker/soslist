@@ -12,3 +12,12 @@ test('only the matching invocation reply completes an app permission; channel cl
  const second=host.ask({appId:'com.apple.finder',appName:'Finder'});host.close();
  assert.equal(await second,'decline');assert.equal(host.pending.size,0);
 });
+
+test('app access acceptance cannot answer an intake consent prompt even with its request ID',async()=>{
+ const input=new PassThrough(),events=[],host=new AppApprovals(input,e=>events.push(e));
+ const consent=host.ask({title:'Synthetic intake consent',message:'Synthetic destinations'},'intakeApproval');
+ input.write(JSON.stringify({type:'appApproval',requestId:events[0].requestId,action:'accept'})+'\n');
+ assert.equal(host.pending.size,1);
+ input.write(JSON.stringify({type:'intakeApproval',requestId:events[0].requestId,action:'decline'})+'\n');
+ assert.equal(await consent,'decline');host.close();
+});

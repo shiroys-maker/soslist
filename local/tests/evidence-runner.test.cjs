@@ -42,7 +42,7 @@ function fixture(t, scenario='normal') {
   req('sos_ready',{edge:true,soslist:true});
  }
  });`,{mode:0o700});
- return {root,codexPath,skillPath,runRoot:path.join(root,'jobs'),cuaConfig:{command:'/usr/bin/true',args:[],env:{}},timeouts:{rpc:600,cleanup:250,stall:160,tick:20},environment:{OPENAI_API_KEY:'synthetic-secret'}};
+ return {requestIntakeConsent:async()=> 'accept',root,codexPath,skillPath,runRoot:path.join(root,'jobs'),cuaConfig:{command:'/usr/bin/true',args:[],env:{}},timeouts:{rpc:600,cleanup:250,stall:160,tick:20},environment:{OPENAI_API_KEY:'synthetic-secret'}};
 }
 const readWire=f=>fs.readFileSync(path.join(f.root,'wire.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
 const checkpoints=f=>fs.readdirSync(path.join(f.runRoot,'checkpoints'));
@@ -207,4 +207,36 @@ test('app permissions cannot accept unrelated apps, audio, URL requests, or extr
  assert.equal(appApprovalRequest(appRequest()).appId,'com.apple.finder');
  for(const app of ['com.apple.Terminal','computer-audio','com.apple.finder.attacker'])assert.equal(appApprovalRequest(appRequest(app)),null);
  for(const modify of [p=>p.serverName='untrusted',p=>p.mode='url',p=>p._meta.tool_name='start_audio_recording',p=>p.requestedSchema.properties={secret:{type:'string'}}]){const p=appRequest();modify(p);assert.equal(appApprovalRequest(p),null);}
+});
+
+
+test('batch consent shows medical data destinations and reaches the user prompt before any browser turn',async t=>{
+ const f=fixture(t);let prompt;
+ await runJob({mode:'batch'},{...f,requestIntakeConsent:async request=>{prompt=request;assert.ok(!readWire(f).some(m=>m.method==='turn/start'));return 'accept';}});
+ assert.match(prompt.message,/201 Bill/);assert.match(prompt.message,/Dropbox/);assert.match(prompt.message,/OpenAI/);assert.match(prompt.message,/Firestore/);assert.match(prompt.message,/Storage/);
+ const text=readWire(f).find(m=>m.method==='turn/start').params.input[0].text;
+ assert.match(text,/CURRENT EXPLICIT INTAKE AUTHORIZATION/);assert.ok(text.includes(prompt.message));
+});
+test('missing or declined batch consent retains checkpoint and starts no model turn',async t=>{
+ for(const consent of [undefined,async()=> 'decline']){
+  const f=fixture(t);await assert.rejects(runJob({mode:'batch'},{...f,requestIntakeConsent:consent}),/保存.*許可/);
+  assert.ok(!readWire(f).some(m=>['thread/start','thread/resume','turn/start'].includes(m.method)));assert.equal(checkpoints(f).length,1);
+ }
+});
+test('resuming a batch asks for current intake consent; single recovery does not export a bill',async t=>{
+ const {ReviewStore}=require('../evidence-review/store.cjs'),f=fixture(t);const store=ReviewStore.create(f.runRoot,{mode:'batch'});
+ let calls=0;await runJob({mode:'resume',resumeId:store.id},{...f,requestIntakeConsent:async()=>{calls++;return 'accept';}});assert.equal(calls,1);
+ const g=fixture(t),appointment={docId:'synthetic-selected',claimantName:'SYNTHETIC',contractNumber:'TEST.1.2',appointmentDateTimeMs:1791248400000,services:['SHA']};
+ const single=ReviewStore.create(g.runRoot,{mode:'single',appointment});
+ await assert.rejects(runJob({mode:'resume',resumeId:single.id},{...g,requestIntakeConsent:async()=>{throw Error('single must not request bill consent');}}));
+ assert.ok(readWire(g).some(m=>m.method==='turn/start'));
+});
+
+test('intake consent timeout and cancellation cannot start a browser turn',async t=>{
+ const f=fixture(t);await assert.rejects(runJob({mode:'batch'},{...f,timeouts:{...f.timeouts,approval:20},requestIntakeConsent:()=>new Promise(()=>{})}),/保存.*許可/);
+ assert.ok(!readWire(f).some(m=>m.method==='turn/start'));
+ const g=fixture(t);let pending;
+ const run=runJob({mode:'batch'},{...g,requestIntakeConsent:()=>{setTimeout(()=>process.emit('SIGTERM'),1);return new Promise(resolve=>{pending=resolve;});}});
+ assert.equal(await run,null);pending('accept');
+ assert.ok(!readWire(g).some(m=>m.method==='turn/start'));assert.equal(checkpoints(g).length,1);
 });
