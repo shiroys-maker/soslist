@@ -89,7 +89,8 @@
                     ? (typeof update.resumeDocId === 'string' && update.resumeDocId.trim() ? update.resumeDocId : null)
                     : state.resumeDocId) : null;
                 publish({ ...update, busy, resumeId, resumeDocId,
-                    phase: typeof update.phase === 'string' ? update.phase : null,
+                    phase: ['completed', 'no_records'].includes(update.state) ? 'complete'
+                        : (typeof update.phase === 'string' ? update.phase : null),
                     lastProgressAt: update.lastProgressAt || null });
             }
         };
