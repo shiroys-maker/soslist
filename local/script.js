@@ -212,7 +212,7 @@ function updateSummaryStatus(message, tone = 'neutral') {
     }
 }
 
-function openSummaryPopup(mode = 'generate') {
+function openSummaryPopup(mode = 'view') {
     if (!summaryDateInput?.value) {
         alert('Summeryの日付を選んでください。');
         return;
@@ -248,7 +248,7 @@ function handleSummaryGenerate() {
 
     const nativeGenerateHandler = window.webkit?.messageHandlers?.startSummaryGeneration;
     if (!nativeGenerateHandler) {
-        openSummaryPopup('generate');
+        updateSummaryStatus('新規作成はSOSList Localアプリから行ってください。');
         return;
     }
 
@@ -539,7 +539,10 @@ cancelEditBtn.addEventListener('click', closeEditModal);
 printInvoiceButton.addEventListener('click', printInvoice);
 summaryPrevDateButton?.addEventListener('click', () => jumpToAdjacentSummaryReservationDate(-1));
 summaryNextDateButton?.addEventListener('click', () => jumpToAdjacentSummaryReservationDate(1));
-generateSummaryButton?.addEventListener('click', handleSummaryGenerate);
+if (generateSummaryButton) {
+    generateSummaryButton.hidden = !window.webkit?.messageHandlers?.startSummaryGeneration;
+    generateSummaryButton.addEventListener('click', handleSummaryGenerate);
+}
 showSummaryButton?.addEventListener('click', handleSummaryShow);
 cdMonitorToggleButton?.addEventListener('click', toggleCDMonitor);
 saveClaimDetailBtn.addEventListener('click', saveClaimDetail);

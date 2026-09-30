@@ -2,7 +2,12 @@
 set -euo pipefail
 
 ROOT_DIR="/Users/shungohiroyasu/Documents/GitHub/soslist"
-CODEX_BIN="/Users/shungohiroyasu/.local/bin/codex"
+CODEX_BIN="${SOSLIST_CODEX_BIN:-}"
+if [[ -z "$CODEX_BIN" ]]; then
+  for candidate in "$HOME/.local/bin/codex" "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex" "/Applications/ChatGPT.app/Contents/Resources/codex" "/Applications/Codex.app/Contents/Resources/codex" /opt/homebrew/bin/codex /usr/local/bin/codex; do
+    if [[ -x "$candidate" ]]; then CODEX_BIN="$candidate"; break; fi
+  done
+fi
 NODE_BIN="/Users/shungohiroyasu/.nvm/versions/node/v22.14.0/bin/node"
 DAILY_BRIEF_DIR="$ROOT_DIR/daily-brief"
 RUNTIME_DIR="$DAILY_BRIEF_DIR/.runtime"
@@ -36,15 +41,6 @@ cleanup() {
 }
 trap cleanup EXIT
 
-quit_aivis_if_used() {
-  (
-    source "$DAILY_BRIEF_DIR/.env"
-    if [[ "${PODCAST_AUDIO_ENGINE:-gemini}" == "aivis" ]]; then
-      osascript -e 'tell application "AivisSpeech" to quit' || true
-    fi
-  )
-}
-
 if [[ ! -x "$NODE_BIN" || ! -x "$CODEX_BIN" ]]; then
   print -u2 "Node または Codex CLI が見つかりません。"
   exit 1
@@ -68,7 +64,6 @@ fi
 
 if [[ "$action" == "finalize" ]]; then
   (cd "$DAILY_BRIEF_DIR" && source .env && "$NODE_BIN" generate-brief.js --finalize-prepared --date "$ymd")
-  quit_aivis_if_used
   print "[$(date -Iseconds)] ${ymd}: 後段処理を完了しました。"
   exit 0
 fi
@@ -103,5 +98,4 @@ if [[ ! -s "$out_dir/brief.md" || ! -s "$out_dir/podcast-script.txt" ]]; then
 fi
 
 (cd "$DAILY_BRIEF_DIR" && source .env && "$NODE_BIN" generate-brief.js --finalize-prepared --date "$ymd")
-quit_aivis_if_used
 print "[$(date -Iseconds)] ${ymd}: Codex Summary の後段処理を完了しました。"

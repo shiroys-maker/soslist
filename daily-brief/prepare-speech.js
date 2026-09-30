@@ -80,7 +80,13 @@ async function runCodexConversion(dialogue, { model, log, timeoutMs }) {
     const schemaFile = path.join(workdir, 'schema.json');
     const outputFile = path.join(workdir, 'readings.json');
     fs.writeFileSync(schemaFile, JSON.stringify(SCHEMA));
-    const executable = process.env.PODCAST_SPEECH_CODEX_BIN || '/Applications/ChatGPT.app/Contents/Resources/codex';
+    const executable = process.env.PODCAST_SPEECH_CODEX_BIN || [
+      path.join(os.homedir(), '.local/bin/codex'),
+      '/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex',
+      '/Applications/ChatGPT.app/Contents/Resources/codex', '/Applications/Codex.app/Contents/Resources/codex',
+      '/opt/homebrew/bin/codex', '/usr/local/bin/codex',
+    ].find(candidate => { try { fs.accessSync(candidate, fs.constants.X_OK); return true; } catch (_) { return false; } });
+    if (!executable) throw new Error('読み変換用のCodex CLIが見つかりません。');
     const argv = ['exec', '--ephemeral', '--ignore-user-config', '--sandbox', 'read-only',
       '--skip-git-repo-check', '--cd', workdir,
       '-c', 'approval_policy="never"', '-c', 'forced_login_method="chatgpt"',
@@ -121,7 +127,7 @@ async function runCodexConversion(dialogue, { model, log, timeoutMs }) {
 
 async function prepareSpeechDialogue(dialogue, outDir, options = {}) {
   const log = options.log || (() => {});
-  const model = process.env.PODCAST_SPEECH_MODEL || 'gpt-6-sol';
+  const model = process.env.PODCAST_SPEECH_MODEL || 'gpt-6.1-sol';
   const timeoutMs = Number(process.env.PODCAST_SPEECH_TIMEOUT_MS || 300000);
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new Error('PODCAST_SPEECH_TIMEOUT_MS が不正です。');
   const sourceHash = createHash('sha256').update(JSON.stringify({ version: VERSION, model, prompt: PROMPT, dialogue })).digest('hex');

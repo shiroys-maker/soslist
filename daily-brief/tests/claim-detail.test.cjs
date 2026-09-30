@@ -24,7 +24,7 @@ function harness(t) {
   t.after(() => fs.rmSync(outputDir, { recursive: true, force: true }));
   const ctx = vm.createContext({
     require, module: { exports: {} }, __dirname: path.dirname(generator),
-    process: { argv: [], env: { OUTPUT_DIR: outputDir, PODCAST_GENERATION_MAX_ATTEMPTS: '2' } },
+    process: { argv: [], env: { OUTPUT_DIR: outputDir } },
     console: { error() {} },
   });
   vm.runInContext(source, ctx, { filename: generator });
@@ -88,39 +88,4 @@ test('manual and scheduled contexts deliver the same complete claim-aware prompt
     assert.equal(promptAppointments(context.prompt)[1].claimDetail, records[1].claimDetail);
   }
   assert.equal(manual.prompt, scheduled.prompt);
-});
-
-test('API generation and its retry both receive all claims and the corrected evidence rules', async t => {
-  const ctx = harness(t);
-  const inputs = await ctx.module.exports.collectGenerationInputs({ date: ymd });
-  const requests = [];
-  ctx.createJsonCompletion = async (_client, request) => {
-    requests.push(request);
-    return JSON.stringify({ summaryMarkdown: '要約'.repeat(requests.length === 1 ? 1 : 2500),
-      podcastDialogue: [{ speaker: 'A', text: '台本'.repeat(3000) }] });
-  };
-  await ctx.generateBrief(null, inputs.appointments, ymd);
-  assert.equal(requests.length, 2);
-  for (const request of requests) {
-    assertEvidenceRules(request.system);
-    assert.ok(request.user.includes(JSON.stringify(inputs.appointments, null, 2)));
-    assert.match(request.user, /claimDetail=Claim詳細/);
-  }
-});
-
-test('empty-dialogue recovery retains claim-aware instructions and source data', async t => {
-  const ctx = harness(t);
-  const inputs = await ctx.module.exports.collectGenerationInputs({ date: ymd });
-  const requests = [];
-  ctx.createJsonCompletion = async (_client, request) => {
-    requests.push(request);
-    return JSON.stringify(requests.length === 1
-      ? { summaryMarkdown: '要約'.repeat(2500), podcastDialogue: [] }
-      : { podcastDialogue: [{ speaker: 'A', text: '台本'.repeat(3000) }] });
-  };
-  const result = await ctx.generateBrief(null, inputs.appointments, ymd);
-  assert.equal(requests.length, 2);
-  assert.equal(result.podcastDialogue.length, 1);
-  assertEvidenceRules(requests[1].system);
-  assert.ok(requests[1].user.includes(JSON.stringify(inputs.appointments, null, 2)));
 });

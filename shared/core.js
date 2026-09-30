@@ -1242,9 +1242,12 @@ async function fetchNameKana(nameEn) {
     const normalizedName = String(nameEn || '').trim();
     if (!normalizedName || !canUseLocalNameKanaAPI()) return '';
 
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 30000);
     try {
         const response = await fetch('http://127.0.0.1:19876/api/name-kana', {
             method: 'POST',
+            signal: controller.signal,
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name: normalizedName })
         });
@@ -1252,18 +1255,28 @@ async function fetchNameKana(nameEn) {
         const data = await response.json();
         return String(data.kana || '').trim();
     } catch (error) {
-        console.warn('カタカナ氏名の自動入力に失敗しました:', error);
         return '';
+    } finally {
+        clearTimeout(timer);
     }
 }
 
+let shokaijyoKanaRequest = 0;
 function autofillShokaijyoKana(nameEn) {
-    fetchNameKana(nameEn).then(kana => {
-        if (!kana) return;
-        shokaijyoSheetContainer.querySelectorAll('[name="name_kana"]').forEach(input => {
-            if (!input.value.trim()) input.value = kana;
-        });
+    const request = ++shokaijyoKanaRequest;
+    const inputs = [...shokaijyoSheetContainer.querySelectorAll('[name="name_kana"]')];
+    const edited = new WeakSet();
+    const listeners = inputs.map(input => {
+        const listener = () => edited.add(input);
+        input.addEventListener('input', listener);
+        return [input, listener];
     });
+    fetchNameKana(nameEn).then(kana => {
+        if (!kana || request !== shokaijyoKanaRequest) return;
+        inputs.forEach(input => {
+            if (input.isConnected && !edited.has(input) && !input.value.trim()) input.value = kana;
+        });
+    }).finally(() => listeners.forEach(([input, listener]) => input.removeEventListener('input', listener)));
 }
 
 function normalizeServiceTokens(services) {

@@ -34,7 +34,7 @@ cd local/mac-app
 Manual and scheduled Summary generation both use `daily-brief/run-codex-summary.sh`.
 It explicitly selects `gpt-6-astra` / `high` for the joint `brief.md` and
 `podcast-script.txt` generation, independently of the user's global Codex settings.
-The later pronunciation-only conversion uses `gpt-6-sol` / `medium`.
+The later pronunciation-only conversion uses `gpt-6.1-sol` / `medium`.
 
 - `作成` is handled only by the native app.
 - The app runs `daily-brief/run-codex-summary.sh` for the selected date.

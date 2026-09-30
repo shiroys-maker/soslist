@@ -25,7 +25,8 @@ const resultSchema = {
 };
 
 function resolveCodex() {
-    for (const candidate of ['/Applications/ChatGPT.app/Contents/Resources/codex', '/Applications/Codex.app/Contents/Resources/codex',
+    for (const candidate of [path.join(os.homedir(), '.local/bin/codex'), '/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex',
+        '/Applications/ChatGPT.app/Contents/Resources/codex', '/Applications/Codex.app/Contents/Resources/codex',
         '/opt/homebrew/bin/codex', '/usr/local/bin/codex']) {
         try { fs.accessSync(candidate, fs.constants.X_OK); return candidate; } catch (_) {}
     }

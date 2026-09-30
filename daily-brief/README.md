@@ -21,7 +21,7 @@
 
 > claim・対象部位・左右・DBQ・IMO依頼は **Claim詳細** を主な情報源にし、**メモ**の病歴・補足情報と合わせてサマリーと台本に反映します。Claim詳細が空の従来予約はメモを参照し、メモが空でもClaim詳細を取り込みます。
 > 重複するclaimは一つにまとめ、相違は情報源を添えて要確認とします。明記されたIMO依頼を一般的な分類ルールより優先し、未記載だけで「IMO不要」と断定しません。
-> SOSList Localの手動作成・定時作成、手動取り込み用プロンプト、API生成・台本再生成に共通のルールです。作成済みサマリーに反映するには、対象日を指定して再作成してください。
+> SOSList Localの手動作成・定時作成、手動取り込み用プロンプト、Codex生成に共通のルールです。作成済みサマリーに反映するには、対象日を指定して再作成してください。
 > 聞き手は専門家(本人)なので、用語の基礎説明は台本に入れません。
 
 ---
@@ -40,30 +40,11 @@ cp .env.example .env        # ANTHROPIC_API_KEY と GOOGLE_APPLICATION_CREDENTIA
 
 SOSList Localの手動・定時Summaryは `run-codex-summary.sh` からCodex CLIを呼び、`gpt-6-astra` / `high` を起動引数で指定します。`brief.md` と `podcast-script.txt` は同じ呼び出しで生成し、Codex共通設定の変更に影響されません。
 
-以下のAPI経由で直接生成する場合の既定の要約モデルは Anthropic の `claude-sonnet-5` です。
-必要に応じて `.env` で `LLM_PROVIDER`、`PODCAST_MODEL`、`PODCAST_FALLBACK_MODEL` を上書きできます。
+## 閲覧サーバー
 
----
-
-## 使い方(ミニアプリ)
-
-```bash
-bash run-app.sh             # ローカルサーバ起動 (npm run serve でも可)
-```
-
-ブラウザで **http://127.0.0.1:8790/** を開く → 日付を選んで「作成」。
-生成後、画面で要約が表示され、音声プレーヤーで再生できます(右クリックで保存可)。
-
-mp3 が完成すると Firebase Storage に `daily-brief/<YYYY-MM-DD>/podcast.mp3` としてアップロードされます。
-Storage には対象日が新しい2件だけを残し、cloud viewer の Summary からログイン済みユーザーが再生できます。
-
-- 「音声なし」にチェックするとテキストのみを高速生成。
-- 「サンプルデータで試す」で Firestore に接続せず動作確認。
-- 終了は Ctrl+C。
-
-> 定期(自動)実行は行いません。必要なときに作成ボタンで生成する方式です。
-
----
+`bash run-app.sh` または `npm start` で起動し、http://127.0.0.1:8790/ から日付を選んで既存Summaryと音声を表示します。
+ブラウザの作成・再生成、POST /api/generate、直接LLM API生成は廃止しました。
+新規作成はSOSList Localアプリの手動・定時Codex経路のみです。表示時の既存Brief同期と音声配信は維持しています。
 
 ## 出力
 
@@ -84,45 +65,33 @@ Storage には対象日が新しい2件だけを残し、cloud viewer の Summar
 
 二人の発話をまとめて生成し、長い台本は最大1200文字のまとまりに分割します。生成したWAVを結合して、ffmpegで1.3倍速のMP3へ変換します。Geminiでの速度変更は `PODCAST_SPEED`（0.5〜2、既定1.3）です。全区間の生成・MP3変換に成功してから音声を入れ替えるため、APIエラー時も既存音声を維持します。他モデルへの自動フォールバックはしません。
 
-`GEMINI_TTS_MODEL`、`GEMINI_TTS_VOICE_A`、`GEMINI_TTS_VOICE_B`、`GEMINI_TTS_STYLE`、`GEMINI_TTS_TIMEOUT_MS`（区間ごと、既定240000）で調整できます。以前のAivisSpeechへ戻す場合は `PODCAST_AUDIO_ENGINE=aivis` を設定します。Gemini利用時はAivisSpeechを起動・終了しません。
+`GEMINI_TTS_MODEL`、`GEMINI_TTS_VOICE_A`、`GEMINI_TTS_VOICE_B`、`GEMINI_TTS_STYLE`、`GEMINI_TTS_TIMEOUT_MS`（区間ごと、既定240000）で調整できます。音声エンジンはGeminiのみです。旧AivisSpeech・macOS say・OpenAI TTS分岐は削除しました。
 
 APIは [Google公式のGemini 3.8 TTS仕様](https://ai.google.dev/gemini-api/docs/speech-generation) に合わせ、Interactions APIの二話者設定・WAV出力を使用しています。キーはHTTPヘッダーに渡し、リクエストは `store: false` です。APIキー、台本、音声の生成物はGitに含めません。
 
-### Gemini / AivisSpeechの読み補正
+### Geminiの読み補正
 
-GeminiまたはAivisSpeechで音声を作る前に、ChatGPT認証のCodex CLIが、一般語・医学用語・英語・略語・単位記号の読みを文脈に合わせて仮名に変換します。手動・定時・取り込み・API生成の共通音声処理に適用されます。`--no-audio` では呼び出しません。
+Geminiで音声を作る前に、ChatGPT認証のCodex CLIが、一般語・医学用語・英語・略語・単位記号の読みを文脈に合わせて仮名に変換します。手動・定時・取り込みの共通音声処理に適用されます。`--no-audio` では呼び出しません。
 
 全文を書き直させず、元の発話に一致する語句の読みだけを置換します。数字、左右、否定・陰性・陽性・未確認・疑いなどの保護対象と重なる置換、不正な位置、重複する置換は採用せず、その部分の原文を残します。`brief.md`、`podcast-script.txt`、`dialogue.json` は変更しません。これは内容変更を抑える検証であり、読みの正しさを完全に保証するものではありません。
 
 同じ台本・設定の再生成では変換結果を再利用します。台本やモデルを変えると再変換します。読みを再試行したい場合は対象日の `podcast-speech.json` を削除します。Codexの起動・認証・接続・タイムアウトなどで変換できない場合は処理をエラーで止め、既存音声は削除しません。過去のMP3は自動的には変更されません。
 
-既定モデルは `gpt-6-sol`、待ち時間の上限は5分です。`PODCAST_SPEECH_MODEL`、`PODCAST_SPEECH_TIMEOUT_MS`、`PODCAST_SPEECH_CODEX_BIN` で変更できます。APIキーは渡さず、既存のCodexログインを使います。台本は標準入力で渡し、作業用ディレクトリは処理後に削除します。
+既定モデルは `gpt-6.1-sol`、待ち時間の上限は5分です。`PODCAST_SPEECH_MODEL`、`PODCAST_SPEECH_TIMEOUT_MS`、`PODCAST_SPEECH_CODEX_BIN` で変更できます。APIキーは渡さず、既存のCodexログインを使います。台本は標準入力で渡し、作業用ディレクトリは処理後に削除します。
 
 CLI連携は [Codex公式の非対話モード・構造化出力仕様](https://developers.openai.com/codex/noninteractive/) に基づきます。
 
 ---
 
-## コマンドライン(任意)
+## コマンドライン
 
-```bash
-node generate-brief.js                  # 翌日分
-node generate-brief.js --date 2026-06-05  # 指定日
-node generate-brief.js --no-audio       # テキストのみ
-node generate-brief.js --sample         # 擬似データ
-node generate-brief.js --finalize-manual --date 2026-06-05
-npm run sync-audio                       # 既存mp3のうち新しい2件をFirebase Storageへ同期
-```
+- `node generate-brief.js --codex-context --date YYYY-MM-DD`：手動Codex生成の入力を準備。
+- `node generate-brief.js --scheduled-context`：定時Codex生成の入力を準備。
+- `node generate-brief.js --finalize-prepared --date YYYY-MM-DD`：保存済み原稿からGemini音声を作成し保存・同期。
+- `--finalize-manual` は同じ後段処理の互換入口。`--no-audio` はこの後段処理でのみ音声を省略。
+- `npm run sync-audio`：既存音声の同期。
+- 引数なし／旧API生成オプションのみではエラー終了し、生成しません。
 
-- `--finalize-manual` は、`output/<YYYY-MM-DD>/brief.md` と `podcast-script.txt` を前提に、mp3 作成・Firestore 保存を行います。
-- `sync-audio` はローカルの出力先から日付が新しい `podcast.mp3` を2件だけ選び、Firebase Storageへアップロードします。Storage 上も最新2件以外の音声を削除します。
-
-主な環境変数(`.env`):
-`ANTHROPIC_API_KEY`(必須) / `OPENAI_API_KEY`(OpenAIモデルまたはOpenAI TTS使用時) / `GOOGLE_APPLICATION_CREDENTIALS`(必須) /
-`PODCAST_SPEED`(再生速度・既定 1.3) / `PODCAST_MINUTES`(台本の目安尺・既定 12) /
-`PODCAST_AUDIO_ENGINE`(既定 `gemini`) / `AIVIS_ENGINE_URL`(既定 `http://127.0.0.1:10101`) /
-`AIVIS_STYLE_ID_A`(既定 `1937616896`, にせ) / `AIVIS_STYLE_ID_B`(既定 `1388823424`, 凛音エル) /
-`SAY_VOICE_A`(say 利用時。既定 `Kyoko`) / `SAY_VOICE_B`(say 利用時。既定 `Reed (日本語（日本）)`) /
-`TTS_MODEL` `TTS_VOICE_A` `TTS_VOICE_B`(OpenAI TTS に戻す場合) /
-`LLM_PROVIDER`(既定 `anthropic`) / `PODCAST_MODEL`(既定 `claude-sonnet-5`) / `PODCAST_FALLBACK_MODEL` / `ANTHROPIC_EFFORT`(既定 `medium`) / `PODCAST_GENERATION_MAX_ATTEMPTS`(既定 `1`) / `FIREBASE_STORAGE_BUCKET` / `PORT`(既定 8790)。
-
-> ヒント: 1.3倍速だと再生時間は台本尺の約77%になります。長めにしたい場合は `PODCAST_MINUTES` を増やしてください。
+必要な設定はFirebase認証、Gemini音声設定、Codex読み変換設定です。
+`PODCAST_MINUTES`、`PODCAST_SPEED`、`OUTPUT_DIR`、`PORT` は引き続き使用します。
+旧provider・API生成モデル・fallback設定は読み取りません。既存の秘密値を含む `.env` は変更していません。

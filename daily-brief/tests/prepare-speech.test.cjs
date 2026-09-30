@@ -63,27 +63,33 @@ test('cache is tied to source content and revalidates edits, never trusting cach
   assert.equal(fs.readFileSync(path.join(dir, 'brief.md'), 'utf8'), 'summary');
 });
 
-function generatorHarness(prepare) {
+function generatorHarness(prepare, synthesize = async () => {}, engine = 'gemini') {
   const file = path.resolve(__dirname, '../generate-brief.js');
   const ctx = vm.createContext({ require: name => name === './prepare-speech'
-    ? { prepareSpeechDialogue: prepare } : require(name), module: { exports: {} },
-  __dirname: path.dirname(file), process: { argv: [], env: { PODCAST_AUDIO_ENGINE: 'aivis' } }, console: { error() {} } });
+    ? { prepareSpeechDialogue: prepare } : name === './gemini-tts'
+    ? { validateSettings() {}, synthesizeGemini: synthesize } : require(name), module: { exports: {} },
+  __dirname: path.dirname(file), process: { argv: [], env: { PODCAST_AUDIO_ENGINE: engine } }, console: { error() {} } });
   vm.runInContext(fs.readFileSync(file, 'utf8'), ctx, { filename: file });
   return ctx;
 }
 
-test('common Aivis route converts first and passes converted dialogue to synthesis', async () => {
+test('Gemini route converts first and passes converted dialogue to synthesis', async () => {
   const order = [];
-  const ctx = generatorHarness(async () => { order.push('convert'); return [{ speaker: 'B', text: 'コツキョク' }]; });
-  ctx.removeExistingAudioArtifacts = () => order.push('cleanup');
-  ctx.synthesizePodcastWithAivis = async dialogue => { order.push('synthesize'); assert.equal(dialogue[0].text, 'コツキョク'); };
+  const ctx = generatorHarness(async () => { order.push('convert'); return [{ speaker: 'B', text: 'コツキョク' }]; },
+    async dialogue => { order.push('synthesize'); assert.equal(dialogue[0].text, 'コツキョク'); });
   await ctx.module.exports.synthesizePodcast(null, [{ speaker: 'B', text: '骨棘' }], '/tmp/speech/podcast');
-  assert.deepEqual(order, ['convert', 'cleanup', 'synthesize']);
+  assert.deepEqual(order, ['convert', 'synthesize']);
 });
 
-test('conversion failures preserve the existing audio and never synthesize', async () => {
-  const ctx = generatorHarness(async () => { throw new Error('conversion failed'); });
-  ctx.removeExistingAudioArtifacts = () => assert.fail('Existing audio must remain');
-  ctx.synthesizePodcastWithAivis = () => assert.fail('Invalid conversion must not be spoken');
+test('conversion failures preserve existing audio and never synthesize', async () => {
+  const ctx = generatorHarness(async () => { throw new Error('conversion failed'); },
+    () => assert.fail('Invalid conversion must not be spoken'));
   await assert.rejects(ctx.module.exports.synthesizePodcast(null, [], '/tmp/speech/podcast'), /conversion failed/);
+});
+
+test('removed engines fail before conversion or external work', async () => {
+  for (const engine of ['aivis', 'say', 'openai', 'unknown']) {
+    const ctx = generatorHarness(() => assert.fail('must not convert'), () => assert.fail('must not synthesize'), engine);
+    await assert.rejects(ctx.module.exports.synthesizePodcast(null, [], '/tmp/speech/podcast'), /Gemini/);
+  }
 });

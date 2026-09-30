@@ -12,7 +12,7 @@ import threading
 MAX_REQUEST_BYTES = 80 * 1024 * 1024
 MAX_IMAGE_COUNT = 12
 TIMEOUT_SECONDS = 240
-CODEX_BIN = '/Applications/ChatGPT.app/Contents/Resources/codex'
+CODEX_BIN = next((str(p) for p in (Path.home() / '.local/bin/codex', Path('/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex'), Path('/Applications/ChatGPT.app/Contents/Resources/codex')) if os.access(p, os.X_OK)), '/Applications/ChatGPT.app/Contents/Resources/codex')
 REPORT_SLOTS = threading.BoundedSemaphore(2)
 IMAGE_SUFFIXES = {
     'image/png': '.png', 'image/jpeg': '.jpg', 'image/jpg': '.jpg',

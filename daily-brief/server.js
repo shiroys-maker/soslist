@@ -2,14 +2,14 @@
 /**
  * daily-brief / server.js  — ミニアプリ
  * ------------------------------------------------------------------
- * 日付を入れて「作成」ボタンを押すと、その日のブリーフ + ポッドキャスト音声を
- * 生成して、画面上で要約の表示と音声の再生ができるローカルWebアプリ。
+ * 作成済みの要約の閲覧と音声の再生・配信を行うローカルWebアプリ。
+ * 新規生成はSOSList LocalのネイティブCodex経路のみ。
  *
  * 起動:  node server.js     (または bash run-app.sh)
  * ブラウザ:  http://127.0.0.1:8790/
  *
  * 必要な環境変数は generate-brief.js と同じ (.env 参照):
- *   OPENAI_API_KEY / GOOGLE_APPLICATION_CREDENTIALS
+ *   GOOGLE_APPLICATION_CREDENTIALS (既存Briefの同期用)
  */
 
 'use strict';
@@ -17,18 +17,17 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { run, getExistingBriefResult, saveBriefToFirestore } = require('./generate-brief');
+const { getExistingBriefResult, saveBriefToFirestore } = require('./generate-brief');
 
 const PORT = Number(process.env.PORT || 8790);
 const OUTPUT_DIR = process.env.OUTPUT_DIR
   ? path.resolve(process.env.OUTPUT_DIR)
   : path.join(__dirname, 'output');
 
-let busy = false; // 同時生成を防ぐ簡易ロック
 
 function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'content-type');
 }
 
@@ -55,9 +54,8 @@ function escapeHtml(value) {
     .replace(/"/g, '&quot;');
 }
 
-function summaryPopupPage(ymd, mode = 'generate') {
+function summaryPopupPage(ymd) {
   const safeDate = escapeHtml(ymd);
-  const safeMode = mode === 'view' ? 'view' : 'generate';
   return `<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -114,10 +112,6 @@ function summaryPopupPage(ymd, mode = 'generate') {
 
     <section class="card status" id="statusCard">
       <div id="status"><span class="spinner"></span>確認中...</div>
-      <div class="actions hidden" id="confirmActions">
-        <button type="button" class="secondary" id="showExistingButton">キャンセル</button>
-        <button type="button" class="danger" id="regenerateButton">再生成</button>
-      </div>
     </section>
 
     <section class="card hidden" id="audioCard">
@@ -132,12 +126,8 @@ function summaryPopupPage(ymd, mode = 'generate') {
 
 <script>
   const ymd = ${JSON.stringify(ymd)};
-  const mode = ${JSON.stringify(safeMode)};
   const statusEl = document.getElementById('status');
   const metaEl = document.getElementById('meta');
-  const confirmActions = document.getElementById('confirmActions');
-  const showExistingButton = document.getElementById('showExistingButton');
-  const regenerateButton = document.getElementById('regenerateButton');
   const summaryCard = document.getElementById('summaryCard');
   const summaryEl = document.getElementById('summary');
   const audioCard = document.getElementById('audioCard');
@@ -180,23 +170,9 @@ function summaryPopupPage(ymd, mode = 'generate') {
       .replace(/"/g, '&quot;');
   }
 
-  function setBusy(message) {
-    confirmActions.classList.add('hidden');
-    showExistingButton.disabled = true;
-    regenerateButton.disabled = true;
-    statusEl.innerHTML = '<span class="spinner"></span>' + message;
-  }
-
-  function setIdle(message) {
-    statusEl.textContent = message;
-    showExistingButton.disabled = false;
-    regenerateButton.disabled = false;
-  }
-
   function renderResult(data) {
     metaEl.textContent = data.ymd + (Number.isFinite(data.count) ? ' / 予約 ' + data.count + ' 件' : '');
     statusEl.textContent = '表示中';
-    confirmActions.classList.add('hidden');
     summaryEl.innerHTML = renderMarkdownToHtml(data.summaryMarkdown || '(要約なし)');
     summaryCard.classList.remove('hidden');
 
@@ -220,62 +196,13 @@ function summaryPopupPage(ymd, mode = 'generate') {
     return data;
   }
 
-  async function generate() {
-    const res = await fetch('/api/generate', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ date: ymd, noAudio: false, sample: false })
-    });
-    const data = await res.json();
-    if (!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
-    return data;
-  }
-
   async function boot() {
     try {
-      setBusy('確認中...');
       const status = await fetchStatus();
-      if (status.exists) {
-        if (mode === 'view') {
-          renderResult(status);
-          return;
-        }
-        setIdle('既に作成済みです。再生成しますか。');
-        confirmActions.classList.remove('hidden');
-        showExistingButton.onclick = () => renderResult(status);
-        regenerateButton.onclick = async () => {
-          try {
-            setBusy('再生成中... 音声ありだと1〜2分かかることがあります。');
-            const result = await generate();
-            renderResult(result);
-          } catch (error) {
-            setIdle('エラーが発生しました。');
-            alert('Summery の再生成に失敗しました。\\n' + (error.message || error));
-          }
-        };
-        window.requestAnimationFrame(() => showExistingButton.focus());
-        return;
-      }
-
-      if (mode === 'view') {
-        metaEl.textContent = ymd;
-        statusEl.textContent = 'サマリーは未作成です。';
-        summaryEl.innerHTML = '<p>サマリーは未作成です。</p>';
-        summaryCard.classList.remove('hidden');
-        audioEl.removeAttribute('src');
-        audioCard.classList.add('hidden');
-        return;
-      }
-
-      setBusy('生成中... 音声ありだと1〜2分かかることがあります。');
-      const result = await generate();
-      renderResult(result);
+      if (status.exists) { renderResult(status); return; }
+      statusEl.textContent = 'サマリーは未作成です。SOSList Localアプリから作成してください。';
     } catch (error) {
-      statusEl.textContent = 'エラーが発生しました。';
-      alert('Summery の取得に失敗しました。\\n' +
-        'daily-brief サーバーを起動してから再試行してください。\\n' +
-        'cd ~/Documents/GitHub/soslist/daily-brief\\nbash run-app.sh\\n\\n' +
-        '詳細: ' + (error.message || error));
+      statusEl.textContent = 'サマリーを取得できませんでした。再読み込みしてください。';
     }
   }
 
@@ -287,114 +214,12 @@ function summaryPopupPage(ymd, mode = 'generate') {
 
 // ----------------------------- HTML UI -----------------------------
 function page() {
-  // 既定の日付 = 翌日(JST)
-  return `<!DOCTYPE html>
-<html lang="ja">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>予約ポッドキャスト生成</title>
-<style>
-  :root { --accent:#5b2b74; }
-  * { box-sizing: border-box; }
-  body { font-family: -apple-system, "Hiragino Kaku Gothic ProN", sans-serif;
-         margin: 0; background:#f6f4f9; color:#222; }
-  .wrap { max-width: 820px; margin: 0 auto; padding: 24px 16px 64px; }
-  h1 { font-size: 20px; color: var(--accent); }
-  .card { background:#fff; border-radius:12px; padding:18px; margin-top:16px;
-          box-shadow:0 1px 4px rgba(0,0,0,.08); }
-  .row { display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap; }
-  label { font-size:13px; color:#555; display:block; margin-bottom:4px; }
-  input[type=date] { font-size:16px; padding:8px 10px; border:1px solid #ccc; border-radius:8px; }
-  button { font-size:15px; padding:9px 18px; border:0; border-radius:8px;
-           background:var(--accent); color:#fff; cursor:pointer; }
-  button:disabled { opacity:.5; cursor:default; }
-  .opts { font-size:13px; color:#555; margin-top:10px; display:flex; gap:16px; }
-  #status { margin-top:14px; font-size:14px; min-height:20px; }
-  .spinner { display:inline-block; width:14px; height:14px; border:2px solid #ccc;
-             border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite;
-             vertical-align:-2px; margin-right:6px; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  audio { width:100%; margin-top:8px; }
-  pre { white-space:pre-wrap; word-break:break-word; font-size:14px; line-height:1.6;
-        background:#faf9fc; padding:14px; border-radius:8px; border:1px solid #eee; }
-  .muted { color:#888; font-size:12px; }
-</style>
-</head>
-<body>
-<div class="wrap">
-  <h1>翌日予約ポッドキャスト生成</h1>
-  <div class="card">
-    <div class="row">
-      <div>
-        <label for="date">対象日</label>
-        <input type="date" id="date">
-      </div>
-      <button id="go">作成</button>
-    </div>
-    <div class="opts">
-      <label><input type="checkbox" id="noAudio"> 音声なし(テキストのみ・高速)</label>
-      <label><input type="checkbox" id="sample"> サンプルデータで試す</label>
-    </div>
-    <div id="status"></div>
-  </div>
-
-  <div class="card" id="result" style="display:none;">
-    <div id="audioWrap"></div>
-    <h3 style="margin-top:18px;">ブリーフ</h3>
-    <pre id="summary"></pre>
-  </div>
-</div>
-
-<script>
-  // 既定日付 = 翌日(ローカル時刻基準)
-  const d = new Date(Date.now() + 86400000);
-  document.getElementById('date').value =
-    d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
-
-  const goBtn = document.getElementById('go');
-  const statusEl = document.getElementById('status');
-  const resultEl = document.getElementById('result');
-
-  goBtn.addEventListener('click', async () => {
-    const date = document.getElementById('date').value;
-    const noAudio = document.getElementById('noAudio').checked;
-    const sample = document.getElementById('sample').checked;
-    if (!date) { statusEl.textContent = '日付を選んでください。'; return; }
-
-    goBtn.disabled = true;
-    resultEl.style.display = 'none';
-    statusEl.innerHTML = '<span class="spinner"></span>生成中… 音声ありだと1〜2分かかることがあります。';
-
-    try {
-      const res = await fetch('/api/generate', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ date, noAudio, sample })
-      });
-      const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
-
-      statusEl.innerHTML = '完了：' + data.ymd + '（予約 ' + data.count + ' 件）';
-      document.getElementById('summary').textContent = data.summaryMarkdown || '(要約なし)';
-      const audioWrap = document.getElementById('audioWrap');
-      if (data.audioUrl) {
-        audioWrap.innerHTML =
-          '<audio controls preload="metadata" src="' + data.audioUrl + '"></audio>' +
-          '<div class="muted">右クリックで保存できます。</div>';
-      } else {
-        audioWrap.innerHTML = '<div class="muted">音声なしで生成しました。</div>';
-      }
-      resultEl.style.display = 'block';
-    } catch (e) {
-      statusEl.textContent = 'エラー: ' + e.message;
-    } finally {
-      goBtn.disabled = false;
-    }
-  });
-</script>
-</body>
-</html>`;
+  return `<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Summary閲覧</title>
+<style>body{font:16px -apple-system,sans-serif;max-width:800px;margin:40px auto;padding:20px;color:#312e81}input,button{font:inherit;padding:10px}</style></head>
+<body><h1>Summary閲覧</h1><p>作成済みの要約と音声を表示します。新規作成はSOSList Localアプリから行ってください。</p>
+<form action="/summary-popup" method="get"><label>対象日 <input type="date" name="date" required></label> <button type="submit">表示</button></form>
+</body></html>`;
 }
 
 // ----------------------------- 音声配信(Range対応) -----------------------------
@@ -454,14 +279,13 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === 'GET' && url.pathname === '/summary-popup') {
     const ymd = url.searchParams.get('date');
-    const mode = url.searchParams.get('mode') === 'view' ? 'view' : 'generate';
     if (!validateYmd(ymd)) {
       writeJson(res, 400, { ok: false, error: 'date は YYYY-MM-DD 形式で指定してください。' });
       return;
     }
     setCorsHeaders(res);
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    res.end(summaryPopupPage(ymd, mode));
+    res.end(summaryPopupPage(ymd));
     return;
   }
 
@@ -510,40 +334,6 @@ const server = http.createServer(async (req, res) => {
       console.error(error);
       writeJson(res, 500, { ok: false, error: error.message || String(error) });
     }
-    return;
-  }
-
-  // 生成API
-  if (req.method === 'POST' && url.pathname === '/api/generate') {
-    if (busy) {
-      writeJson(res, 429, { ok: false, error: '別の生成処理が実行中です。完了までお待ちください。' });
-      return;
-    }
-    let body = '';
-    req.on('data', (c) => { body += c; if (body.length > 1e6) req.destroy(); });
-    req.on('end', async () => {
-      busy = true;
-      try {
-        const opts = body ? JSON.parse(body) : {};
-        const result = await run({
-          date: opts.date || null,
-          sample: !!opts.sample,
-          noAudio: !!opts.noAudio,
-        });
-        writeJson(res, 200, {
-          ok: true,
-          ymd: result.ymd,
-          count: result.count,
-          summaryMarkdown: result.summaryMarkdown,
-          audioUrl: toAudioUrl(result),
-        });
-      } catch (e) {
-        console.error(e);
-        writeJson(res, 500, { ok: false, error: e.message || String(e) });
-      } finally {
-        busy = false;
-      }
-    });
     return;
   }
 

@@ -88,19 +88,34 @@ def update_audiogram_page(text):
     ) + text[end:]
 
 
+def update_name_kana_server(text):
+    line = 'from name_kana_codex import handle_name_kana\n'
+    if line not in text:
+        text = text.replace('import http.server\n', 'import http.server\n' + line, 1)
+    start = text.index('    def _handle_name_kana(self):\n')
+    end = text.index('    def _handle_xray_report(self):\n', start)
+    return text[:start] + '    def _handle_name_kana(self):\n        handle_name_kana(self)\n\n' + text[end:]
+
+
+def update_name_kana_page(text):
+    start = text.index('        async function fetchNameKana(')
+    end = text.index('        function applyReportFields', start)
+    return text[:start] + "        async function fetchNameKana(name) {\n            const normalizedName = String(name || '').trim();\n            if (!normalizedName) return '';\n\n            const controller = new AbortController();\n            const timer = setTimeout(() => controller.abort(), 30000);\n            try {\n                const response = await fetch('/api/name-kana', {\n                    method: 'POST',\n                    signal: controller.signal,\n                    headers: { 'Content-Type': 'application/json' },\n                    body: JSON.stringify({ name: normalizedName })\n                });\n                if (!response.ok) return '';\n                const data = await response.json();\n                return String(data.kana || '').trim();\n            } catch (error) {\n                return '';\n            } finally {\n                clearTimeout(timer);\n            }\n        }\n\n        let reportKanaRequest = 0;\n        function autofillReportKana(name) {\n            const request = ++reportKanaRequest;\n            const field = document.getElementById('out-kana');\n            let edited = false;\n            const onInput = () => { edited = true; };\n            field.addEventListener('input', onInput);\n            fetchNameKana(name).then(kana => {\n                if (request !== reportKanaRequest || edited || field.innerText !== '変換中...') return;\n                field.innerText = kana || '';\n                field.title = kana ? '' : '自動変換できませんでした。カタカナ氏名を手入力してください。';\n            }).finally(() => field.removeEventListener('input', onInput));\n        }\n\n" + text[end:]
+
+
 def main():
     server = BIN / 'sospdf_server.py'
     page = QTC / 'ImageReport.html'
     audiogram = QTC / 'audiogram.html'
-    server_text = update_audiogram_server(update_server(server.read_text(encoding='utf-8')))
-    page_text = update_page(page.read_text(encoding='utf-8'))
+    server_text = update_name_kana_server(update_audiogram_server(update_server(server.read_text(encoding='utf-8'))))
+    page_text = update_name_kana_page(update_page(page.read_text(encoding='utf-8')))
     audiogram_text = update_audiogram_page(audiogram.read_text(encoding='utf-8'))
     compile(server_text, str(server), 'exec')
     for target in (server, page, audiogram):
         backup = target.with_name(target.name + '.before-audiogram-codex')
         if not backup.exists():
             shutil.copy2(target, backup)
-    for filename in ('codex_images.py', 'xray_codex.py', 'audiogram_codex.py'):
+    for filename in ('codex_images.py', 'xray_codex.py', 'audiogram_codex.py', 'name_kana_codex.py'):
         shutil.copy2(SOURCE / filename, BIN / filename)
     shutil.copy2(SOURCE / 'xray-upload.js', QTC / 'xray-upload.js')
     server.write_text(server_text, encoding='utf-8')
