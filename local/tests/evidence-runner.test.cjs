@@ -11,8 +11,9 @@ function fixture(t, scenario='normal') {
  fs.writeFileSync(codexPath,`#!${process.execPath}
  const fs=require('fs'),path=require('path'),rl=require('readline');
  const scenario=${JSON.stringify(scenario)},empty=${JSON.stringify(empty)};let stage=0,active=false;
+ if(scenario==='slow-exit')process.on('SIGTERM',()=>{});
  const wire=v=>console.log(JSON.stringify(v)),log=v=>fs.appendFileSync(path.join(__dirname,'wire.jsonl'),JSON.stringify(v)+'\\n');
- fs.writeFileSync(path.join(__dirname,'capture.json'),JSON.stringify({args:process.argv,api:process.env.OPENAI_API_KEY||null}));
+ fs.writeFileSync(path.join(__dirname,'capture.json'),JSON.stringify({pid:process.pid,args:process.argv,api:process.env.OPENAI_API_KEY||null}));
  function req(tool,args){wire({id:'s'+(++stage),method:'item/tool/call',params:{threadId:'thread',turnId:'turn',callId:'call'+stage,tool,arguments:args}});}
  function complete(){wire({method:'item/completed',params:{threadId:'thread',turnId:'turn',item:{type:'agentMessage',phase:'final_answer',text:scenario==='malformed'?'SECRET_CLINICAL invalid JSON':JSON.stringify(empty)}}});wire({method:'turn/completed',params:{threadId:'thread',turn:{id:'turn',status:'completed'}}});}
  rl.createInterface({input:process.stdin}).on('line',line=>{const m=JSON.parse(line);log(m);
@@ -239,4 +240,25 @@ test('intake consent timeout and cancellation cannot start a browser turn',async
  const run=runJob({mode:'batch'},{...g,requestIntakeConsent:()=>{setTimeout(()=>process.emit('SIGTERM'),1);return new Promise(resolve=>{pending=resolve;});}});
  assert.equal(await run,null);pending('accept');
  assert.ok(!readWire(g).some(m=>m.method==='turn/start'));assert.equal(checkpoints(g).length,1);
+});
+
+
+test('completion follows cleanup notification and actual app-server exit',async t=>{
+ for(const scenario of ['normal','slow-exit']) {
+ const f=fixture(t,scenario),events=[];
+ await runJob({mode:'batch'},{...f,onEvent:e=>{
+  events.push(e);
+  if(['completed','no_records'].includes(e.state)){
+   const {pid}=JSON.parse(fs.readFileSync(path.join(f.root,'capture.json')));
+   assert.throws(()=>process.kill(pid,0),{code:'ESRCH'},'completed status must wait for app-server shutdown');
+  }
+ }});
+ assert.ok(events.some(e=>e.state==='progress'&&e.phase==='cleanup'));
+ assert.equal(events.at(-1).phase,'complete');
+ assert.equal(events.filter(e=>e.state==='no_records').length,1);
+ const wire=readWire(f);
+ const release=wire.findIndex(m=>m.method==='mcpServer/tool/call');
+ const deletion=wire.findIndex(m=>m.method==='thread/delete');
+ assert.ok(release>=0&&deletion>release);
+ }
 });

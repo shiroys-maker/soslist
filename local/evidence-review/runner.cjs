@@ -136,6 +136,8 @@ async function runJob(input, options = {}) {
         if (!owner) return;
         if (store.data.browserRecoveryRequired) throw Error('元のブラウザ接続の再取得が未確認です。所有記録を保持します。');
         if (!owner.turnId) throw Error('操作ターンの終了を確認できません。所有記録を保持しています。');
+        phase = 'cleanup';
+        emit('progress', '画面操作を解放し、終了処理を確認しています。');
         const r = await server.rpc('mcpServer/tool/call', { threadId: thread, server: 'cua_repl', tool: 'turn_ended',
             arguments: { hook_event_name: event, session_id: owner.sessionId, turn_id: owner.turnId } }, duration('cleanup', 15000));
         if (r.isError) throw Error('Edge操作の終了通知が失敗しました。所有記録を保持しています。');
@@ -168,6 +170,8 @@ async function runJob(input, options = {}) {
         store.finish(result, { retain: true });
         atomic(path.join(runRoot, 'last-result.json'), result);
         if (['completed', 'no_records'].includes(result.outcome)) {
+            phase = 'cleanup';
+            emit('progress', '保存を確認済みです。操作と復旧履歴の終了を確認しています。');
             // Retained final results resume ONLY this cleanup, never patient work.
             const originalThread = store.data.session?.threadId;
             if (!originalThread) throw Error('保存確認済みですが、復旧履歴の終了先を確認できません。');
@@ -179,8 +183,11 @@ async function runJob(input, options = {}) {
                 await server.rpc('thread/delete', { threadId: originalThread });
                 const next = structuredClone(store.data); next.sessionDeleted = true; store.save(next);
             }
-            emit(result.outcome, result.summary, { result, resumeId: null });
+            // Keep the verified checkpoint until the browser cleanup, session
+            // deletion and actual app-server shutdown have all finished.
+            await server.close();
             store.finish(result);
+            phase = 'complete';
         }
         terminal = { state: result.outcome, message: result.summary, result, ...(['completed', 'no_records'].includes(result.outcome) ? { resumeId: null } : {}) };
         return result;
@@ -383,7 +390,11 @@ async function runJob(input, options = {}) {
         done = true; clearInterval(watch); clearInterval(heartbeat); clearInterval(parentWatch);
         for (const timer of toolTimers.values()) clearTimeout(timer);
         if (importChild?.pid) { try { process.kill(-importChild.pid, 'SIGKILL'); } catch (_) {} }
-        await server?.close();
+        try { await server?.close(); }
+        catch (error) {
+            phase = 'cleanup';
+            terminal = { state: stopping ? 'cancelled' : 'paused', message: error.message };
+        }
         process.removeListener('SIGTERM', stop); process.removeListener('SIGINT', stop);
         try { if (terminal) emit(terminal.state, terminal.message, terminal); }
         finally { fs.unlinkSync(lockFile); }

@@ -146,3 +146,16 @@ test('row resume displays only for the original document and shares the toolbar 
  state.busy=false;state.resumeDocId=null;ctx.syncEvidenceButtons();assert.ok(buttons.every(b=>b.hidden));
  state.resumeId=null;ctx.syncEvidenceButtons();assert.ok(buttons.every(b=>b.hidden));
 });
+
+test('restored successful results display complete rather than their final work phase', () => {
+ for (const state of ['completed','no_records']) {
+  const c=createController({send:()=>{},onState:()=>{}});
+  c.receive({state,message:'保存確認済み',phase:'verify'});
+  assert.equal(c.state.phase,'complete');
+  assert.equal(c.state.busy,false);
+ }
+ const c=createController({send:()=>{},onState:()=>{}});
+ c.receive({state:'paused',message:'後処理未完了',phase:'cleanup',resumeId:'a'.repeat(64)});
+ assert.equal(c.state.phase,'cleanup');
+ assert.equal(c.state.resumeId,'a'.repeat(64));
+});

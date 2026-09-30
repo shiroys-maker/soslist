@@ -76,14 +76,19 @@ class AppServer {
         this.pending.clear();
         const pid = this.child.pid;
         try { process.kill(-pid, 'SIGTERM'); } catch (_) {}
-        this.closePromise = new Promise(resolve => {
+        this.closePromise = new Promise((resolve, reject) => {
             if (!pid) { resolve(); return; }
             const started = Date.now();
             const poll = setInterval(() => {
                 let alive = true; try { process.kill(-pid, 0); } catch (e) { alive = e.code !== 'ESRCH'; }
-                if (alive && Date.now() - started < 1500) return;
-                if (alive) { try { process.kill(-pid, 'SIGKILL'); } catch (_) {} }
-                clearInterval(poll); resolve();
+                if (!alive) { clearInterval(poll); resolve(); return; }
+                const elapsed = Date.now() - started;
+                if (elapsed >= 1500) { try { process.kill(-pid, 'SIGKILL'); } catch (_) {} }
+                // Sending a signal does not confirm that the process has exited.
+                if (elapsed >= 3500) {
+                    clearInterval(poll);
+                    reject(Error('Codex操作プロセスの終了を確認できません。後処理から再開してください。'));
+                }
             }, 50);
         });
         return this.closePromise;

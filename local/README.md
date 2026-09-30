@@ -100,6 +100,7 @@ padding, not only on the text-sized button. Keyboard button activation is unchan
 - 現行の `~/.codex/skills/qtc-evidence-review/SKILL.md` と必要な参照を毎回読む。臨床根拠は `notes`、DBQ/Claim/IMO依頼内容は `claimDetail`。既存の実質的なメモを保ち、両方の全文を再読込確認する。紹介状・SHAは現行スキルの範囲に従う。署名・提出・紹介状送信は行わない。
 - 201 Bill取込は実稼働の `~/soslist/openai-processor/km_folder_trigger.sh <exact-pdf-path>` を使用する。既存のフォルダアクションと共通の排他・処理済み判定を利用する。インポータのコード・設定は変更しない。
 - 実行中は他の取得を無効化し、現在の段階・最終進捗からの経過時間・結果を表示する。中断時に再開可能なチェックポイントがあれば「再開」を表示し、新しい取得はその確認が終わるまで無効にする。アプリ再起動時にも最後の状態を読み戻し、実行中だった状態は中断として表示する。
+- 終了処理中は段階 `cleanup` を表示する。Computer Useの終了通知、復旧threadの後処理、app-serverと取得プロセスの終了を待って完了を表示し、成功時の段階は `complete` にする。既存の成功記録も表示時に `complete` に揃える。終了確認が失敗した場合は完了にせず、復旧用のチェックポイントを保持する。
 - 「停止」とアプリ終了はランナーにSIGTERMを送り、アプリ終了時は最大20秒間、ランナー自身の後片付けを待つ。途中まで保存された情報は戻さない。Edgeは処理中に使用される。
 - app-serverはChatGPTの既存ログインと公式Computer Use連携を使う。予約別・一括ともに `gpt-6-astra` / high を実行要求で固定する（Codex共通設定は変更しない）。APIキーを引き継がず、画面操作とアプリ専用のcheckpoint／Importer操作だけを許可する。中断後に同じsessionを再開できるよう、未完了の間だけCodexに復旧履歴を保持する。完了後はリモートthreadのarchive・deleteを確認してからローカルcheckpointを削除する。ログイン/MFAやツール利用が必要な場合は理由を表示して終了し、解決後に再実行する。
 - Computer Useのアプリ利用許可（Edge・SOSList Local・Finder・プレビュー）はSOSList内の確認画面に表示する。「許可」の応答を該当要求へ返して今回のセッションを継続する。拒否・2分の応答待ち時間切れ・停止時は途中状態を保持する。別アプリ、音声録音、外部認証や追加データの要求は受け付けない。

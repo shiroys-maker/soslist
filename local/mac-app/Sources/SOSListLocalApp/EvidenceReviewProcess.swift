@@ -94,6 +94,7 @@ final class EvidenceReviewProcess {
                 }
                 var buffer = Data()
                 var receivedFinal = false
+                var terminalUpdate: [String: Any]?
                 while true {
                     let chunk = output.fileHandleForReading.availableData
                     if chunk.isEmpty { break }
@@ -113,7 +114,11 @@ final class EvidenceReviewProcess {
                             continue
                         }
                         event["jobId"] = jobID
-                        if let state = event["state"] as? String, terminalStates.contains(state) { receivedFinal = true }
+                        if let state = event["state"] as? String, terminalStates.contains(state) {
+                            receivedFinal = true
+                            terminalUpdate = event
+                            continue
+                        }
                         let update = event
                         DispatchQueue.main.async { self.publish(update) }
                     }
@@ -122,10 +127,13 @@ final class EvidenceReviewProcess {
                 stderrDrain.wait()
                 try? fm.removeItem(at: requestURL)
                 let finished = receivedFinal
+                let finalUpdate = terminalUpdate
                 DispatchQueue.main.async {
                     self.dismissApproval()
                     self.process = nil
-                    if !finished {
+                    if let finalUpdate = finalUpdate {
+                        self.publish(finalUpdate)
+                    } else if !finished {
                         var interrupted = self.restoredStatus() ?? [:]
                         interrupted["jobId"] = jobID
                         interrupted["state"] = (interrupted["resumeId"] as? String) == nil ? "error" : "paused"
