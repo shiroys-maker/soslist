@@ -83,6 +83,7 @@ button:active {
 
 body #appointmentsTable .col-actions { width: 64px; white-space: nowrap; }
 body #appointmentsTable .col-actions > button { display: block; box-sizing: border-box; width: 42px; margin: 0 auto 4px; }
+body #appointmentsTable .col-actions > button[hidden] { display: none; }
 body #appointmentsTable .col-actions > button:last-child { margin-bottom: 0; }
 .dbq-btn, .evidence-btn {
     margin-left: 5px;
