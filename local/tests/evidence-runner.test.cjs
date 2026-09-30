@@ -16,7 +16,7 @@ function fixture(t, scenario='normal') {
  function req(tool,args){wire({id:'s'+(++stage),method:'item/tool/call',params:{threadId:'thread',turnId:'turn',callId:'call'+stage,tool,arguments:args}});}
  function complete(){wire({method:'item/completed',params:{threadId:'thread',turnId:'turn',item:{type:'agentMessage',phase:'final_answer',text:scenario==='malformed'?'SECRET_CLINICAL invalid JSON':JSON.stringify(empty)}}});wire({method:'turn/completed',params:{threadId:'thread',turn:{id:'turn',status:'completed'}}});}
  rl.createInterface({input:process.stdin}).on('line',line=>{const m=JSON.parse(line);log(m);
- if(!m.method){if(m.id==='s1')req('sos_set_queue',{enumerationComplete:true,appointments:[]});else if(m.id==='s2'){
+ if(!m.method){if(m.id==='permission'){if(m.result?.action==='accept'){for(let i=0;i<2;i++)wire({method:'item/completed',params:{threadId:'thread',turnId:'turn',item:{id:'r'+i,type:'mcpToolCall',result:{}}}});req('sos_ready',{edge:true,soslist:true});}return;}if(m.id==='s1')req('sos_set_queue',{enumerationComplete:true,appointments:[]});else if(m.id==='s2'){
   if(scenario==='crash')process.exit(7);
   else if(['hang','no-ended'].includes(scenario))return;
   else if(scenario==='window'){for(let i=0;i<3;i++)wire({method:'item/completed',params:{threadId:'thread',turnId:'turn',item:{id:'w'+i,type:'mcpToolCall',error:{message:'cgWindowNotFound'}}}});}
@@ -37,6 +37,7 @@ function fixture(t, scenario='normal') {
  if(m.id!==undefined)wire({id:m.id,result:r});
  if(m.method==='turn/start'){
   if(scenario==='premature'){complete();return;}
+  if(scenario==='app-approval'){wire({id:'permission',method:'mcpServer/elicitation/request',params:${JSON.stringify(appRequest())}});return;}
   for(let i=0;i<2;i++)wire({method:'item/completed',params:{threadId:'thread',turnId:'turn',item:{id:'r'+i,type:'mcpToolCall',result:{_meta:{'codex/toolSurface':{kind:'browserUse'}}}}}});
   req('sos_ready',{edge:true,soslist:true});
  }
@@ -186,4 +187,24 @@ test('explicit resume clarification reaches the original session and survives th
  assert.deepEqual(retained.data.request,{mode:'single',appointment});
  assert.deepEqual(retained.data.appointments[0].verified,{});
  assert.equal(retained.data.appointments[0].shaEditStarted,undefined);
+});
+
+function appRequest(app='com.apple.finder') {
+ return {threadId:'thread',turnId:'turn',serverName:'cua_repl',mode:'form',message:'Allow Computer Use?',requestedSchema:{type:'object',properties:{}},_meta:{codex_approval_kind:'mcp_tool_call',connector_id:'computer-use',tool_name:'get_app_state',tool_params:{app},riskLevel:'low'}};
+}
+test('native app permission reaches the host and continues only after explicit acceptance', async t=>{
+ const f=fixture(t,'app-approval'); let prompted=0;
+ const r=await runJob({mode:'batch'},{...f,requestAppApproval:async request=>{prompted++;assert.equal(request.appId,'com.apple.finder');return 'accept';}});
+ assert.equal(r.outcome,'no_records');assert.equal(prompted,1);
+ const response=readWire(f).find(m=>m.id==='permission');assert.equal(response.result.action,'accept');assert.equal(response.result._meta.persist,'session');
+});
+test('declined app permission stops and preserves resumable state',async t=>{
+ const f=fixture(t,'app-approval');await assert.rejects(runJob({mode:'batch'},{...f,requestAppApproval:async()=> 'decline'}),/許可/);
+ assert.equal(readWire(f).find(m=>m.id==='permission').result.action,'decline');assert.equal(checkpoints(f).length,1);
+});
+test('app permissions cannot accept unrelated apps, audio, URL requests, or extra form data',()=>{
+ const {appApprovalRequest}=require('../evidence-review/runner.cjs');
+ assert.equal(appApprovalRequest(appRequest()).appId,'com.apple.finder');
+ for(const app of ['com.apple.Terminal','computer-audio','com.apple.finder.attacker'])assert.equal(appApprovalRequest(appRequest(app)),null);
+ for(const modify of [p=>p.serverName='untrusted',p=>p.mode='url',p=>p._meta.tool_name='start_audio_recording',p=>p.requestedSchema.properties={secret:{type:'string'}}]){const p=appRequest();modify(p);assert.equal(appApprovalRequest(p),null);}
 });

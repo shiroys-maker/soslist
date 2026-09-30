@@ -1,8 +1,10 @@
+import AppKit
 import Foundation
 
 // All public entry points and callbacks run on the main queue. Pipe draining is off-main.
 final class EvidenceReviewProcess {
     private var process: Process?
+    private var approvalAlert: NSAlert?
     private(set) var status: [String: Any]?
     var onStatus: (([String: Any]) -> Void)?
     private var quitCompletions: [() -> Void] = []
@@ -65,12 +67,13 @@ final class EvidenceReviewProcess {
             guard data.count < 100_000 else { throw NSError(domain: "EvidenceReview", code: 1, userInfo: [NSLocalizedDescriptionKey: "取得対象の情報が大きすぎます。"]) }
             try data.write(to: requestURL, options: .atomic)
             try fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: requestURL.path)
-            let child = Process(), output = Pipe(), errors = Pipe()
+            let child = Process(), output = Pipe(), errors = Pipe(), answers = Pipe()
             child.executableURL = URL(fileURLWithPath: nodePath)
             child.arguments = [resources.appendingPathComponent("local/evidence-review/runner.cjs").path, requestURL.path]
             child.currentDirectoryURL = directory
             child.standardOutput = output
             child.standardError = errors
+            child.standardInput = answers
             var environment = ProcessInfo.processInfo.environment
             environment["PATH"] = "\(URL(fileURLWithPath: nodePath).deletingLastPathComponent().path):/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
             child.environment = environment
@@ -104,6 +107,11 @@ final class EvidenceReviewProcess {
                         buffer.removeSubrange(...newline)
                         guard line.count <= 65_536 else { continue }
                         guard var event = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any] else { continue }
+                        if event["type"] as? String == "appApproval" {
+                            let request = event
+                            DispatchQueue.main.async { self.requestAppApproval(request, child: child, answers: answers) }
+                            continue
+                        }
                         event["jobId"] = jobID
                         if let state = event["state"] as? String, terminalStates.contains(state) { receivedFinal = true }
                         let update = event
@@ -115,6 +123,7 @@ final class EvidenceReviewProcess {
                 try? fm.removeItem(at: requestURL)
                 let finished = receivedFinal
                 DispatchQueue.main.async {
+                    self.dismissApproval()
                     self.process = nil
                     if !finished {
                         var interrupted = self.restoredStatus() ?? [:]
@@ -140,6 +149,7 @@ final class EvidenceReviewProcess {
 
     func stop(jobID: String? = nil) {
         guard let process, process.isRunning, jobID == nil || jobID == status?["jobId"] as? String else { return }
+        dismissApproval()
         process.terminate() // The runner owns session cleanup and receives SIGTERM.
     }
 
@@ -160,6 +170,36 @@ final class EvidenceReviewProcess {
     private func publish(_ update: [String: Any]) {
         status = update
         onStatus?(update)
+    }
+
+    private func requestAppApproval(_ request: [String: Any], child: Process, answers: Pipe) {
+        guard process === child, child.isRunning,
+              let requestID = request["requestId"] as? String,
+              UUID(uuidString: requestID) != nil,
+              let appName = request["appName"] as? String else { return }
+        let respond: (Bool) -> Void = { [weak self] accepted in
+            guard self?.process === child, child.isRunning,
+                  let data = try? JSONSerialization.data(withJSONObject: ["type": "appApproval", "requestId": requestID, "action": accepted ? "accept" : "decline"]) else { return }
+            do { try answers.fileHandleForWriting.write(contentsOf: data + Data([10])) } catch { self?.stop() }
+        }
+        guard approvalAlert == nil, let window = NSApp.mainWindow ?? NSApp.keyWindow else { respond(false); return }
+        let alert = NSAlert()
+        alert.messageText = "取得で\(appName)を使用することを許可しますか？"
+        alert.informativeText = "Codexの画面操作に必要な利用許可です。今回の取得セッションに適用されます。拒否した場合は途中状態を残して停止します。"
+        alert.addButton(withTitle: "許可")
+        alert.addButton(withTitle: "許可しない")
+        approvalAlert = alert
+        NSApp.activate(ignoringOtherApps: true)
+        alert.beginSheetModal(for: window) { [weak self] response in
+            self?.approvalAlert = nil
+            respond(response == .alertFirstButtonReturn)
+        }
+    }
+
+    private func dismissApproval() {
+        guard let alert = approvalAlert else { return }
+        approvalAlert = nil
+        if let parent = alert.window.sheetParent { parent.endSheet(alert.window, returnCode: .alertSecondButtonReturn) }
     }
 }
 

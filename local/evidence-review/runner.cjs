@@ -6,6 +6,21 @@ const { spawn } = require('node:child_process');
 const { buildRequest } = require('../evidence-review.js');
 const { ReviewStore, atomic } = require('./store.cjs');
 const { AppServer, browserConfig } = require('./app-server.cjs');
+const { AppApprovals } = require('./app-approvals.cjs');
+
+function appApprovalRequest(p) {
+    const apps = { 'com.apple.finder': 'Finder', 'com.apple.Preview': 'プレビュー',
+        'com.microsoft.edgemac': 'Microsoft Edge', 'jp.niraissc.soslist.local': 'SOSList Local' };
+    const m = p._meta, app = m?.tool_params?.app;
+    if (p.serverName !== 'cua_repl' || !['form', 'openai/form', 'openaiForm'].includes(p.mode)
+        || m?.codex_approval_kind !== 'mcp_tool_call' || m.connector_id !== 'computer-use'
+        || !Object.hasOwn(apps, app) || !['low', 'high'].includes(m.riskLevel)
+        || typeof m.tool_name !== 'string' || !m.tool_name || /audio/i.test(m.tool_name)
+        || Object.keys(m.tool_params).some(k => k !== 'app')
+        || p.requestedSchema?.type !== 'object' || !p.requestedSchema.properties
+        || Object.keys(p.requestedSchema.properties).length || p.requestedSchema.required?.length) return null;
+    return { appId: app, appName: apps[app], riskLevel: m.riskLevel };
+}
 
 const resultSchema = {
     type: 'object', additionalProperties: false,
@@ -204,10 +219,27 @@ async function runJob(input, options = {}) {
         }
         if (p.turnId && turn && p.turnId !== turn) return;
         if (message.id !== undefined) {
+            if (message.method === 'mcpServer/elicitation/request') {
+                const request = appApprovalRequest(p);
+                let action = 'decline';
+                if (accepting && request && options.requestAppApproval) {
+                    emit('progress', `${request.appName}の利用許可を待っています。`);
+                    let timeout;
+                    try {
+                        action = await Promise.race([options.requestAppApproval(request), completion.catch(() => 'decline'),
+                            new Promise(resolve => { timeout = setTimeout(() => resolve('decline'), duration('approval', 120000)); })]);
+                    } catch (_) {} finally { clearTimeout(timeout); }
+                }
+                action = accepting && action === 'accept' ? 'accept' : 'decline';
+                server.write({ id: message.id, result: { action, content: null, _meta: action === 'accept' ? { persist: 'session' } : null } });
+                if (action !== 'accept') fail(Error(request ? `${request.appName}の利用許可を確認できないため停止しました。「再開」から許可を確認してください。` : '取得対象外の認証・許可要求のため停止しました。'));
+                else activity();
+                return;
+            }
             if (message.method !== 'item/tool/call') {
                 if (['item/commandExecution/requestApproval', 'item/fileChange/requestApproval'].includes(message.method)) server.write({ id: message.id, result: { decision: 'decline' } });
                 else server.write({ id: message.id, error: { code: -32601, message: 'This UI-only host cannot fulfill this request. Stop safely and report the blocker.' } });
-                fail(Error('追加の認証・承認または未対応の操作が必要なため停止しました。'));
+                fail(Error(`追加の認証・承認または未対応の操作（${message.method}）が必要なため停止しました。`));
                 return;
             }
             if (!accepting) { server.write({ id: message.id, error: { code: -32000, message: 'Stopping; do not mutate.' } }); return; }
@@ -347,10 +379,11 @@ if (require.main === module) {
     let reported = false;
     let request;
     const emit = event => { if (['paused','cancelled','error'].includes(event.state)) reported = true; process.stdout.write(JSON.stringify(event) + '\n'); };
+    const approvals = new AppApprovals(process.stdin, emit);
     process.stdout.on('error', () => process.emit('SIGTERM'));
     try {
         request = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
-        runJob(request, { onEvent: emit }).catch(error => { if (!reported) emit({ state: 'error', message: error.message, ...(/^[a-f0-9]{64}$/.test(request.resumeId || '') ? { resumeId: request.resumeId } : {}) }); process.exitCode = 1; });
-    } catch (error) { emit({ state: 'error', message: error.message }); process.exitCode = 1; }
+        runJob(request, { onEvent: emit, requestAppApproval: request => approvals.ask(request) }).catch(error => { if (!reported) emit({ state: 'error', message: error.message, ...(/^[a-f0-9]{64}$/.test(request.resumeId || '') ? { resumeId: request.resumeId } : {}) }); process.exitCode = 1; }).finally(() => approvals.close());
+    } catch (error) { approvals.close(); emit({ state: 'error', message: error.message }); process.exitCode = 1; }
 }
-module.exports = { runJob, dynamicTools, scopeInstructions };
+module.exports = { runJob, dynamicTools, scopeInstructions, appApprovalRequest };
