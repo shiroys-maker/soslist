@@ -160,3 +160,29 @@ test('large resumed history is omitted from the response without changing the pe
  assert.ok(!Object.hasOwn(resume.params,'history'));
  assert.equal(readWire(f).some(m=>m.method==='thread/start'),false);
 });
+
+
+test('explicit resume clarification reaches the original session and survives the next retry',async t=>{
+ const f=fixture(t),{ReviewStore}=require('../evidence-review/store.cjs');
+ const appointment={docId:'synthetic-selected',claimantName:'SYNTHETIC',contractNumber:'TEST.1.2',appointmentDateTimeMs:1791248400000,services:['SHA'],sha:true};
+ const store=ReviewStore.create(f.runRoot,{mode:'single',appointment});
+ store.queue({enumerationComplete:true,appointments:[appointment]});
+ store.setSession({threadId:'thread',sessionId:'actual-session'});
+ const clarification='SYNTHETIC_USER_CLARIFICATION_ONLY';
+ await assert.rejects(runJob({mode:'resume',resumeId:store.id,userInstruction:clarification},f));
+ await assert.rejects(runJob({mode:'resume',resumeId:store.id},f));
+ const wire=readWire(f),turns=wire.filter(m=>m.method==='turn/start');
+ assert.equal(turns.length,2);
+ for(const turn of turns){
+  const text=turn.params.input[0].text;
+  assert.ok(text.includes('USER-PROVIDED RESUME INSTRUCTIONS'));
+  assert.ok(text.includes(clarification));assert.ok(text.includes('do not prove a historical state transition'));
+ }
+ assert.equal(wire.some(m=>m.method==='thread/start'),false);
+ for(const resume of wire.filter(m=>m.method==='thread/resume'))assert.equal(resume.params.threadId,'thread');
+ const retained=ReviewStore.open(f.runRoot,store.id);
+ assert.equal(retained.data.userInstructions.length,1);
+ assert.deepEqual(retained.data.request,{mode:'single',appointment});
+ assert.deepEqual(retained.data.appointments[0].verified,{});
+ assert.equal(retained.data.appointments[0].shaEditStarted,undefined);
+});

@@ -174,3 +174,22 @@ test('partial reports cannot claim a field was verified without a saved readback
     result.appointments[0].notesVerified = false;
     assert.equal(store.finish(result).outcome, 'partial');
 });
+
+
+test('user clarification persists only in its checkpoint without altering evidence or approval flags', t => {
+ const root=setup(t),store=ReviewStore.create(root,{mode:'single',appointment:identity});
+ store.queue({enumerationComplete:true,appointments:[identity]});
+ const original=structuredClone(store.data.appointments);
+ store.addUserInstruction('  Synthetic clarification  ');
+ store.addUserInstruction('Synthetic clarification');
+ const restored=ReviewStore.open(root,store.id);
+ assert.equal(restored.data.userInstructions.length,1);
+ assert.equal(restored.data.userInstructions[0].text,'Synthetic clarification');
+ assert.deepEqual(restored.data.appointments,original);
+ assert.deepEqual(restored.data.request,{mode:'single',appointment:identity});
+ assert.equal(ReviewStore.create(root,{mode:'batch'}).data.userInstructions,undefined);
+ assert.throws(()=>restored.addUserInstruction('x'.repeat(4001)));
+ const invalid=structuredClone(restored.data);invalid.userInstructions[0].text={};
+ fs.writeFileSync(restored.file,JSON.stringify(invalid));
+ assert.throws(()=>ReviewStore.open(root,store.id),/checkpoint/i);
+});

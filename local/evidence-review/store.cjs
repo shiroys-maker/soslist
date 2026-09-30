@@ -2,7 +2,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { validateResult } = require('../evidence-review.js');
+const { validateResult, resumeInstruction } = require('../evidence-review.js');
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
 function atomic(file, value) {
     fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
@@ -41,7 +41,15 @@ function validSession(session) {
         Object.keys(session).every(k => ['threadId', 'sessionId'].includes(k)) &&
         ['threadId', 'sessionId'].every(k => typeof session[k] === 'string' && session[k].trim());
 }
+function validUserInstructions(entries) {
+    if (entries === undefined) return true;
+    return Array.isArray(entries) && entries.length <= 20 && entries.every(entry =>
+        entry && typeof entry === 'object' && Object.keys(entry).length === 2 &&
+        typeof entry.text === 'string' && entry.text.length <= 4000 && entry.text.trim() === entry.text &&
+        entry.text.length > 0 && typeof entry.at === 'string' && Number.isFinite(Date.parse(entry.at)));
+}
 function validRecoveryIdentity(data) {
+    if (!validUserInstructions(data.userInstructions)) return false;
     if (data.owner !== null && !validOwner(data.owner)) return false;
     if (data.session != null && !validSession(data.session)) return false;
     return !(data.owner && data.session &&
@@ -97,6 +105,14 @@ class ReviewStore {
         if (Buffer.byteLength(JSON.stringify(next)) > 12_000_000) throw Error('Checkpoint size limit reached; pause and inspect');
         atomic(this.file, next);
         this.data = next;
+    }
+    addUserInstruction(value) {
+        const text = resumeInstruction(value);
+        if (!text || this.data.userInstructions?.at(-1)?.text === text) return;
+        const next = structuredClone(this.data);
+        next.userInstructions = [...(next.userInstructions || []), { text, at: new Date().toISOString() }];
+        if (next.userInstructions.length > 20) throw Error('追加指示の上限に達しました。記録を確認してください。');
+        this.save(next);
     }
     owner(owner) {
         if (owner !== null && !validOwner(owner)) throw Error('Invalid ownership identity');

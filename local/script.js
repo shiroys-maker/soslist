@@ -128,6 +128,14 @@ function renderEvidenceStatus(state = evidenceController.state) {
         const resume = document.getElementById('resumeEvidenceButton');
         resume.hidden = state.busy || !state.resumeId;
         resume.disabled = state.busy;
+        const instructionArea = document.getElementById('resumeInstructionArea');
+        const instruction = document.getElementById('resumeInstruction');
+        if (instructionArea && instruction) {
+            instructionArea.hidden = state.busy || !state.resumeId;
+            instruction.disabled = state.busy;
+            if (instruction.dataset.resumeId !== (state.resumeId || '')) instruction.value = '';
+            instruction.dataset.resumeId = state.resumeId || '';
+        }
         document.getElementById('fetchEvidenceButton').textContent = state.busy ? '取得中…' : '取得';
         syncEvidenceButtons(state.busy || !!state.resumeId);
 }
@@ -139,7 +147,11 @@ new MutationObserver(() => syncEvidenceButtons()).observe(tableBody, { childList
 window.__sosEvidenceStatus = status => evidenceController.receive(status);
 document.getElementById('fetchEvidenceButton').addEventListener('click', () => evidenceController.start('batch'));
 document.getElementById('resumeEvidenceButton').addEventListener('click', () => {
-    if (evidenceController.state.resumeId) evidenceController.start('resume', { resumeId: evidenceController.state.resumeId });
+    if (evidenceController.state.resumeId) {
+        const instruction = document.getElementById('resumeInstruction');
+        evidenceController.start('resume', { resumeId: evidenceController.state.resumeId,
+            userInstruction: instruction?.value || '' });
+    }
 });
 document.getElementById('stopEvidenceButton').addEventListener('click', () => {
     window.webkit?.messageHandlers?.stopEvidenceReview?.postMessage({ jobId: evidenceController.state.jobId });

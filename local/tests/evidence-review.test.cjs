@@ -105,3 +105,13 @@ test('the actual row click hands off the corrected visible time for legacy impor
     assert.equal(sent[0].appointment.appointmentDateTimeMs, 1790902800000);
     assert.equal(sent[0].appointment.docId, 'synthetic-doc');
 });
+
+
+test('resume accepts only explicit bounded user instructions without broadening the selection', () => {
+ const resumeId = 'a'.repeat(64);
+ assert.deepEqual(buildRequest('resume', {resumeId, userInstruction:'  Synthetic clarification  ', appointment}),
+  {mode:'resume',resumeId,userInstruction:'Synthetic clarification'});
+ assert.deepEqual(buildRequest('resume', {resumeId, userInstruction:'  '}), {mode:'resume',resumeId});
+ for (const value of [null, {}, 42, 'x'.repeat(4001)]) assert.throws(() => buildRequest('resume',{resumeId,userInstruction:value}));
+ assert.equal(buildRequest('single',{...appointment,userInstruction:'unrelated'}).userInstruction,undefined);
+});

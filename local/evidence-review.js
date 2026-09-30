@@ -1,12 +1,18 @@
 (function (root) {
     'use strict';
+    function resumeInstruction(value) {
+        if (value === undefined) return '';
+        if (typeof value !== 'string' || value.length > 4000) throw new Error('追加指示は4000文字以内で入力してください。');
+        return value.trim();
+    }
     function buildRequest(mode, value) {
         if (!['single', 'batch', 'resume'].includes(mode)) throw new Error('取得方法が不正です。');
         if (mode === 'resume') {
             if (!value || typeof value.resumeId !== 'string' || !/^[a-f0-9]{64}$/i.test(value.resumeId)) {
                 throw new Error('再開情報が不正です。アプリを再起動して状態を確認してください。');
             }
-            return { mode, resumeId: value.resumeId };
+            const userInstruction = resumeInstruction(value.userInstruction);
+            return { mode, resumeId: value.resumeId, ...(userInstruction ? { userInstruction } : {}) };
         }
         if (mode === 'batch') return { mode };
         if (!value || !['docId', 'claimantName', 'contractNumber'].every(key => typeof value[key] === 'string' && value[key].trim()) ||
@@ -84,7 +90,7 @@
             }
         };
     }
-    const api = { buildRequest, validateResult, createController };
+    const api = { buildRequest, validateResult, createController, resumeInstruction };
     if (typeof module !== 'undefined') module.exports = api;
     else root.SOSEvidenceReview = api;
 })(typeof window === 'undefined' ? globalThis : window);
