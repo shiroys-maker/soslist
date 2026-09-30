@@ -32,7 +32,7 @@ done
 
 BUILD_SHA="$(git -C "$REPO_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 
-if pgrep -x "$APP_NAME" >/dev/null 2>&1; then
+if { [ "$DO_INSTALL" -eq 1 ] || [ "$DO_RUN" -eq 1 ]; } && pgrep -x "$APP_NAME" >/dev/null 2>&1; then
   pkill -x "$APP_NAME" || true
   sleep 1
 fi

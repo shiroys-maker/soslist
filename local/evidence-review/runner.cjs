@@ -7,6 +7,7 @@ const { buildRequest } = require('../evidence-review.js');
 const { ReviewStore, atomic } = require('./store.cjs');
 const { AppServer, browserConfig } = require('./app-server.cjs');
 const { AppApprovals } = require('./app-approvals.cjs');
+const { resolveCodexPath } = require('./codex-path.cjs');
 
 function appApprovalRequest(p) {
     const apps = { 'com.apple.finder': 'Finder', 'com.apple.Preview': 'プレビュー',
@@ -45,12 +46,7 @@ const resultSchema = {
 };
 
 function resolveCodex() {
-    for (const candidate of [path.join(os.homedir(), '.local/bin/codex'), '/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex',
-        '/Applications/ChatGPT.app/Contents/Resources/codex', '/Applications/Codex.app/Contents/Resources/codex',
-        '/opt/homebrew/bin/codex', '/usr/local/bin/codex']) {
-        try { fs.accessSync(candidate, fs.constants.X_OK); return candidate; } catch (_) {}
-    }
-    throw Error('Codex CLIが見つかりません。Codexアプリをインストールしてください。');
+    return resolveCodexPath();
 }
 
 function acquireLock(lockFile) {

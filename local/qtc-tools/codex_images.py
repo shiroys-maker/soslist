@@ -8,11 +8,12 @@ from pathlib import Path
 import subprocess
 import tempfile
 import threading
+from codex_path import resolve_codex_path
 
 MAX_REQUEST_BYTES = 80 * 1024 * 1024
 MAX_IMAGE_COUNT = 12
 TIMEOUT_SECONDS = 240
-CODEX_BIN = next((str(p) for p in (Path.home() / '.local/bin/codex', Path('/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex'), Path('/Applications/ChatGPT.app/Contents/Resources/codex')) if os.access(p, os.X_OK)), '/Applications/ChatGPT.app/Contents/Resources/codex')
+CODEX_BIN = None  # Resolve on each request so app updates are noticed.
 REPORT_SLOTS = threading.BoundedSemaphore(2)
 IMAGE_SUFFIXES = {
     'image/png': '.png', 'image/jpeg': '.jpg', 'image/jpg': '.jpg',
@@ -53,8 +54,10 @@ def decode_images(payload, max_count=MAX_IMAGE_COUNT):
 
 
 def run_image_report(images, *, prompt, schema, model, executable=CODEX_BIN):
-    if not os.path.isfile(executable) or not os.access(executable, os.X_OK):
-        raise ReportError(503, 'Codex CLIが見つかりません。ChatGPTアプリを確認してください。')
+    try:
+        executable = resolve_codex_path(executable)
+    except ValueError as error:
+        raise ReportError(503, str(error)) from None
     if not REPORT_SLOTS.acquire(blocking=False):
         raise ReportError(429, '別の画像を処理中です。少し待ってから再試行してください。')
     try:

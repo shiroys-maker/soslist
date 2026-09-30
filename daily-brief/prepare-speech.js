@@ -5,6 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
 const { spawn } = require('node:child_process');
+const { resolveCodexPath } = require('./codex-path.cjs');
 
 const VERSION = 1;
 const PROMPT = `日本語の音声合成用に、台本の語句の「読み」だけを整えてください。
@@ -80,13 +81,7 @@ async function runCodexConversion(dialogue, { model, log, timeoutMs }) {
     const schemaFile = path.join(workdir, 'schema.json');
     const outputFile = path.join(workdir, 'readings.json');
     fs.writeFileSync(schemaFile, JSON.stringify(SCHEMA));
-    const executable = process.env.PODCAST_SPEECH_CODEX_BIN || [
-      path.join(os.homedir(), '.local/bin/codex'),
-      '/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex',
-      '/Applications/ChatGPT.app/Contents/Resources/codex', '/Applications/Codex.app/Contents/Resources/codex',
-      '/opt/homebrew/bin/codex', '/usr/local/bin/codex',
-    ].find(candidate => { try { fs.accessSync(candidate, fs.constants.X_OK); return true; } catch (_) { return false; } });
-    if (!executable) throw new Error('読み変換用のCodex CLIが見つかりません。');
+    const executable = resolveCodexPath(process.env.PODCAST_SPEECH_CODEX_BIN);
     const argv = ['exec', '--ephemeral', '--ignore-user-config', '--sandbox', 'read-only',
       '--skip-git-repo-check', '--cd', workdir,
       '-c', 'approval_policy="never"', '-c', 'forced_login_method="chatgpt"',

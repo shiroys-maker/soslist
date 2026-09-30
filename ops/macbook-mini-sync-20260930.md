@@ -21,9 +21,10 @@ AppSyncのsender/receiver設定は変更しない。
 
 ## 端末固有の反映
 
-MacBookのChatGPT同梱CLIは
-`/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex`。
-旧配置とMac miniの `~/.local/bin/codex` の両方を検出候補に含める。
+両端末ともChatGPT同梱CLIのラッパー
+`/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex` を優先する。
+取得・Summary・読み変換・PDF取り込み・画像読影・氏名変換で共通の検出規則を使い、
+実行可能な明示overrideは保持する。既定の旧配置が消えた場合は現配置へ再検出する。
 認証情報・患者ファイル・Evidence Review復旧状態は同期しない。
 QTC HTMLはMac miniから丸ごとコピーせず、既存のMacBookファイルに管理済みinstallerを適用する。
 
@@ -32,3 +33,7 @@ QTC実配置の直前コピーはMacBook内の `/private/tmp/soslist-macbook-bef
 これは一時的なローカル補助コピーであり、恒久バックアップとして扱わない。
 
 検証は合成データを用いる。実患者のEvidence Review・Summary生成を実行して確認したという意味ではない。
+
+## Mac miniの更新
+
+利用者の指示により、Mac miniの未コミット変更はAppSyncのmanual-backupsへGit bundleとstashで退避してから、SOSList関連4リポジトリをMacBookの管理済みコミットへ揃える。他のアプリの未コミット変更には適用しない。以後は通常の一方向同期を継続する。

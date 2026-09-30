@@ -115,7 +115,7 @@ def main():
         backup = target.with_name(target.name + '.before-audiogram-codex')
         if not backup.exists():
             shutil.copy2(target, backup)
-    for filename in ('codex_images.py', 'xray_codex.py', 'audiogram_codex.py', 'name_kana_codex.py'):
+    for filename in ('codex_path.py', 'codex_images.py', 'xray_codex.py', 'audiogram_codex.py', 'name_kana_codex.py'):
         shutil.copy2(SOURCE / filename, BIN / filename)
     shutil.copy2(SOURCE / 'xray-upload.js', QTC / 'xray-upload.js')
     server.write_text(server_text, encoding='utf-8')

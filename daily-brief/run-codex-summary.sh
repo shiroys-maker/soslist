@@ -2,12 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="/Users/shungohiroyasu/Documents/GitHub/soslist"
-CODEX_BIN="${SOSLIST_CODEX_BIN:-}"
-if [[ -z "$CODEX_BIN" ]]; then
-  for candidate in "$HOME/.local/bin/codex" "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex" "/Applications/ChatGPT.app/Contents/Resources/codex" "/Applications/Codex.app/Contents/Resources/codex" /opt/homebrew/bin/codex /usr/local/bin/codex; do
-    if [[ -x "$candidate" ]]; then CODEX_BIN="$candidate"; break; fi
-  done
-fi
+CODEX_BIN="" # Resolved below without running Codex.
 NODE_BIN="/Users/shungohiroyasu/.nvm/versions/node/v22.14.0/bin/node"
 DAILY_BRIEF_DIR="$ROOT_DIR/daily-brief"
 RUNTIME_DIR="$DAILY_BRIEF_DIR/.runtime"
@@ -41,10 +36,12 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if [[ ! -x "$NODE_BIN" || ! -x "$CODEX_BIN" ]]; then
+if [[ ! -x "$NODE_BIN" ]]; then
   print -u2 "Node または Codex CLI が見つかりません。"
   exit 1
 fi
+
+CODEX_BIN=$("$NODE_BIN" "$DAILY_BRIEF_DIR/codex-path.cjs" "${SOSLIST_CODEX_BIN:-}") || exit 1
 
 if [[ "$MODE" == "scheduled" ]]; then
   context_json=$(cd "$DAILY_BRIEF_DIR" && source .env && "$NODE_BIN" generate-brief.js --scheduled-context)

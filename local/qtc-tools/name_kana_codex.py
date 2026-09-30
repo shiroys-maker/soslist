@@ -9,6 +9,7 @@ import subprocess
 import tempfile
 import threading
 import time
+from codex_path import resolve_codex_path
 
 MODEL = 'gpt-6-luna'
 TIMEOUT_SECONDS = 25
@@ -28,14 +29,10 @@ class KanaError(Exception):
 
 
 def resolve_codex():
-    override = os.environ.get('NAME_KANA_CODEX_BIN')
-    candidates = [override] if override else [str(Path.home() / '.local/bin/codex'),
-        '/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex',
-        '/Applications/ChatGPT.app/Contents/Resources/codex', '/opt/homebrew/bin/codex']
-    for candidate in candidates:
-        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
-            return candidate
-    raise KanaError(503, '氏名変換用のCodex CLIが見つかりません。手入力してください。')
+    try:
+        return resolve_codex_path(os.environ.get('NAME_KANA_CODEX_BIN'))
+    except ValueError as error:
+        raise KanaError(503, str(error)) from None
 
 
 def convert_name(name):
