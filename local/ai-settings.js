@@ -5,8 +5,8 @@
  const dialog=document.createElement('dialog');dialog.style.cssText='width:min(780px,90vw);max-height:85vh;overflow:auto;border:0;border-radius:12px;padding:24px';
  dialog.innerHTML='<h2>AIタスク設定</h2><p>次回開始に使う設定です。実行中の処理は開始時の設定を保持します。</p><div id="ai-task-rows"></div><p id="ai-settings-status"></p><button id="ai-model-refresh">モデル一覧を更新</button> <button id="ai-settings-save">保存</button> <button id="ai-settings-close">閉じる</button>';
  document.body.append(dialog);const el=id=>dialog.querySelector('#'+id);
- function render(){el('ai-task-rows').replaceChildren();for(const [id,t]of Object.entries(tasks)){
- const box=document.createElement('fieldset');box.style.marginBottom='12px';const title=document.createElement('legend');title.textContent=t.label;box.append(title);
+ function render(){el('ai-task-rows').replaceChildren();for(const id of ['bill','evidence','xray','audiogram','kana','summary','speech','tts']){const t=tasks[id];
+ const box=document.createElement('fieldset');box.dataset.task=id;box.style.marginBottom='12px';const title=document.createElement('legend');title.textContent=t.label;box.append(title);
  const scope=document.createElement('p');scope.textContent=t.scope;
  if(t.execution){const used=document.createElement('p');used.textContent=(t.execution.state==='running'?'実行中: ':t.execution.state==='interrupted'?'前回中断: ':'前回実行: ')+t.execution.model+' / '+(t.execution.effort||'非対応');box.append(used);}box.append(scope);
  const service=document.createElement('select');service.append(new Option(t.service==='gemini'?'Gemini TTS':'OpenAI / Codex',t.service));box.append(service);
