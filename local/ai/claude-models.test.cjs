@@ -14,7 +14,7 @@ test('Claude rejects empty catalogs and mismatched or failed initialization resp
  assert.throws(()=>api.parseModels([]));assert.throws(()=>api.parseModels([{value:'\ninvalid'}]));
 });
 test('subscription catalog with 1M Opus identifies the resolved version clearly',()=>{
- const models=api.parseModels([{value:'default',resolvedModel:'claude-opus-5-5[1m]',displayName:'Default (recommended)',description:'Use the default model (currently Opus 5.5 (1M context))',supportedEffortLevels:['medium','high']},{value:'opus[1m]',resolvedModel:'claude-opus-5-5[1m]',displayName:'Opus (1M context)',description:'Opus 5.5 · Best for everyday'}]);
+ const models=api.parseModels([{value:'default',resolvedModel:'claude-opus-5-5[1m]',displayName:'Default (recommended)',description:'Use the default model (currently Opus 5.5 (1M context)) · Best for everyday',supportedEffortLevels:['medium','high']},{value:'opus[1m]',resolvedModel:'claude-opus-5-5[1m]',displayName:'Opus (1M context)',description:'Opus 5.5 · Best for everyday'}]);
  assert.equal(models.find(m=>m.id==='claude-opus-5-5[1m]').name,'Opus 5.5 (1M context)');
  assert.equal(models.filter(m=>m.id==='claude-opus-5-5[1m]').length,1);
 });
