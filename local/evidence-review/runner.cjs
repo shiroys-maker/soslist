@@ -24,8 +24,18 @@ function appApprovalRequest(p) {
 }
 function intakeConsentRequest(sosPdfDir, appointments) {
     const scope = appointments.length ? `前回のキューを起点に、今回のData Entry検索で本人・日時・検査を照合した予約（前回 ${appointments.length}件）` : '今回のData Entry全件検索で本人・日時・検査を照合した予約';
-    return { title: '201 Billの保存・取り込みを許可しますか？', message:
-        `対象：${scope}\n\nQTC Provider Portalの対象201 Bill（氏名・生年月日・契約番号・予約日時・検査内容などの医療情報を含むPDF）を、次のDropbox同期フォルダへ保存します。既存の同一PDFは再保存しません。\n${sosPdfDir}\n\n既存の取り込み処理で対象PDFの内容をChatGPT認証のCodex（OpenAI）へ送って解析し、既存SOSListのFirebase Firestore／Cloud Storageへ予約情報とPDFを登録します。その後、対象の証拠資料をCodex（OpenAI）で確認し、SOSListのメモ・Claim詳細へ保存します。\n\nこの開始／再開の対象に限る許可です。QTCの署名・送信や、医療記録PDFの追加書き出しは含みません。` };
+    return { title: '資料取得・保存とSHA入力を許可しますか？', message:
+        `対象：${scope}\n\nQTC Provider Portalの対象201 Bill（氏名・生年月日・契約番号・予約日時・検査内容などの医療情報を含むPDF）を、次のDropbox同期フォルダへ保存します。既存の同一PDFは再保存しません。\n${sosPdfDir}\n\n既存の取り込み処理で対象PDFの内容をChatGPT認証のCodex（OpenAI）へ送って解析し、既存SOSListのFirebase Firestore／Cloud Storageへ予約情報とPDFを登録します。その後、対象の証拠資料をCodex（OpenAI）で確認し、SOSListのメモ・Claim詳細へ保存します。\n\n${shaConsent}\n\n${referralConsent}\n\nこの開始／再開の対象に限る許可です。QTCの署名・送信や、医療記録PDFの追加書き出しは含みません。` };
+}
+const shaConsent = '対象にSHAがある場合は、本人・予約日時・全契約番号・検査・編集権限を照合して、MEPの「Yes, Edit Exam」で編集を開始します。これに伴う通常の状態変更（Data Entry → Provider In Progress）と、SHA Section III（Part Aの申告転記）、VI（画像・重要な検査結果）、IV（スクリーニング回答・画面の規則による採点・Summary）の入力・保存を許可します。対象の原資料と既存回答を確認し、保存後に同じ予約を開き直して照合します。他のDBQ、別途の状態変更、所有権の引き継ぎ、ロック解除、完了・送信済み検査の再開は含みません。';
+const referralConsent = '対象に紹介状の作成先が指定されている場合は、確認済み資料から紹介状を作成し、既存の指定先へ保存・再読込確認します。紹介状の送信は含みません。';
+function reviewConsentRequest(request, sosPdfDir, appointments) {
+    if (request.mode === 'batch') return intakeConsentRequest(sosPdfDir, appointments);
+    if (request.mode !== 'single') throw Error('取得対象の元のモードを確認できません。');
+    const a = request.appointment;
+    const date = new Date(a.appointmentDateTimeMs).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', hour12: false });
+    return { title: '選択した予約の資料確認・保存を許可しますか？', message:
+        `対象：${a.claimantName}\n${a.contractNumber}\n${date}（Asia/Tokyo）\n${a.services.join(' / ')}\n\n認証済みMicrosoft EdgeのQTC資料をChatGPT認証のCodex（OpenAI）で確認し、既存SOSListのメモ・Claim詳細へ保存して再読込確認します。既存の内容を確認・保持します。\n\n${shaConsent}\n\n${referralConsent}\n\nこの開始／再開の選択予約に限る許可です。PDFの保存・取り込み、対象外の予約、QTCの署名・送信は含みません。` };
 }
 
 const resultSchema = {
@@ -317,16 +327,16 @@ async function runJob(input, options = {}) {
             emit('recovering', '保存確認済みです。復旧履歴の後処理だけを再開します。');
             return await finalizeResult(store.data.result);
         }
-        if (store.data.request.mode === 'batch') {
-            const consent = intakeConsentRequest(sosPdfDir, store.data.appointments);
-            emit('starting', '201 Billの保存・取り込みの許可を確認しています。');
+        {
+            const consent = reviewConsentRequest(store.data.request, sosPdfDir, store.data.appointments);
+            emit('starting', '資料確認・保存と対象SHA入力の許可を確認しています。');
             let timeout, action;
             try {
                 action = await Promise.race([options.requestIntakeConsent?.(consent), completion.catch(() => 'decline'),
                     new Promise(resolve => { timeout = setTimeout(() => resolve('decline'), duration('approval', 120000)); })]);
             } finally { clearTimeout(timeout); }
-            if (stopping || action !== 'accept') throw Error('201 Billの保存・取り込みの許可を確認できません。「再開」で確認画面の内容を承認してください。');
-            intakeAuthorization = `CURRENT EXPLICIT INTAKE AUTHORIZATION: the human user clicked 「許可して続ける」 in the native SOSList confirmation for this invocation. The exact scope, sensitive data and destinations shown and accepted were:\n${consent.message}\nThis is the user's current authorization for the bounded 201 Bill export and subsequent import described above. It is not a blanket approval for other exports, destinations, patients, signature/submission, or bypassing an approval rejection. Recheck the appointment identity and existing files before saving.`;
+            if (stopping || action !== 'accept') throw Error('資料確認・保存の許可を確認できません。「再開」で確認画面の内容を承認してください。');
+            intakeAuthorization = `CURRENT EXPLICIT EVIDENCE REVIEW AUTHORIZATION${store.data.request.mode === 'batch' ? ' / CURRENT EXPLICIT INTAKE AUTHORIZATION' : ''}: the human user clicked 「許可して続ける」 in the native SOSList confirmation for this invocation. The exact scope, sensitive data, destinations and SHA edit/save actions shown and accepted were:\n${consent.message}\nThis is the user's current authorization for the bounded actions shown above, including MEP Yes, Edit Exam and SHA Sections III, VI and IV only for an identity-verified SHA appointment in this scope. It is not a blanket approval for other exports, destinations, patients, signature/submission, or bypassing an approval rejection. Do not ask for the same authorized routine step again unless scope/access has changed or approval review requires it. Earlier denials still require evaluation of this fresh consent by the reviewer; never assume they are overridden. Recheck identity, access and existing answers before any edit and verify every save.`;
             activity();
         }
         if (store.data.owner) {
@@ -411,4 +421,4 @@ if (require.main === module) {
         runJob(request, { onEvent: emit, requestAppApproval: request => approvals.ask(request), requestIntakeConsent: request => approvals.ask(request, 'intakeApproval') }).catch(error => { if (!reported) emit({ state: 'error', message: error.message, ...(/^[a-f0-9]{64}$/.test(request.resumeId || '') ? { resumeId: request.resumeId } : {}) }); process.exitCode = 1; }).finally(() => approvals.close());
     } catch (error) { approvals.close(); emit({ state: 'error', message: error.message }); process.exitCode = 1; }
 }
-module.exports = { runJob, dynamicTools, scopeInstructions, appApprovalRequest, intakeConsentRequest };
+module.exports = { runJob, dynamicTools, scopeInstructions, appApprovalRequest, intakeConsentRequest, reviewConsentRequest };
