@@ -10,14 +10,18 @@
  const scope=document.createElement('p');scope.textContent=t.scope;
  if(t.execution){const used=document.createElement('p');used.textContent=(t.execution.state==='running'?'実行中: ':t.execution.state==='interrupted'?'前回中断: ':'前回実行: ')+t.execution.model+' / '+(t.execution.effort||'非対応');box.append(used);}box.append(scope);
  const service=document.createElement('select');service.append(new Option(t.service==='gemini'?'Gemini TTS':'OpenAI / Codex',t.service));box.append(service);
- const input=document.createElement('input');input.value=t.model;input.placeholder='次回のモデルID（直接指定可能）';input.style.width='270px';input.setAttribute('list','ai-model-'+id);box.append(input);
- const list=document.createElement('datalist');list.id='ai-model-'+id;for(const m of catalog.filter(m=>(m.service||'openai')===t.service)){list.append(new Option(m.name,m.id));}box.append(list);
+ const input=document.createElement('select');input.className='ai-model-select';input.setAttribute('aria-label',t.label+'のモデル');input.style.cssText='width:270px;max-width:100%';
+ const candidates=catalog.filter(m=>(m.service||'openai')===t.service);
+ if(!candidates.some(m=>m.id===t.model))input.append(new Option(t.model,t.model));
+ for(const m of candidates)input.append(new Option(m.name||m.id,m.id));
+ input.value=t.model;box.append(input);
  const effort=document.createElement('select');
  function efforts(){const known=catalog.find(m=>m.id===input.value),choices=t.service==='gemini'?['']:(known?.efforts?.length?[...known.efforts]:['none','minimal','low','medium','high','xhigh','max','ultra']);if(!choices.includes(t.effort))choices.push(t.effort);effort.replaceChildren(...choices.map(v=>new Option(v||'effort非対応',v)));effort.value=t.effort;}
- efforts();box.append(effort);input.oninput=()=>{t.model=input.value;efforts();};effort.onchange=()=>t.effort=effort.value;el('ai-task-rows').append(box);
+ efforts();box.append(effort);input.onchange=()=>{t.model=input.value;efforts();};effort.onchange=()=>t.effort=effort.value;el('ai-task-rows').append(box);
  }}
- document.getElementById('ai-settings-open').onclick=async()=>{try{tasks=await call('get');render();el('ai-settings-status').textContent='保存済みの設定を読み込みました。';dialog.showModal();}catch(e){alert(e.message);}};
+ document.getElementById('ai-settings-open').onclick=async()=>{try{tasks=await call('get');render();el('ai-settings-status').textContent='保存済みの設定を読み込みました。';dialog.showModal();await refreshModels();}catch(e){alert(e.message);}};
  el('ai-settings-close').onclick=()=>dialog.close();
- el('ai-model-refresh').onclick=async()=>{el('ai-settings-status').textContent='モデル一覧を取得中…';try{const result=await call('models');catalog=result.models;render();el('ai-settings-status').textContent=(result.cached?result.warning:catalog.length+'件。')+' モデルIDの直接指定も可能です。';}catch(e){el('ai-settings-status').textContent=e.message;}};
+ async function refreshModels(){el('ai-model-refresh').disabled=true;el('ai-settings-status').textContent='モデル一覧を取得中…';try{const result=await call('models');catalog=result.models;render();el('ai-settings-status').textContent=(result.cached?result.warning:catalog.length+'件。')+' モデルを一覧から選択できます。';}catch(e){el('ai-settings-status').textContent=e.message;}finally{el('ai-model-refresh').disabled=false;}}
+ el('ai-model-refresh').onclick=refreshModels;
  el('ai-settings-save').onclick=async()=>{try{tasks=await call('save',{tasks});render();el('ai-settings-status').textContent='保存しました。次回開始から反映します。';}catch(e){el('ai-settings-status').textContent=e.message;}};
 })();
