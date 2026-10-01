@@ -9,7 +9,7 @@ function parseModels(items){
   const efforts=(m.supportedEffortLevels||[]).filter(x=>levels.includes(x));
   const name=m.displayName||m.value;
   models.set(m.value,{service:'claude',id:m.value,name:name+(m.value==='opus'?'（最新）':''),efforts});
-  if(valid(m.resolvedModel)&&m.resolvedModel!==m.value&&!models.has(m.resolvedModel))models.set(m.resolvedModel,{service:'claude',id:m.resolvedModel,name:(m.description||'').replace(/^Use the default model \(currently (.*)\)$/,'$1').split(' · ')[0]||m.resolvedModel,efforts});
+  if(valid(m.resolvedModel)&&m.resolvedModel!==m.value&&!models.has(m.resolvedModel))models.set(m.resolvedModel,{service:'claude',id:m.resolvedModel,name:(m.description||'').split(' · ')[0].replace(/^Use the default model \(currently (.*)\)$/,'$1').trim()||m.resolvedModel,efforts});
  }
  if(!models.size)throw Error('Claude Codeのモデル一覧が空です。');
  return [...models.values()];
