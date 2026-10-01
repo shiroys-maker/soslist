@@ -336,11 +336,15 @@ async function runJob(input, options = {}) {
         if (message.method === 'item/completed' && p.item?.type === 'mcpToolCall') {
             clearTimeout(toolTimers.get(p.item.id)); toolTimers.delete(p.item.id); activity();
             const detail = JSON.stringify(p.item.error || p.item.result || {});
-            if (/already belongs to another|already part of browser session|ownership conflict|owned by another|existing session.*in use/i.test(detail)) { fail(Error('別セッションがEdgeを使用中です。所有権を変更せず停止しました。')); return; }
-            if (/noWindowsAvailable|cgWindowNotFound|window.*(not found|unavailable|closed)|target.*closed/i.test(detail)) {
+            // Successful responses include API documentation and page text. Error
+            // phrases in that content are not evidence of a failed operation.
+            const failed = !!p.item.error || p.item.status === 'failed' || /"isError"\s*:\s*true/.test(detail);
+            if (failed && /already belongs to another|already part of browser session|ownership conflict|owned by another|existing session.*in use/i.test(detail)) { fail(Error('別セッションがEdgeを使用中です。所有権を変更せず停止しました。')); return; }
+            if (failed && /noWindowsAvailable|cgWindowNotFound|window.*(not found|unavailable|closed)|target.*closed/i.test(detail)) {
                 if (++windowFailures > 2) fail(Error('画面の復旧を2回試みても操作できないため停止しました。'));
                 else emit('recovering', `画面への接続を取り直しています（${windowFailures}/2）。`);
-            } else if (!p.item.error && p.item.status !== 'failed' && !/"isError"\s*:\s*true/.test(detail)) {
+            } else if (!failed) {
+                windowFailures = 0;
                 cuaReads++;
                 if (p.item.result?._meta?.['codex/toolSurface']?.kind === 'browserUse') {
                     const next = structuredClone(store.data); next.browserRecoveryRequired = false; store.save(next);
