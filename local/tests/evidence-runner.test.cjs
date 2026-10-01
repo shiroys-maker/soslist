@@ -22,6 +22,18 @@ function fixture(t, scenario='normal') {
   else if(['hang','no-ended'].includes(scenario))return;
   else if(scenario==='window'){for(let i=0;i<3;i++)wire({method:'item/completed',params:{threadId:'thread',turnId:'turn',item:{id:'w'+i,type:'mcpToolCall',error:{message:'cgWindowNotFound'}}}});}
   else if(scenario==='ownership'){wire({method:'item/completed',params:{threadId:'thread',turnId:'turn',item:{id:'w',type:'mcpToolCall',error:{message:'Tab 123 is already part of browser session other-session'}}}});req('sos_ready',{edge:true,soslist:true});}
+  else if(['successful-docs','successful-ownership-docs'].includes(scenario)){
+   const text=scenario==='successful-docs'?'Windows. setValue is unavailable.':'On ownership conflict: already belongs to another browser session.';
+   for(let i=0;i<3;i++)wire({method:'item/completed',params:{threadId:'thread',turnId:'turn',item:{id:'docs'+i,type:'mcpToolCall',status:'completed',result:{content:[{type:'text',text}],isError:false}}}});
+   complete();
+  }
+  else if(scenario==='recovered-windows'){
+   for(let i=0;i<3;i++){
+    wire({method:'item/completed',params:{threadId:'thread',turnId:'turn',item:{id:'lost'+i,type:'mcpToolCall',status:'completed',result:{content:[{type:'text',text:'cgWindowNotFound'}],isError:true}}}});
+    wire({method:'item/completed',params:{threadId:'thread',turnId:'turn',item:{id:'recovered'+i,type:'mcpToolCall',status:'completed',result:{isError:false}}}});
+   }
+   complete();
+  }
   else complete();
  }return;}
  let r={};
@@ -64,6 +76,24 @@ test('premature final, ownership conflicts, repeated window loss and stalls reta
   assert.equal(events.at(-1).state,'paused');assert.match(events.at(-1).resumeId,/^[a-f0-9]{64}$/);assert.equal(checkpoints(f).length,1);
   assert.ok(readWire(f).some(m=>m.method==='mcpServer/tool/call'));assert.ok(!events.some(e=>e.state==='completed'));assert.ok(!JSON.stringify(events).includes('SECRET_CLINICAL'));if(scenario==='ownership')assert.equal(readWire(f).find(m=>m.id==='s3')?.error?.code,-32000);
  }
+});
+
+test('successful Computer Use documentation cannot trigger window or ownership failures',async t=>{
+ for(const scenario of ['successful-docs','successful-ownership-docs']){
+  const f=fixture(t,scenario),events=[];
+  const result=await runJob({mode:'batch'},{...f,onEvent:e=>events.push(e)});
+  assert.equal(result.outcome,'no_records');
+  assert.equal(events.some(e=>e.state==='recovering'),false);
+  assert.deepEqual(checkpoints(f),[]);
+ }
+});
+
+test('a successful screen reacquisition resets the consecutive window recovery limit',async t=>{
+ const f=fixture(t,'recovered-windows'),events=[];
+ const result=await runJob({mode:'batch'},{...f,onEvent:e=>events.push(e)});
+ assert.equal(result.outcome,'no_records');
+ assert.equal(events.filter(e=>e.state==='recovering').length,3);
+ assert.deepEqual(checkpoints(f),[]);
 });
 
 test('failed cleanup and process crash keep exact owner; next run resumes the same session',async t=>{
