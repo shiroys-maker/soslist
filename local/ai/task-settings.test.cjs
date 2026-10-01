@@ -32,3 +32,17 @@ test('Summary saves Claude Opus and keeps separate Codex and Claude selections a
   assert.throws(()=>api.save({...tasks,evidence:{...tasks.evidence,service:'claude',model:'opus'}}));
  }finally{previous===undefined?delete process.env.SOSLIST_AI_SETTINGS_FILE:process.env.SOSLIST_AI_SETTINGS_FILE=previous;fs.rmSync(dir,{recursive:true,force:true});}
 });
+
+test('model refresh replaces each successful provider and preserves only failed providers from cache',async()=>{
+ const api=require('./task-settings.cjs'),dir=fs.mkdtempSync(path.join(os.tmpdir(),'sos-catalog-test-')),cacheFile=path.join(dir,'models.json');
+ try{
+  fs.writeFileSync(cacheFile,JSON.stringify([{service:'openai',id:'old-codex'},{service:'claude',id:'old-claude'}]));
+  const result=await api.models({cacheFile,providers:{openai:async()=>{throw Error('offline');},claude:async()=>[{service:'claude',id:'claude-opus-5-5',name:'Opus 5.5',efforts:['high']}]}});
+  assert.equal(result.cached,true);assert.match(result.warning,/Codex/);assert.ok(!result.warning.includes('Claude Code'));
+  assert.deepEqual(result.models.map(m=>m.id),['old-codex','claude-opus-5-5']);
+  const next=await api.models({cacheFile,providers:{openai:async()=>[{service:'openai',id:'new-codex'}],claude:async()=>{throw Error('offline');}}});
+  assert.deepEqual(next.models.map(m=>m.id),['new-codex','claude-opus-5-5']);assert.match(next.warning,/Claude Code/);
+  assert.deepEqual(JSON.parse(fs.readFileSync(cacheFile)),next.models);
+  const refreshed=await api.models({cacheFile,providers:{claude:async()=>[{service:'claude',id:'new-opus'}]}});assert.equal(refreshed.cached,false);
+ }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});

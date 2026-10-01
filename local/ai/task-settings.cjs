@@ -34,12 +34,32 @@ function save(input){const previous=read(),next={...previous};for(const [id,d]of
  }
 }
  fs.mkdirSync(path.dirname(file()),{recursive:true,mode:0o700});const temp=file()+'.'+process.pid+'.tmp';fs.writeFileSync(temp,JSON.stringify(next,null,2),{mode:0o600});fs.renameSync(temp,file());return all();}
-async function models(){
- const {AppServer}=require('../evidence-review/app-server.cjs');const {resolveCodexPath}=require('../evidence-review/codex-path.cjs');
+async function codexModels(){
+ const {AppServer}=require('../evidence-review/app-server.cjs'),{resolveCodexPath}=require('../evidence-review/codex-path.cjs');
  const cwd=path.dirname(file());fs.mkdirSync(cwd,{recursive:true,mode:0o700});
  const server=new AppServer({codex:resolveCodexPath(),cwd,cua:null,onEvent:()=>{},onFailure:()=>{},timeoutMs:20000});
- try{await server.rpc('initialize',{clientInfo:{name:'soslist-settings',version:'1.1.0'},capabilities:{experimentalApi:true}});server.write({method:'initialized'});let cursor,data=[];do{const r=await server.rpc('model/list',{limit:100,...(cursor?{cursor}:{} )});data.push(...r.data);cursor=r.nextCursor;}while(cursor);const result=[...claudeModels,...data.filter(x=>!x.hidden).map(x=>({service:'openai',id:x.model||x.id,name:x.displayName||x.model,efforts:(x.supportedReasoningEfforts||[]).map(e=>e.reasoningEffort)}))];const key=process.env.GEMINI_API_KEY||process.env.GOOGLE_API_KEY;if(key){try{const response=await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000',{headers:{'x-goog-api-key':key},signal:AbortSignal.timeout(10000)});if(response.ok){const body=await response.json();for(const m of body.models||[])if(/tts/i.test(m.name))result.push({service:'gemini',id:m.name.replace(/^models\//,''),name:m.displayName,efforts:[]});}}catch(_){} }fs.writeFileSync(path.join(cwd,'ai-models.json'),JSON.stringify(result),{mode:0o600});return result;}
+ try{await server.rpc('initialize',{clientInfo:{name:'soslist-settings',version:'1.1.0'},capabilities:{experimentalApi:true}});server.write({method:'initialized'});let cursor,data=[];do{const r=await server.rpc('model/list',{limit:100,...(cursor?{cursor}:{} )});data.push(...r.data);cursor=r.nextCursor;}while(cursor);return data.filter(x=>!x.hidden).map(x=>({service:'openai',id:x.model||x.id,name:x.displayName||x.model,efforts:(x.supportedReasoningEfforts||[]).map(e=>e.reasoningEffort)}));}
  finally{await server.close();}
 }
+async function geminiModels(){
+ const key=process.env.GEMINI_API_KEY||process.env.GOOGLE_API_KEY;if(!key)throw Error('Gemini API key unavailable');
+ const response=await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000',{headers:{'x-goog-api-key':key},signal:AbortSignal.timeout(10000)});if(!response.ok)throw Error('Gemini model list unavailable');
+ const body=await response.json();return (body.models||[]).filter(m=>/tts/i.test(m.name)).map(m=>({service:'gemini',id:m.name.replace(/^models\//,''),name:m.displayName,efforts:[]}));
+}
+async function models(options={}){
+ const target=options.cacheFile||path.join(path.dirname(file()),'ai-models.json');let cached=[];
+ try{cached=JSON.parse(fs.readFileSync(target,'utf8'));if(!Array.isArray(cached))cached=[];}catch(_){}
+ const providers=options.providers||{openai:codexModels,claude:require('./claude-models.cjs').claudeModels,gemini:geminiModels};
+ const entries=Object.entries(providers),responses=await Promise.allSettled(entries.map(([,fetchModels])=>Promise.resolve().then(fetchModels)));
+ const result=[],warnings=[];
+ for(let i=0;i<entries.length;i++){
+  const service=entries[i][0],response=responses[i];
+  if(response.status==='fulfilled'&&Array.isArray(response.value)&&response.value.length){result.push(...response.value);continue;}
+  const previous=cached.filter(m=>m.service===service);result.push(...(previous.length?previous:service==='claude'?claudeModels:[]));
+  if(service!=='gemini'||process.env.GEMINI_API_KEY||process.env.GOOGLE_API_KEY)warnings.push((service==='claude'?'Claude Code':service==='openai'?'Codex':'Gemini')+'の一覧を取得できませんでした。'+(previous.length?'前回の一覧を表示しています。':'現在の設定と既定の候補を表示しています。'));
+ }
+ fs.mkdirSync(path.dirname(target),{recursive:true,mode:0o700});const temp=target+'.'+process.pid+'.tmp';fs.writeFileSync(temp,JSON.stringify(result),{mode:0o600});fs.renameSync(temp,target);
+ return {models:result,cached:warnings.length>0,warning:warnings.join(' ')};
+}
 module.exports={choice,all,save,definitions,models,begin,end,record};
-if(require.main===module)(async()=>{const action=process.argv[2];if(action==='get')return all();if(action==='selected')return choice(process.argv[3]);if(action==='save')return save(JSON.parse(fs.readFileSync(0,'utf8')));if(action==='record'){const id=process.argv[3];record(id,process.argv[6]?{service:process.argv[8]||definitions[id].service,model:process.argv[6],effort:process.argv[7]||''}:choice(id),process.argv[4],Number(process.argv[5]||process.ppid));return {}; }if(action==='value')return choice(process.argv[3])[process.argv[4]];if(action==='models'){try{return {models:await models(),cached:false};}catch(e){try{return {models:[...claudeModels,...JSON.parse(fs.readFileSync(path.join(path.dirname(file()),'ai-models.json'),'utf8')).filter(m=>m.service!=='claude')],cached:true,warning:'一覧を取得できなかったため、保存済みの候補を表示しています。'};}catch(_){return {models:claudeModels,cached:true,warning:'Codexの一覧を取得できませんでした。Claude Codeの候補と現在の設定を表示しています。'};}}}throw Error('Unknown action');})().then(x=>process.stdout.write(typeof x==='string'?x:JSON.stringify(x))).catch(e=>{process.stderr.write(e.message);process.exitCode=1;});
+if(require.main===module)(async()=>{const action=process.argv[2];if(action==='get')return all();if(action==='selected')return choice(process.argv[3]);if(action==='save')return save(JSON.parse(fs.readFileSync(0,'utf8')));if(action==='record'){const id=process.argv[3];record(id,process.argv[6]?{service:process.argv[8]||definitions[id].service,model:process.argv[6],effort:process.argv[7]||''}:choice(id),process.argv[4],Number(process.argv[5]||process.ppid));return {}; }if(action==='value')return choice(process.argv[3])[process.argv[4]];if(action==='models')return models();throw Error('Unknown action');})().then(x=>process.stdout.write(typeof x==='string'?x:JSON.stringify(x))).catch(e=>{process.stderr.write(e.message);process.exitCode=1;});

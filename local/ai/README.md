@@ -16,3 +16,9 @@ SOSList Local 1.1.0 adds a native settings button. User settings are private JSO
 QTC Python helpers installed in `~/bin` need `ai_task_settings.py` alongside the managed runners. Updating these files requires restarting an idle resident QTC HTTP server to reload Python modules; subsequent settings changes need no restart. The external bill importer has its own self-contained reader and reads the same setting file.
 
 `AIExecutions/*.json` contains only execution service, model, effort, PID and state; no prompts or patient details. A dead PID is reported as interrupted. Settings tests use isolated temporary files. The app's `--ai-settings-smoke` mode refuses paths outside `/private/tmp/` and opens only a settings test page without Firebase or patient data.
+
+「モデル一覧を更新」はCodexのmodel/listとClaude Codeの初期化応答を取得します。
+Claudeはログイン済みサブスクリプションのCLIを使い、モデル生成のプロンプトは送信しません。
+Claudeの別名（例: Opus）に対応するresolvedModelも版指定の候補（例: Opus 5.5）として表示します。
+サービスごとに更新し、取得失敗時はそのサービスの前回の一覧を残して画面に知らせます。
+更新中も未保存のサービス・モデル・effort選択を保持します。
