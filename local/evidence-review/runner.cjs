@@ -55,6 +55,47 @@ const resultSchema = {
     }
 };
 
+function cleanupConsent(consent, count) {
+    return { ...consent, title: '前回のクリーンアップと新規取得を許可しますか？', message:
+        `新規取得の前に、前回の復旧記録（${count}件）をクリーンアップします。旧会話をアーカイブし、復旧データをこの端末のEvidenceReview/archivedへ退避します。前回の対象一覧・追加指示・ドラフトは引き継ぎません。保存済みPDF・メモ・Claim詳細・SHA入力・端末固有設定は保持します。実行中または操作所有権が未解放の場合は新規開始できません。\n\n${consent.message}` };
+}
+function assertCleanupAllowed(stores) {
+    for (const old of stores) {
+        if (old.data.owner || old.data.browserRecoveryRequired) throw Error('前回の操作所有権が未解放です。「再開」で操作終了を確認するまで新規開始できません。');
+        if (old.data.serverPid !== undefined) {
+            if (!Number.isSafeInteger(old.data.serverPid) || old.data.serverPid <= 0) throw Error('前回の操作プロセスを確認できません。');
+            try { process.kill(-old.data.serverPid, 0); }
+            catch (error) { if (error.code === 'ESRCH') continue; }
+            throw Error('前回の操作プロセスが実行中です。新規開始できません。');
+        }
+    }
+}
+async function archivePrevious(runRoot, stores, server, stopping) {
+    assertCleanupAllowed(stores);
+    for (const old of stores) {
+        if (stopping()) throw Error('停止しました。前回の復旧記録を保持しています。');
+        if (old.data.session && !old.data.sessionArchived && !old.data.sessionDeleted) {
+            await server.rpc('thread/archive', { threadId: old.data.session.threadId });
+            const next = structuredClone(old.data); next.sessionArchived = true; old.save(next);
+        }
+    }
+    if (stopping()) throw Error('停止しました。前回の復旧記録を保持しています。');
+    // Move only private recovery files. last-result, PDFs and host configuration stay in place.
+    const archive = path.join(runRoot, 'archived', `new-start-${Date.now()}-${require('node:crypto').randomUUID()}`);
+    fs.mkdirSync(archive, { recursive: true, mode: 0o700 });
+    const files = ['checkpoints', 'last-status.json', 'events.jsonl', 'events.jsonl.previous'];
+    const moved = [];
+    try {
+        for (const name of files) if (fs.existsSync(path.join(runRoot, name))) {
+            fs.renameSync(path.join(runRoot, name), path.join(archive, name)); moved.push(name);
+        }
+        atomic(path.join(archive, 'manifest.json'), { reason: 'approved-new-start', checkpointIds: stores.map(s => s.id), archivedAt: new Date().toISOString() });
+    } catch (error) {
+        for (const name of moved.reverse()) fs.renameSync(path.join(archive, name), path.join(runRoot, name));
+        throw error;
+    }
+}
+
 function resolveCodex() {
     return resolveCodexPath();
 }
@@ -114,6 +155,7 @@ async function runJob(input, options = {}) {
     const instructions = skillBody(skillPath);
     fs.mkdirSync(runRoot, { recursive: true, mode: 0o700 }); fs.chmodSync(runRoot, 0o700);
     const lockFile = path.join(runRoot, 'active.lock'); acquireLock(lockFile);
+    let previous = [], cleanupPending = false;
     let store, server, thread, session, turn, starting, importChild, finalText = '', intakeAuthorization = '', done = false, stopping = false;
     let terminal, watch, heartbeat, parentWatch, mayRelease = false, accepting = true, lastActivity = Date.now(), phase = 'preflight', preflight = false, cuaReads = 0, windowFailures = 0;
     const toolTimers = new Map(), finished = new Set(), seenCalls = new Set();
@@ -125,7 +167,8 @@ async function runJob(input, options = {}) {
     const duration = (name, fallback) => options.timeouts?.[name] ?? fallback;
     const emit = (state, message, extra = {}) => {
         require('../ai/task-settings.cjs').record('evidence',ai,['starting','running','progress','recovering','cancelling'].includes(state)?'running':'finished');
-        const update = { state, message, model: ai.model, effort: ai.effort, ...(store ? { resumeId: store.id, resumeDocId: store.data.request.mode === 'single' ? store.data.request.appointment.docId : null } : {}), phase, lastProgressAt: new Date(lastActivity).toISOString(), ...extra };
+        const update = { state, message, model: ai.model, effort: ai.effort, ...((store || previous[0]) ? { resumeId: (store || previous[0]).id, resumeDocId: (store || previous[0]).data.request.mode === 'single' ? (store || previous[0]).data.request.appointment.docId : null } : {}), phase, lastProgressAt: new Date(lastActivity).toISOString(), ...extra };
+        if (cleanupPending) { options.onEvent?.(update); return; }
         const diagnostic = path.join(runRoot, 'events.jsonl');
         if (fs.existsSync(diagnostic) && fs.statSync(diagnostic).size > 256000) fs.renameSync(diagnostic, diagnostic + '.previous');
         fs.appendFileSync(diagnostic, JSON.stringify({ at: new Date().toISOString(), state, phase, lastProgressAt: update.lastProgressAt }) + '\n', { mode: 0o600 });
@@ -167,7 +210,7 @@ async function runJob(input, options = {}) {
         thread = r.thread?.id; session = r.thread?.sessionId;
         if (!thread || !session) throw Error('Codexのsession IDを確認できないため操作を開始できません。');
         if (previous && (thread !== previous.threadId || session !== previous.sessionId)) throw Error('復旧前後の操作セッションが一致しません。所有権を変更せず停止しました。');
-        const next = structuredClone(store.data); next.session = { threadId: thread, sessionId: session }; store.save(next);
+        const next = structuredClone(store.data); next.session = { threadId: thread, sessionId: session }; next.serverPid = server.child.pid; store.save(next);
         let cursor, browser = false, cleanup = false;
         do {
             const catalog = await server.rpc('mcpServerStatus/list', { threadId: thread, limit: 100, ...(cursor ? { cursor } : {}) });
@@ -312,25 +355,30 @@ async function runJob(input, options = {}) {
     if (require.main === module) parentWatch = setInterval(() => { if (process.ppid !== parentPid) stop(); }, 1000);
     try {
         const unfinished = fs.existsSync(path.join(runRoot, 'checkpoints')) ? fs.readdirSync(path.join(runRoot, 'checkpoints')).filter(n => /^[a-f0-9]{64}\.json$/.test(n)) : [];
-        if (initial.mode !== 'resume' && unfinished.length) {
+        if (initial.mode === 'batch' && unfinished.length) {
+            cleanupPending = true;
+            previous = unfinished.map(name => ReviewStore.open(runRoot, name.slice(0, -5)));
+            assertCleanupAllowed(previous);
+        } else if (initial.mode !== 'resume' && unfinished.length) {
             if (unfinished.length === 1) store = ReviewStore.open(runRoot, unfinished[0].slice(0, -5));
             throw Error('未完了の取得があります。「再開」から続けてください。');
         }
         if (initial.mode === 'resume' && unfinished.some(n => n !== initial.resumeId + '.json')) throw Error('複数の未完了記録があります。所有状態を確認するまで操作を開始できません。');
-        store = initial.mode === 'resume' ? ReviewStore.open(runRoot, initial.resumeId) : ReviewStore.create(runRoot, initial);
-        if (store.data.owner) { const next = structuredClone(store.data); next.browserRecoveryRequired = true; store.save(next); }
+        store = cleanupPending ? null : initial.mode === 'resume' ? ReviewStore.open(runRoot, initial.resumeId) : ReviewStore.create(runRoot, initial);
+        if (store?.data.owner) { const next = structuredClone(store.data); next.browserRecoveryRequired = true; store.save(next); }
         emit('starting', 'Edge・SOSListの接続と前回の終了状態を確認しています。');
         server = new AppServer({ codex, cwd: runRoot, cua: options.cuaConfig || browserConfig(codex), onEvent: event, onFailure: fail, timeoutMs: duration('rpc', 120000), environment: options.environment });
         await server.rpc('initialize', { clientInfo: { name: 'soslist_evidence_review', version: '2.0.0' }, capabilities: { experimentalApi: true } });
         server.write({ method: 'initialized' });
         const account = await server.rpc('account/read', { refreshToken: false });
         if (account.account?.type !== 'chatgpt') throw Error('CodexのChatGPTログインを確認してください。');
-        if (['completed', 'no_records'].includes(store.data.result?.outcome)) {
+        if (['completed', 'no_records'].includes(store?.data.result?.outcome)) {
             emit('recovering', '保存確認済みです。復旧履歴の後処理だけを再開します。');
             return await finalizeResult(store.data.result);
         }
         {
-            const consent = reviewConsentRequest(store.data.request, sosPdfDir, store.data.appointments);
+            let consent = reviewConsentRequest(store?.data.request || initial, sosPdfDir, store?.data.appointments || []);
+            if (cleanupPending) consent = cleanupConsent(consent, previous.length);
             emit('starting', '資料確認・保存と対象SHA入力の許可を確認しています。');
             let timeout, action;
             try {
@@ -338,10 +386,16 @@ async function runJob(input, options = {}) {
                     new Promise(resolve => { timeout = setTimeout(() => resolve('decline'), duration('approval', 120000)); })]);
             } finally { clearTimeout(timeout); }
             if (stopping || action !== 'accept') throw Error('資料確認・保存の許可を確認できません。「再開」で確認画面の内容を承認してください。');
-            intakeAuthorization = `CURRENT EXPLICIT EVIDENCE REVIEW AUTHORIZATION${store.data.request.mode === 'batch' ? ' / CURRENT EXPLICIT INTAKE AUTHORIZATION' : ''}: the human user clicked 「許可して続ける」 in the native SOSList confirmation for this invocation. The exact scope, sensitive data, destinations and SHA edit/save actions shown and accepted were:\n${consent.message}\nThis is the user's current authorization for the bounded actions shown above, including MEP Yes, Edit Exam and SHA Sections III, VI and IV only for an identity-verified SHA appointment in this scope. It is not a blanket approval for other exports, destinations, patients, signature/submission, or bypassing an approval rejection. Do not ask for the same authorized routine step again unless scope/access has changed or approval review requires it. Earlier denials still require evaluation of this fresh consent by the reviewer; never assume they are overridden. Recheck identity, access and existing answers before any edit and verify every save.`;
+            if (cleanupPending) {
+                phase = 'cleanup'; emit('progress', '旧会話をアーカイブし、前回の復旧データを退避しています。');
+                await archivePrevious(runRoot, previous, server, () => stopping);
+                previous = []; cleanupPending = false;
+                store = ReviewStore.create(runRoot, initial); phase = 'preflight';
+            }
+            intakeAuthorization = `CURRENT EXPLICIT EVIDENCE REVIEW AUTHORIZATION${store.data.request.mode === 'batch' ? ' / CURRENT EXPLICIT INTAKE AUTHORIZATION' : ''}: the human user clicked 「許可して続ける」 in the native SOSList confirmation for this invocation. The exact scope, sensitive data, destinations and SHA edit/save actions shown and accepted were:\n${reviewConsentRequest(store.data.request, sosPdfDir, store.data.appointments).message}\nThis is the user's current authorization for the bounded actions shown above, including MEP Yes, Edit Exam and SHA Sections III, VI and IV only for an identity-verified SHA appointment in this scope. It is not a blanket approval for other exports, destinations, patients, signature/submission, or bypassing an approval rejection. Do not ask for the same authorized routine step again unless scope/access has changed or approval review requires it. Earlier denials still require evaluation of this fresh consent by the reviewer; never assume they are overridden. Recheck identity, access and existing answers before any edit and verify every save.`;
             activity();
         }
-        if (store.data.owner) {
+        if (store?.data.owner) {
             const oldPid = store.data.owner.serverPid;
             let exited = false;
             if (oldPid) {

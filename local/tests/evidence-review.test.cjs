@@ -60,13 +60,13 @@ test('the controller prevents duplicate launch and ignores stale job updates', a
     assert.equal(sent.length, 2);
 });
 
-test('restored incomplete state allows only explicit resume and ignores old callbacks', () => {
+test('restored incomplete state allows fresh toolbar batch and ignores old callbacks', () => {
     const sent = [], controller = createController({ send: value => sent.push(value), onState: () => {} });
     const resumeId = 'b'.repeat(64);
     controller.receive({ state: 'paused', message: '中断', resumeId, phase: 'collecting' });
     assert.equal(controller.state.busy, false);
     assert.equal(controller.state.resumeId, resumeId);
-    assert.equal(controller.start('batch'), null);
+    assert.equal(controller.start('single', appointment), null);
     assert.equal(sent.length, 0);
     const resumed = controller.start('resume', { resumeId });
     assert.equal(sent[0].resumeId, resumeId);
@@ -158,4 +158,23 @@ test('restored successful results display complete rather than their final work 
  c.receive({state:'paused',message:'後処理未完了',phase:'cleanup',resumeId:'a'.repeat(64)});
  assert.equal(c.state.phase,'cleanup');
  assert.equal(c.state.resumeId,'a'.repeat(64));
+});
+
+ test('paused toolbar batch sends a fresh request without inherited resume instructions',()=>{
+ const sent=[],c=createController({send:r=>sent.push(r),onState(){}});
+ c.receive({state:'paused',resumeId:'d'.repeat(64),resumeDocId:'old-doc'});
+ const r=c.start('batch');assert.ok(r);assert.equal(r.mode,'batch');
+ assert.equal(r.resumeId,undefined);assert.equal(r.userInstruction,undefined);assert.equal(r.appointment,undefined);
+ assert.equal(c.state.resumeDocId,null);assert.equal(c.start('batch'),null);assert.equal(sent.length,1);
+ });
+
+test('toolbar fetch stays available while paused but row fetch stays locked',()=>{
+ const fs=require('node:fs'),vm=require('node:vm');
+ const source=fs.readFileSync(require('node:path').join(__dirname,'../script.js'),'utf8');
+ const toolbar={},row={},state={busy:false,resumeId:'c'.repeat(64)};
+ const ctx={evidenceController:{state},document:{querySelectorAll:selector=>selector==='#fetchEvidenceButton'?[toolbar]:selector==='.evidence-btn'?[row]:[]}};
+ vm.createContext(ctx);vm.runInContext(source.slice(source.indexOf('function syncEvidenceButtons('),source.indexOf('// Firestore can replace')),ctx);
+ ctx.syncEvidenceButtons();assert.equal(toolbar.disabled,false);assert.equal(row.disabled,true);
+ state.busy=true;ctx.syncEvidenceButtons();assert.equal(toolbar.disabled,true);assert.equal(row.disabled,true);
+ state.busy=false;state.resumeId=null;ctx.syncEvidenceButtons();assert.equal(toolbar.disabled,false);assert.equal(row.disabled,false);
 });
