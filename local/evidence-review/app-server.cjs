@@ -25,7 +25,7 @@ class AppServer {
         // Disabled entries still need a transport to pass Codex config validation.
         // Do not depend on another Mac having saved MCP server definitions.
         const config = { forced_login_method: 'chatgpt', model_provider: 'openai', project_doc_max_bytes: 0, web_search: 'disabled',
-            mcp_servers: { node_repl: { command: '/usr/bin/false', enabled: false }, 'computer-use': { command: '/usr/bin/false', enabled: false }, cua_repl: { ...cua, enabled: true, required: true, enabled_tools: ['js', 'js_reset', 'turn_ended'], startup_timeout_sec: 120, tool_timeout_sec: 180 } },
+            mcp_servers: { node_repl: { command: '/usr/bin/false', enabled: false }, 'computer-use': { command: '/usr/bin/false', enabled: false }, cua_repl: { ...(cua || {command:'/usr/bin/false'}), enabled: !!cua, required: !!cua, enabled_tools: ['js', 'js_reset', 'turn_ended'], startup_timeout_sec: 120, tool_timeout_sec: 180 } },
             'features.plugins': false, 'features.apps': false, 'features.hooks': false, 'features.memories': false, 'features.chronicle': false,
             'features.shell_tool': false, 'features.unified_exec': false, 'features.multi_agent': false, 'features.multi_agent_v2': false,
             'features.skip_host_skill_discovery': true, 'features.browser_use': false, 'features.browser_use_external': false,

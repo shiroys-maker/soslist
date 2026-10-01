@@ -2,6 +2,7 @@
 
 import json
 import os
+from ai_task_settings import choice
 
 from codex_images import CODEX_BIN, ReportError, decode_images, run_image_report, serve_report
 
@@ -28,11 +29,12 @@ Use only the attached images. Do not browse, run commands, inspect other files, 
 
 
 def generate_report(payload):
+    model, effort = choice('xray', os.environ.get('XRAY_CODEX_MODEL', 'gpt-6-astra'), 'high')
     images = decode_images(payload)
     region = str(payload.get('region') or 'CHEST XR').strip()[:120]
     report = run_image_report(
         images, prompt=report_prompt(len(images), region), schema=REPORT_SCHEMA,
-        model=os.environ.get('XRAY_CODEX_MODEL', 'gpt-6-astra'),
+        model=model, effort=effort, task='xray',
         executable=os.environ.get('XRAY_CODEX_BIN', CODEX_BIN),
     )
     if not isinstance(report, dict) or any(

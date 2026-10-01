@@ -7,7 +7,7 @@ const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/interactions'
 
 function settings() {
   return {
-    model: process.env.GEMINI_TTS_MODEL || 'gemini-3.8-flash-tts',
+    model: require('../local/ai/task-settings.cjs').choice('tts').model,
     voiceA: process.env.GEMINI_TTS_VOICE_A || 'Kore',
     voiceB: process.env.GEMINI_TTS_VOICE_B || 'Alnilam',
     style: process.env.GEMINI_TTS_STYLE || '自然で落ち着いた日本語の会話。明瞭に。',
@@ -117,6 +117,7 @@ async function synthesizeGemini(dialogue, outBase, { runLocalTool, speed, log, f
   if (!Number.isFinite(speed) || speed < 0.5 || speed > 2) throw new Error('Gemini TTSのPODCAST_SPEEDは0.5〜2で指定してください。');
   const chunks = splitDialogue(dialogue);
   const workdir = fs.mkdtempSync(path.join(path.dirname(outBase), '.gemini-tts-'));
+  const monitor=require('../local/ai/task-settings.cjs');monitor.begin('tts',{model:config.model,effort:''});
   try {
     const segments = [];
     for (let i = 0; i < chunks.length; i++) {
@@ -139,7 +140,7 @@ async function synthesizeGemini(dialogue, outBase, { runLocalTool, speed, log, f
     fs.rmSync(`${outBase}.wav`, { force: true });
     log(`MP3出力: ${mp3Path}`);
     return { wavPath: null, mp3Path };
-  } finally { fs.rmSync(workdir, { recursive: true, force: true }); }
+  } finally { monitor.end('tts',{model:config.model,effort:''});fs.rmSync(workdir, { recursive: true, force: true }); }
 }
 
 module.exports = { settings, validateSettings, splitDialogue, buildRequest, extractWav, requestAudio, synthesizeGemini };

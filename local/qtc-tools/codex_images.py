@@ -4,6 +4,7 @@ import base64
 import binascii
 import json
 import os
+from ai_task_settings import record
 from pathlib import Path
 import subprocess
 import tempfile
@@ -53,13 +54,14 @@ def decode_images(payload, max_count=MAX_IMAGE_COUNT):
     return images
 
 
-def run_image_report(images, *, prompt, schema, model, executable=CODEX_BIN):
+def run_image_report(images, *, prompt, schema, model, effort="high", task=None, executable=CODEX_BIN):
     try:
         executable = resolve_codex_path(executable)
     except ValueError as error:
         raise ReportError(503, str(error)) from None
     if not REPORT_SLOTS.acquire(blocking=False):
         raise ReportError(429, '別の画像を処理中です。少し待ってから再試行してください。')
+    if task: record(task, model, effort, 'running')
     try:
         with tempfile.TemporaryDirectory(prefix='soslist-images-') as directory:
             workdir = Path(directory)
@@ -72,7 +74,7 @@ def run_image_report(images, *, prompt, schema, model, executable=CODEX_BIN):
                 '-c', 'approval_policy="never"', '-c', 'forced_login_method="chatgpt"',
                 '-c', 'web_search="disabled"', '-c', 'features.shell_tool=false',
                 '-c', 'project_doc_max_bytes=0',
-                '-c', 'model_reasoning_effort="high"',
+                '-c', f'model_reasoning_effort={json.dumps(effort)}',
                 '--model', model,
                 '--output-schema', str(schema_file), '--output-last-message', str(output_file),
             ]
@@ -104,6 +106,7 @@ def run_image_report(images, *, prompt, schema, model, executable=CODEX_BIN):
                 raise ReportError(502, 'Codexの画像解析結果を解析できませんでした。') from None
             return report
     finally:
+        if task: record(task, model, effort, 'finished')
         REPORT_SLOTS.release()
 
 

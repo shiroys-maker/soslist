@@ -3,6 +3,7 @@ from collections import OrderedDict
 import hashlib
 import json
 import os
+from ai_task_settings import choice, record
 from pathlib import Path
 import re
 import subprocess
@@ -39,7 +40,8 @@ def convert_name(name):
     if not isinstance(name, str) or not name.strip() or len(name) > 160:
         raise KanaError(400, '氏名は1〜160文字で入力してください。')
     name = ' '.join(name.split())
-    key = hashlib.sha256((MODEL + '\0' + name.casefold()).encode()).digest()
+    model, effort = choice('kana', MODEL, 'low')
+    key = hashlib.sha256((model + effort + '\0' + name.casefold()).encode()).digest()
     with _lock:
         cached = _cache.get(key)
         if cached and time.monotonic() - cached[0] < CACHE_TTL_SECONDS:
@@ -48,6 +50,7 @@ def convert_name(name):
         _cache.pop(key, None)
     if not _slots.acquire(blocking=False):
         raise KanaError(429, '氏名変換が混み合っています。手入力するか再試行してください。')
+    record('kana', model, effort, 'running')
     try:
         executable = resolve_codex()
         with tempfile.TemporaryDirectory(prefix='soslist-kana-') as directory:
@@ -58,8 +61,8 @@ def convert_name(name):
                 '--sandbox', 'read-only', '--skip-git-repo-check', '--cd', directory,
                 '-c', 'approval_policy="never"', '-c', 'forced_login_method="chatgpt"',
                 '-c', 'web_search="disabled"', '-c', 'features.shell_tool=false',
-                '-c', 'project_doc_max_bytes=0', '-c', 'model_reasoning_effort="low"',
-                '--model', MODEL, '--output-schema', str(schema), '--output-last-message', str(output), '-']
+                '-c', 'project_doc_max_bytes=0', '-c', f'model_reasoning_effort={json.dumps(effort)}',
+                '--model', model, '--output-schema', str(schema), '--output-last-message', str(output), '-']
             env = {k: v for k, v in os.environ.items() if k in
                    ('HOME', 'USER', 'LOGNAME', 'PATH', 'TMPDIR', 'LANG', 'LC_ALL', 'CODEX_HOME')}
             prompt = ('Transliterate the English personal name into natural Japanese katakana. '
@@ -89,6 +92,7 @@ def convert_name(name):
                 _cache.popitem(last=False)
         return kana
     finally:
+        record('kana', model, effort, 'finished')
         _slots.release()
 
 

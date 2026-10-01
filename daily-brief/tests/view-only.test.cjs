@@ -45,7 +45,7 @@ test('audio full and partial range remain available',async t=>{
  const h=harness(t);const a=await h.request('GET','/audio/2099-01-01/podcast.mp3');assert.equal(a.status,200);assert.equal(a.body,'synthetic audio');
  const b=await h.request('GET','/audio/2099-01-01/podcast.mp3',{range:'bytes=0-3'});assert.equal(b.status,206);assert.equal(b.body,'synt');
 });
-test('removed CLI and provider functions cannot generate; native runner stays Astra/high',()=>{
+test('removed CLI and provider functions cannot generate; native runner uses persisted task selection',()=>{
  const api=require('../generate-brief');assert.equal(api.run,undefined);
  for(const args of [[],['--sample'],['--date','2099-01-01']]){
   const r=spawnSync(process.execPath,[path.join(dir,'generate-brief.js'),...args],{encoding:'utf8',env:{PATH:process.env.PATH}});
@@ -54,7 +54,7 @@ test('removed CLI and provider functions cannot generate; native runner stays As
  const s=fs.readFileSync(path.join(dir,'generate-brief.js'),'utf8');
  assert.doesNotMatch(s,/api\.anthropic|require\('openai'\)|createJsonCompletion|PODCAST_FALLBACK_MODEL|async function run\(/);
  const runner=fs.readFileSync(path.join(dir,'run-codex-summary.sh'),'utf8');
- assert.match(runner,/--model gpt-6-astra/);assert.match(runner,/model_reasoning_effort="high"/);
+ assert.match(runner,/--model "\$AI_MODEL"/);assert.ok(runner.includes('value summary effort'));assert.equal(require('../../local/ai/task-settings.cjs').definitions.summary.model,'gpt-6-astra');
  for(const mode of ['--scheduled-context','--codex-context','--finalize-prepared'])assert.ok(runner.includes(mode));
 });
 

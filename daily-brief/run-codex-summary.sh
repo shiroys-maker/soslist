@@ -72,13 +72,18 @@ fi
 
 mkdir -p "$out_dir"
 print "[$(date -Iseconds)] ${ymd}: Codex Summary 原稿を生成します。"
+AI_MODEL=$("$NODE_BIN" "$ROOT_DIR/local/ai/task-settings.cjs" value summary model)
+AI_EFFORT=$("$NODE_BIN" "$ROOT_DIR/local/ai/task-settings.cjs" value summary effort)
+print "Summary AI: $AI_MODEL / $AI_EFFORT"
+"$NODE_BIN" "$ROOT_DIR/local/ai/task-settings.cjs" record summary running $$ "$AI_MODEL" "$AI_EFFORT" >/dev/null
+trap 'cleanup; "$NODE_BIN" "$ROOT_DIR/local/ai/task-settings.cjs" record summary finished $$ "$AI_MODEL" "$AI_EFFORT" >/dev/null' EXIT
 last_message_file="$LOG_DIR/codex-summary-last-message.txt"
 prompt="入力として読むファイルは ${CONTEXT_FILE} だけ。メモリ、リポジトリ、その他のファイルを調査しない。外部LLM API、ブラウザ、デスクトップLLMアプリ、Gitは使わない。JSON の prompt を内容仕様の唯一の根拠として使い、JSON 内の briefPath と scriptPath に UTF-8 で日本語の brief.md と podcast-script.txt を保存する。予約情報にない事実を補わない。podcast-script.txt の各発話は必ず 進行役: または 専門役: で始める。${CONTEXT_FILE} の読み取りと briefPath/scriptPath への保存に限り、利用可能なファイル操作ツールまたはシェルコマンドを使ってよい。保存後、実施日・対象日・結果だけを短く報告する。"
 
 "$CODEX_BIN" exec \
   --ephemeral \
-  --model gpt-6-astra \
-  --config 'model_reasoning_effort="high"' \
+  --model "$AI_MODEL" \
+  --config "model_reasoning_effort=\"$AI_EFFORT\"" \
   --sandbox workspace-write \
   --cd "$ROOT_DIR" \
   --add-dir "$out_dir" \

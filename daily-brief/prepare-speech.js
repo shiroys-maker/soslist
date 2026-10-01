@@ -75,7 +75,7 @@ function applyReadings(dialogue, result) {
   return { dialogue: spoken, accepted: spans.reduce((n, a) => n + a.length, 0), rejected };
 }
 
-async function runCodexConversion(dialogue, { model, log, timeoutMs }) {
+async function runCodexConversion(dialogue, { model, effort, log, timeoutMs }) {
   const workdir = fs.mkdtempSync(path.join(os.tmpdir(), 'soslist-speech-'));
   try {
     const schemaFile = path.join(workdir, 'schema.json');
@@ -86,7 +86,7 @@ async function runCodexConversion(dialogue, { model, log, timeoutMs }) {
       '--skip-git-repo-check', '--cd', workdir,
       '-c', 'approval_policy="never"', '-c', 'forced_login_method="chatgpt"',
       '-c', 'web_search="disabled"', '-c', 'features.shell_tool=false',
-      '-c', 'project_doc_max_bytes=0', '-c', 'model_reasoning_effort="medium"',
+      '-c', 'project_doc_max_bytes=0', '-c', `model_reasoning_effort=${JSON.stringify(effort||'medium')}`,
       '--model', model, '--output-schema', schemaFile, '--output-last-message', outputFile, '-'];
     const env = Object.fromEntries(['HOME', 'USER', 'LOGNAME', 'PATH', 'TMPDIR', 'LANG', 'LC_ALL', 'CODEX_HOME']
       .filter(key => process.env[key] !== undefined).map(key => [key, process.env[key]]));
@@ -122,10 +122,10 @@ async function runCodexConversion(dialogue, { model, log, timeoutMs }) {
 
 async function prepareSpeechDialogue(dialogue, outDir, options = {}) {
   const log = options.log || (() => {});
-  const model = process.env.PODCAST_SPEECH_MODEL || 'gpt-6.1-sol';
+  const {model,effort}=require('../local/ai/task-settings.cjs').choice('speech');
   const timeoutMs = Number(process.env.PODCAST_SPEECH_TIMEOUT_MS || 300000);
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new Error('PODCAST_SPEECH_TIMEOUT_MS が不正です。');
-  const sourceHash = createHash('sha256').update(JSON.stringify({ version: VERSION, model, prompt: PROMPT, dialogue })).digest('hex');
+  const sourceHash = createHash('sha256').update(JSON.stringify({ version: VERSION, model, effort, prompt: PROMPT, dialogue })).digest('hex');
   const cacheFile = path.join(outDir, 'podcast-speech.json');
   let result;
   try {
@@ -135,7 +135,8 @@ async function prepareSpeechDialogue(dialogue, outDir, options = {}) {
   if (result) log('読み変換済みの台本を再利用します。');
   else {
     log(`音声用の読み変換中 (Codex, ${model}) ...`);
-    result = await (options.convert || runCodexConversion)(dialogue, { model, log, timeoutMs });
+    const monitor=require('../local/ai/task-settings.cjs');monitor.begin('speech',{model,effort});
+    try { result = await (options.convert || runCodexConversion)(dialogue, { model, effort, log, timeoutMs }); } finally { monitor.end('speech',{model,effort}); }
   }
   const applied = applyReadings(dialogue, result);
   fs.mkdirSync(outDir, { recursive: true });

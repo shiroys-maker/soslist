@@ -63,7 +63,7 @@ private struct ASBOCDMetadata {
 
 final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler, NSWindowDelegate {
     private var window: NSWindow!
-    private var webView: WKWebView!
+    var webView: WKWebView!
     private var pdfDownloads: [String: URLSessionDataTask] = [:]
     private let pdfSession: URLSession = {
         let config = URLSessionConfiguration.ephemeral
@@ -92,6 +92,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             return
         }
 
+        if CommandLine.arguments.contains("--ai-settings-smoke") {
+            guard let file = ProcessInfo.processInfo.environment["SOSLIST_AI_SETTINGS_FILE"], file.hasPrefix("/private/tmp/") else { exit(2) }
+            webView = makeWebView()
+            window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 900, height: 750), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+            window.contentView = webView; window.makeKeyAndOrderFront(nil)
+            let test = "<button id='ai-settings-open'>設定</button><script>" + (try! String(contentsOf: Bundle.main.resourceURL!.appendingPathComponent("local-web/local/ai-settings.js"))) + "</script>"
+            webView.loadHTMLString(test, baseURL: nil)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.runAISettingsSmoke() }
+            return
+        }
         webView = makeWebView()
         evidenceReview.onStatus = { [weak self] status in
             guard let self else { return }
@@ -255,6 +265,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                 return
             }
             openQtcTool(tool: tool, contractNumber: contractNumber)
+            return
+        }
+
+        if message.name == "aiSettingsSmokeResult", CommandLine.arguments.contains("--ai-settings-smoke"), let data = message.body as? [String: Any], let file = ProcessInfo.processInfo.environment["SOSLIST_AI_SETTINGS_FILE"], file.hasPrefix("/private/tmp/") {
+            try? JSONSerialization.data(withJSONObject: data).write(to: URL(fileURLWithPath: file + ".result.json"), options: .atomic)
+            exit(data["ok"] as? Bool == true ? 0 : 1)
+        }
+        if message.name == "aiSettings" {
+            guard message.frameInfo.isMainFrame, let request = message.body as? [String: Any],
+                  let id = request["id"] as? String, let action = request["action"] as? String,
+                  ["get", "save", "models"].contains(action), let view = message.webView else { return }
+            let script = Bundle.main.resourceURL!.appendingPathComponent("local-web/local/ai/task-settings.cjs")
+            DispatchQueue.global(qos: .userInitiated).async {
+                let process = Process(), output = Pipe(), errors = Pipe(), input = Pipe()
+                process.executableURL = URL(fileURLWithPath: dailyBriefNodePath)
+                process.arguments = [script.path, action]
+                process.environment = self.makeDailyBriefEnvironment()
+                process.standardOutput = output; process.standardError = errors; process.standardInput = input
+                var response: [String: Any] = ["id": id]
+                do {
+                    try process.run()
+                    if action == "save", let value = request["tasks"] {
+                        try input.fileHandleForWriting.write(contentsOf: JSONSerialization.data(withJSONObject: value))
+                    }
+                    try input.fileHandleForWriting.close()
+                    let data = output.fileHandleForReading.readDataToEndOfFile()
+                    let error = errors.fileHandleForReading.readDataToEndOfFile()
+                    process.waitUntilExit()
+                    guard process.terminationStatus == 0 else { throw NSError(domain: "AISettings", code: 1, userInfo: [NSLocalizedDescriptionKey: String(data: error, encoding: .utf8) ?? "設定を取得できません。"]) }
+                    response["value"] = try JSONSerialization.jsonObject(with: data)
+                } catch { response["error"] = error.localizedDescription }
+                if let data = try? JSONSerialization.data(withJSONObject: response), let json = String(data: data, encoding: .utf8) {
+                    DispatchQueue.main.async { view.evaluateJavaScript("window.aiSettingsReply(\(json))", completionHandler: nil) }
+                }
+            }
             return
         }
 
@@ -507,6 +552,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         configuration.userContentController.add(self, name: "closeDetailsWindow")
         configuration.userContentController.add(self, name: "openQtcTool")
         configuration.userContentController.add(self, name: "runUtilityTool")
+        configuration.userContentController.add(self, name: "aiSettingsSmokeResult")
+        configuration.userContentController.add(self, name: "aiSettings")
         configuration.userContentController.add(self, name: "openDBQProcessor")
         configuration.userContentController.add(self, name: "startEvidenceReview")
         configuration.userContentController.add(self, name: "stopEvidenceReview")

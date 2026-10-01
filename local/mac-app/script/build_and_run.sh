@@ -51,6 +51,8 @@ cp "$BIN_PATH" "$APP_DIR/Contents/MacOS/$APP_NAME"
 for f in index.html script.js connection.js interaction.js evidence-review.js style.css details.html details.js; do
   cp "$LOCAL_SOURCE_DIR/$f" "$WEB_RESOURCES_DIR/local/"
 done
+cp -R "$LOCAL_SOURCE_DIR/ai" "$WEB_RESOURCES_DIR/local/"
+cp "$LOCAL_SOURCE_DIR/ai-settings.js" "$WEB_RESOURCES_DIR/local/"
 cp -R "$LOCAL_SOURCE_DIR/evidence-review" "$WEB_RESOURCES_DIR/local/"
 for f in core.js ui.css ui.js pdf-viewer.js pdf-viewer.css; do
   cp "$SHARED_SOURCE_DIR/$f" "$WEB_RESOURCES_DIR/shared/"
@@ -90,7 +92,7 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
-  <string>1.0</string>
+  <string>1.1.0</string>
   <key>CFBundleVersion</key>
   <string>${BUILD_SHA}</string>
   <key>SOSListBuildSHA</key>
