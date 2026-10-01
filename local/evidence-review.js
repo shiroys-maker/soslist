@@ -60,7 +60,7 @@
             get state() { return state; },
             start(mode, appointment) {
                 if (state.busy) return null;
-                if (state.resumeId && mode !== 'resume') {
+                if (state.resumeId && mode === 'single') {
                     publish({ message: '未完了の取得があります。「再開」から確認してください。' });
                     return null;
                 }

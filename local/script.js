@@ -140,7 +140,8 @@ function renderEvidenceStatus(state = evidenceController.state) {
         syncEvidenceButtons(state.busy || !!state.resumeId);
 }
 function syncEvidenceButtons(locked = evidenceController.state.busy || !!evidenceController.state.resumeId) {
-    document.querySelectorAll('#fetchEvidenceButton, .evidence-btn').forEach(button => { button.disabled = locked; });
+    document.querySelectorAll('#fetchEvidenceButton').forEach(button => { button.disabled = evidenceController.state.busy; });
+    document.querySelectorAll('.evidence-btn').forEach(button => { button.disabled = locked; });
     const state = evidenceController.state;
     document.querySelectorAll('.evidence-resume-btn').forEach(button => {
         const matches = !!state.resumeId && !!state.resumeDocId && button.closest('tr')?.dataset.id === state.resumeDocId;

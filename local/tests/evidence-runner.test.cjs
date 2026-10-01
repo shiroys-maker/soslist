@@ -31,6 +31,7 @@ function fixture(t, scenario='normal') {
  if(m.method==='mcpServerStatus/list')r={data:[{name:'cua_repl',tools:{js:{name:'js'},turn_ended:{name:'turn_ended'}}}]};
  if(m.method==='mcpServer/tool/call'&&scenario==='cleanup-fail')r={isError:true};
  if(m.method==='turn/interrupt'&&scenario!=='no-ended')wire({method:'turn/completed',params:{threadId:'thread',turn:{id:'turn',status:'interrupted'}}});
+ if(m.method==='thread/archive'&&scenario==='archive-fail'){wire({id:m.id,error:{code:-32000,message:'Synthetic archive failure'}});return;}
  if(m.method==='thread/delete'&&scenario==='delete-fail'){wire({id:m.id,error:{code:-32000,message:'Synthetic deletion failure'}});return;}
  if(m.method==='turn/start'){
   active=true;wire({method:'turn/started',params:{threadId:'thread',turn:{id:'turn'}}});r={turn:{id:'turn'}};
@@ -70,7 +71,7 @@ test('failed cleanup and process crash keep exact owner; next run resumes the sa
   const f=fixture(t,scenario);await assert.rejects(runJob({mode:'batch'},f));
   const id=checkpoints(f)[0].slice(0,-5),checkpoint=JSON.parse(fs.readFileSync(path.join(f.runRoot,'checkpoints',id+'.json')));
   assert.equal(checkpoint.owner.sessionId,'actual-session');
-  await assert.rejects(runJob({mode:'batch'},f),/未完了/);
+  await assert.rejects(runJob({mode:'batch'},f),/所有権が未解放/);
   // Switch only the fake transport, retaining the real durable work directory.
   const healthy=fixture(t);await runJob({mode:'resume',resumeId:id},{...f,codexPath:healthy.codexPath});
   const wire=readWire(healthy),resume=wire.findIndex(m=>m.method==='thread/resume');assert.ok(resume>=0&&resume<wire.findIndex(m=>m.method==='turn/start'));
@@ -294,4 +295,71 @@ test('completion follows cleanup notification and actual app-server exit',async 
  const deletion=wire.findIndex(m=>m.method==='thread/delete');
  assert.ok(release>=0&&deletion>release);
  }
+});
+
+function previousWork(f) {
+ const {ReviewStore}=require('../evidence-review/store.cjs');
+ const s=ReviewStore.create(f.runRoot,{mode:'batch'});
+ s.setSession({threadId:'old-thread',sessionId:'old-session'});
+ s.addUserInstruction('OLD_INSTRUCTION');
+ s.queue({enumerationComplete:true,appointments:[{docId:'old-doc',claimantName:'OLD_CLAIMANT',contractNumber:'OLD_CONTRACT',appointmentDateTimeMs:1791248400000,services:['SHA'],sha:true}]});
+ s.progress({contractNumber:'OLD_CONTRACT',phase:'draft',notesDraft:'OLD_DRAFT'});
+ return s;
+}
+test('new toolbar batch confirms cleanup then archives old thread and starts with no inherited work',async t=>{
+ const f=fixture(t),s=previousWork(f),file=fs.readFileSync(s.file);
+ fs.writeFileSync(path.join(f.runRoot,'last-result.json'),'SAVED_RESULT');
+ fs.writeFileSync(path.join(f.runRoot,'last-status.json'),JSON.stringify({state:'paused',resumeId:s.id}));
+ fs.writeFileSync(path.join(f.root,'saved.pdf'),'%PDF-SAVED');
+ fs.writeFileSync(path.join(f.root,'settings.json'),'HOST_SETTINGS');
+ let consent;
+ await runJob({mode:'batch'},{...f,requestIntakeConsent:async p=>{
+  consent=p;assert.deepEqual(fs.readFileSync(s.file),file);
+  assert.ok(!readWire(f).some(m=>m.method==='thread/archive'));return 'accept';
+ }});
+ assert.match(consent.message,/クリーンアップ/);assert.match(consent.message,/アーカイブ/);assert.match(consent.message,/退避/);
+ assert.match(consent.message,/引き継/);assert.doesNotMatch(consent.message,/前回のキューを起点/);
+ const wire=readWire(f),archive=wire.findIndex(m=>m.method==='thread/archive'&&m.params.threadId==='old-thread'),start=wire.findIndex(m=>m.method==='thread/start');
+ assert.ok(archive>=0&&archive<start);assert.ok(!wire.some(m=>m.method==='thread/resume'||(m.method==='thread/delete'&&m.params.threadId==='old-thread')));
+ const prompt=wire.find(m=>m.method==='turn/start').params.input[0].text;
+ for(const old of ['OLD_INSTRUCTION','OLD_CLAIMANT','OLD_CONTRACT','OLD_DRAFT','old-session',s.id])assert.ok(!prompt.includes(old));
+ const archives=fs.readdirSync(path.join(f.runRoot,'archived'));assert.equal(archives.length,1);
+ const old=JSON.parse(fs.readFileSync(path.join(f.runRoot,'archived',archives[0],'checkpoints',s.id+'.json')));
+ assert.equal(old.appointments[0].notesDraft,'OLD_DRAFT');assert.equal(old.sessionArchived,true);
+ assert.equal(fs.readFileSync(path.join(f.root,'saved.pdf'),'utf8'),'%PDF-SAVED');assert.equal(fs.readFileSync(path.join(f.root,'settings.json'),'utf8'),'HOST_SETTINGS');
+});
+test('declining new batch cleanup keeps old checkpoint status result and conversation',async t=>{
+ const f=fixture(t),s=previousWork(f),before=fs.readFileSync(s.file);
+ const status=JSON.stringify({state:'paused',resumeId:s.id});fs.writeFileSync(path.join(f.runRoot,'last-status.json'),status);fs.writeFileSync(path.join(f.runRoot,'last-result.json'),'SAVED_RESULT');
+ await assert.rejects(runJob({mode:'batch'},{...f,requestIntakeConsent:async()=> 'decline'}),/許可/);
+ assert.deepEqual(fs.readFileSync(s.file),before);assert.equal(fs.readFileSync(path.join(f.runRoot,'last-status.json'),'utf8'),status);assert.equal(fs.readFileSync(path.join(f.runRoot,'last-result.json'),'utf8'),'SAVED_RESULT');
+ assert.ok(!readWire(f).some(m=>['thread/archive','thread/start','thread/resume','turn/start'].includes(m.method)));
+});
+test('new batch refuses unreleased ownership even when its server exited',async t=>{
+ const f=fixture(t),s=previousWork(f);s.owner({threadId:'old-thread',sessionId:'old-session',turnId:'old-turn',serverPid:99999999});const before=fs.readFileSync(s.file);let prompts=0;
+ await assert.rejects(runJob({mode:'batch'},{...f,requestIntakeConsent:async()=>{prompts++;return 'accept';}}),/所有|操作終了/);
+ assert.equal(prompts,0);assert.deepEqual(fs.readFileSync(s.file),before);assert.ok(!fs.existsSync(path.join(f.root,'wire.jsonl')));
+});
+
+test('archive failure preserves recovery and saved data and prevents new work',async t=>{
+ const f=fixture(t,'archive-fail'),s=previousWork(f),before=fs.readFileSync(s.file);
+ fs.writeFileSync(path.join(f.runRoot,'last-result.json'),'SAVED_RESULT');
+ await assert.rejects(runJob({mode:'batch'},f),/rejected/);
+ assert.deepEqual(fs.readFileSync(s.file),before);assert.equal(fs.readFileSync(path.join(f.runRoot,'last-result.json'),'utf8'),'SAVED_RESULT');
+ assert.ok(!fs.existsSync(path.join(f.runRoot,'archived')));assert.ok(!readWire(f).some(m=>['thread/start','thread/resume','turn/start'].includes(m.method)));
+});
+test('all prior checkpoints are archived without carrying multiple queues into the new task',async t=>{
+ const f=fixture(t),a=previousWork(f),b=previousWork(f);
+ await runJob({mode:'batch'},f);
+ const dir=path.join(f.runRoot,'archived',fs.readdirSync(path.join(f.runRoot,'archived'))[0],'checkpoints');
+ assert.deepEqual(fs.readdirSync(dir).sort(),[a.id+'.json',b.id+'.json'].sort());
+ assert.equal(readWire(f).filter(m=>m.method==='thread/start').length,1);
+});
+test('new batch refuses a live previous server even after browser owner was cleared',async t=>{
+ const {spawn}=require('node:child_process'),f=fixture(t),s=previousWork(f);
+ const child=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{detached:true,stdio:'ignore'});
+ t.after(()=>{try{process.kill(-child.pid,'SIGKILL')}catch(_){}});
+ s.data.serverPid=child.pid;s.save();const before=fs.readFileSync(s.file);
+ await assert.rejects(runJob({mode:'batch'},f),/実行中/);assert.deepEqual(fs.readFileSync(s.file),before);
+ assert.ok(!fs.existsSync(path.join(f.root,'wire.jsonl')));
 });
