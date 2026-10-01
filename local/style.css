@@ -812,3 +812,6 @@ td.col-received, td.col-completed { padding: 0 2px; }
 #appointmentsTable td:is(.col-name, .col-date, .col-phone, .col-contract, .col-age) {
     cursor: pointer;
 }
+
+/* AI settings apply to every workflow and sit at the right edge of the toolbar. */
+.secondary-controls > #ai-settings-open { margin-left: auto; justify-self: end; }
