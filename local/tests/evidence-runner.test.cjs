@@ -224,13 +224,46 @@ test('missing or declined batch consent retains checkpoint and starts no model t
   assert.ok(!readWire(f).some(m=>['thread/start','thread/resume','turn/start'].includes(m.method)));assert.equal(checkpoints(f).length,1);
  }
 });
-test('resuming a batch asks for current intake consent; single recovery does not export a bill',async t=>{
+test('resuming asks for current scoped review consent; single recovery does not export a bill',async t=>{
  const {ReviewStore}=require('../evidence-review/store.cjs'),f=fixture(t);const store=ReviewStore.create(f.runRoot,{mode:'batch'});
  let calls=0;await runJob({mode:'resume',resumeId:store.id},{...f,requestIntakeConsent:async()=>{calls++;return 'accept';}});assert.equal(calls,1);
  const g=fixture(t),appointment={docId:'synthetic-selected',claimantName:'SYNTHETIC',contractNumber:'TEST.1.2',appointmentDateTimeMs:1791248400000,services:['SHA']};
  const single=ReviewStore.create(g.runRoot,{mode:'single',appointment});
- await assert.rejects(runJob({mode:'resume',resumeId:single.id},{...g,requestIntakeConsent:async()=>{throw Error('single must not request bill consent');}}));
+ let singleConsent;
+ await assert.rejects(runJob({mode:'resume',resumeId:single.id},{...g,requestIntakeConsent:async request=>{singleConsent=request;return 'accept';}}));
+ assert.ok(singleConsent, 'single work must show the actions before a model turn');
+ assert.match(singleConsent.message,/TEST\.1\.2/);
+ assert.doesNotMatch(singleConsent.message,/201 Bill/);
+ const singleText=readWire(g).find(m=>m.method==='turn/start').params.input[0].text;
+ assert.match(singleText,/CURRENT EXPLICIT EVIDENCE REVIEW AUTHORIZATION/);
+ assert.ok(singleText.includes(singleConsent.message));
  assert.ok(readWire(g).some(m=>m.method==='turn/start'));
+});
+
+test('review consent explicitly covers bounded SHA editing and survives resume without broadening scope',async t=>{
+ const f=fixture(t,'hang'),{ReviewStore}=require('../evidence-review/store.cjs');
+ let consent;
+ await assert.rejects(runJob({mode:'batch'},{...f,requestIntakeConsent:async request=>{consent=request;return 'accept';}}));
+ assert.match(consent.message,/Yes, Edit Exam/);
+ assert.match(consent.message,/Data Entry.*Provider In Progress/);
+ for(const section of ['III','IV','VI']) assert.ok(consent.message.includes(section));
+ assert.match(consent.message,/署名・送信/);
+ const id=checkpoints(f)[0].slice(0,-5);
+ const store=ReviewStore.open(f.runRoot,id);
+ assert.equal(store.data.reviewAuthorization,undefined, 'consent is not persisted as permission for later invocations');
+ const healthy=fixture(t);let resumed;
+ await runJob({mode:'resume',resumeId:id},{...f,codexPath:healthy.codexPath,requestIntakeConsent:async request=>{resumed=request;return 'accept';}});
+ assert.match(resumed.message,/Yes, Edit Exam/);
+ const wire=readWire(healthy),turn=wire.find(m=>m.method==='turn/start');
+ assert.ok(turn.params.input[0].text.includes(resumed.message));
+ assert.equal(wire.find(m=>m.method==='thread/resume').params.threadId,'thread');
+});
+
+test('declined single review consent cannot start a model or browser turn',async t=>{
+ const f=fixture(t),appointment={docId:'synthetic-selected',claimantName:'SYNTHETIC',contractNumber:'TEST.1.2',appointmentDateTimeMs:1791248400000,services:['SHA']};
+ await assert.rejects(runJob({mode:'single',appointment},{...f,requestIntakeConsent:async()=> 'decline'}),/許可/);
+ assert.ok(!readWire(f).some(m=>['thread/start','thread/resume','turn/start'].includes(m.method)));
+ assert.equal(checkpoints(f).length,1);
 });
 
 test('intake consent timeout and cancellation cannot start a browser turn',async t=>{
