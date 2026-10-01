@@ -6,6 +6,8 @@ for(const mode of ['manual','scheduled'])test(`${mode} Summary runs the saved Cl
  const daily=path.join(root,'daily-brief'),ai=path.join(root,'local/ai'),out=path.join(root,'output'),settings=path.join(root,'settings.json'),capture=path.join(root,'invocation.json');
  for(const dir of [daily,ai,out])fs.mkdirSync(dir,{recursive:true});
  fs.copyFileSync(path.join(repo,'local/ai/task-settings.cjs'),path.join(ai,'task-settings.cjs'));
+ fs.copyFileSync(path.join(repo,'local/ai/claude-path.cjs'),path.join(ai,'claude-path.cjs'));
+
  fs.copyFileSync(path.join(repo,'daily-brief/claude-summary.cjs'),path.join(daily,'claude-summary.cjs'));
  fs.writeFileSync(path.join(daily,'.env'),'');
  fs.writeFileSync(settings,JSON.stringify({summary:{service:'claude',model:'opus',effort:'high'}}));

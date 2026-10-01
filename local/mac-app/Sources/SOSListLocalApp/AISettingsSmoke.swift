@@ -21,13 +21,20 @@ extension AppDelegate {
           service().value='openai';service().dispatchEvent(new Event('change'));
           if(summaryModel().value!==original)throw Error('Codex selection lost');
           service().value='claude';service().dispatchEvent(new Event('change'));
+          if(![...summaryModel().options].some(o=>o.value==='claude-opus-5-5'))throw Error('Missing Opus 5.5 dropdown choice');
+          summaryModel().value='claude-opus-5-5';summaryModel().dispatchEvent(new Event('change'));
+          document.getElementById('ai-model-refresh').click();
+          for(let i=0;i<200&&document.getElementById('ai-model-refresh').disabled;i++)await wait();
+          if(document.getElementById('ai-model-refresh').disabled)throw Error('Model refresh did not finish');
+          if(summaryModel().value!=='claude-opus-5-5'||service().value!=='claude')throw Error('Model refresh lost selection');
+          if(![...summaryModel().options].some(o=>o.text==='Opus 5.5'))throw Error('Refreshed version label missing');
           document.getElementById('ai-settings-save').click();
           for(let i=0;i<80&&!document.getElementById('ai-settings-status').textContent.includes('保存しました');i++)await wait();
           document.getElementById('ai-settings-close').click();document.getElementById('ai-settings-open').click();
           for(let i=0;i<80&&!document.querySelector('dialog[open]');i++)await wait();
           if(document.querySelector('[data-task=bill] .ai-model-select').value!=='gpt-6-luna')throw Error('Saved model not reloaded');
-          if(service().value!=='claude'||summaryModel().value!=='opus')throw Error('Summary service not reloaded');
-          window.webkit.messageHandlers.aiSettingsSmokeResult.postMessage({ok:true,tasks:8,model:document.querySelector('[data-task=bill] .ai-model-select').value,automaticCatalog:true,summaryService:service().value,summaryModel:summaryModel().value});
+          if(service().value!=='claude'||summaryModel().value!=='claude-opus-5-5')throw Error('Summary service not reloaded');
+          window.webkit.messageHandlers.aiSettingsSmokeResult.postMessage({ok:true,tasks:8,model:document.querySelector('[data-task=bill] .ai-model-select').value,automaticCatalog:true,refreshedCatalog:true,summaryService:service().value,summaryModel:summaryModel().value});
         }catch(e){window.webkit.messageHandlers.aiSettingsSmokeResult.postMessage({ok:false,error:e.message});}})();
         """#
         webView.evaluateJavaScript(js, completionHandler: nil)

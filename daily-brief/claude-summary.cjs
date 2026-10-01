@@ -1,11 +1,7 @@
 'use strict';
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),{spawn}=require('node:child_process');
 const SCHEMA={type:'object',additionalProperties:false,required:['brief','script'],properties:{brief:{type:'string'},script:{type:'string'}}};
-function resolveClaude(env=process.env){
- const candidates=env.SOSLIST_CLAUDE_BIN?[env.SOSLIST_CLAUDE_BIN]:[path.join(os.homedir(),'.local/bin/claude'),'/opt/homebrew/bin/claude','/usr/local/bin/claude',...(env.PATH||'').split(path.delimiter).filter(Boolean).map(dir=>path.join(dir,'claude'))];
- for(const candidate of candidates)try{if(path.isAbsolute(candidate)){fs.accessSync(candidate,fs.constants.X_OK);return candidate;}}catch(_){}
- throw Error('Claude Code CLIが見つかりません。');
-}
+const {resolveClaude}=require('../local/ai/claude-path.cjs');
 async function generateClaudeSummary(context,selected,options={}){
  if(selected.service!=='claude'||typeof selected.model!=='string'||!selected.model||!['low','medium','high','xhigh','max'].includes(selected.effort))throw Error('Claude Summaryの設定を確認してください。');
  if(typeof context.prompt!=='string'||!context.prompt||!path.isAbsolute(context.outDir||'')||context.briefPath!==path.join(context.outDir,'brief.md')||context.scriptPath!==path.join(context.outDir,'podcast-script.txt'))throw Error('Summaryの保存先・入力を確認してください。');

@@ -13,13 +13,13 @@
  const service=document.createElement('select');service.className='ai-service-select';service.setAttribute('aria-label',t.label+'のサービス');for(const value of t.services||[t.service])service.append(new Option(value==='gemini'?'Gemini TTS':value==='claude'?'Claude Code':'OpenAI / Codex',value));service.value=t.service;box.append(service);
  service.onchange=()=>{t.selections={...t.selections,[t.service]:{model:t.model,effort:t.effort}};t.service=service.value;Object.assign(t,t.selections[t.service]||t.serviceDefaults[t.service]);render();};
  const input=document.createElement('select');input.className='ai-model-select';input.setAttribute('aria-label',t.label+'のモデル');input.style.cssText='width:270px;max-width:100%';
- const available=[...claudeModels,...catalog.filter(m=>m.service!=='claude')];
+ const available=catalog.some(m=>m.service==='claude')?catalog:[...claudeModels,...catalog];
  const candidates=available.filter(m=>(m.service||'openai')===t.service);
  if(!candidates.some(m=>m.id===t.model))input.append(new Option(t.model,t.model));
  for(const m of candidates)input.append(new Option(m.name||m.id,m.id));
  input.value=t.model;box.append(input);
  const effort=document.createElement('select');
- function efforts(){const known=available.find(m=>m.id===input.value&&(m.service||'openai')===t.service),choices=t.service==='gemini'?['']:(known?.efforts?.length?[...known.efforts]:['none','minimal','low','medium','high','xhigh','max','ultra']);if(!choices.includes(t.effort))choices.push(t.effort);effort.replaceChildren(...choices.map(v=>new Option(v||'effort非対応',v)));effort.value=t.effort;}
+ function efforts(){const known=available.find(m=>m.id===input.value&&(m.service||'openai')===t.service),choices=t.service==='gemini'?['']:(known?.efforts?.length?[...known.efforts]:t.service==='claude'?['low','medium','high','xhigh','max']:['none','minimal','low','medium','high','xhigh','max','ultra']);if(!choices.includes(t.effort))choices.push(t.effort);effort.replaceChildren(...choices.map(v=>new Option(v||'effort非対応',v)));effort.value=t.effort;}
  efforts();box.append(effort);input.onchange=()=>{t.model=input.value;efforts();};effort.onchange=()=>t.effort=effort.value;el('ai-task-rows').append(box);
  }}
  document.getElementById('ai-settings-open').onclick=async()=>{try{tasks=await call('get');render();el('ai-settings-status').textContent='保存済みの設定を読み込みました。';dialog.showModal();await refreshModels();}catch(e){alert(e.message);}};
