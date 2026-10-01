@@ -12,12 +12,22 @@ extension AppDelegate {
           const bill=document.querySelector('[data-task=bill] .ai-model-select');
           if(![...bill.options].some(o=>o.value==='gpt-6-luna'))throw Error('Model list not loaded on open');
           bill.value='gpt-6-luna';bill.dispatchEvent(new Event('change'));
+          const service=()=>document.querySelector('[data-task=summary] .ai-service-select');
+          const summaryModel=()=>document.querySelector('[data-task=summary] .ai-model-select');
+          const original=summaryModel().value;
+          if(![...service().options].some(o=>o.value==='claude'))throw Error('Missing Claude service choice');
+          service().value='claude';service().dispatchEvent(new Event('change'));
+          if(summaryModel().value!=='opus')throw Error('Claude Opus not selected');
+          service().value='openai';service().dispatchEvent(new Event('change'));
+          if(summaryModel().value!==original)throw Error('Codex selection lost');
+          service().value='claude';service().dispatchEvent(new Event('change'));
           document.getElementById('ai-settings-save').click();
           for(let i=0;i<80&&!document.getElementById('ai-settings-status').textContent.includes('保存しました');i++)await wait();
           document.getElementById('ai-settings-close').click();document.getElementById('ai-settings-open').click();
           for(let i=0;i<80&&!document.querySelector('dialog[open]');i++)await wait();
           if(document.querySelector('[data-task=bill] .ai-model-select').value!=='gpt-6-luna')throw Error('Saved model not reloaded');
-          window.webkit.messageHandlers.aiSettingsSmokeResult.postMessage({ok:true,tasks:8,model:document.querySelector('[data-task=bill] .ai-model-select').value,automaticCatalog:true});
+          if(service().value!=='claude'||summaryModel().value!=='opus')throw Error('Summary service not reloaded');
+          window.webkit.messageHandlers.aiSettingsSmokeResult.postMessage({ok:true,tasks:8,model:document.querySelector('[data-task=bill] .ai-model-select').value,automaticCatalog:true,summaryService:service().value,summaryModel:summaryModel().value});
         }catch(e){window.webkit.messageHandlers.aiSettingsSmokeResult.postMessage({ok:false,error:e.message});}})();
         """#
         webView.evaluateJavaScript(js, completionHandler: nil)

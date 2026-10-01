@@ -30,9 +30,10 @@ fi
 
 mkdir -p "$RUNTIME_DIR" "$LOG_DIR"
 CONTEXT_FILE="$RUNTIME_DIR/codex-summary-${MODE}-${TARGET_DATE:-next}-$$.json"
+AI_FILE="$RUNTIME_DIR/summary-ai-$$.json"
 
 cleanup() {
-  rm -f "$CONTEXT_FILE"
+  rm -f "$CONTEXT_FILE" "$AI_FILE"
 }
 trap cleanup EXIT
 
@@ -41,7 +42,6 @@ if [[ ! -x "$NODE_BIN" ]]; then
   exit 1
 fi
 
-CODEX_BIN=$("$NODE_BIN" "$DAILY_BRIEF_DIR/codex-path.cjs" "${SOSLIST_CODEX_BIN:-}") || exit 1
 
 if [[ "$MODE" == "scheduled" ]]; then
   context_json=$(cd "$DAILY_BRIEF_DIR" && source .env && "$NODE_BIN" generate-brief.js --scheduled-context)
@@ -71,16 +71,22 @@ if [[ "$action" != "generate" || -z "$ymd" || -z "$out_dir" ]]; then
 fi
 
 mkdir -p "$out_dir"
-print "[$(date -Iseconds)] ${ymd}: Codex Summary 原稿を生成します。"
-AI_MODEL=$("$NODE_BIN" "$ROOT_DIR/local/ai/task-settings.cjs" value summary model)
-AI_EFFORT=$("$NODE_BIN" "$ROOT_DIR/local/ai/task-settings.cjs" value summary effort)
-print "Summary AI: $AI_MODEL / $AI_EFFORT"
-"$NODE_BIN" "$ROOT_DIR/local/ai/task-settings.cjs" record summary running $$ "$AI_MODEL" "$AI_EFFORT" >/dev/null
-trap 'cleanup; "$NODE_BIN" "$ROOT_DIR/local/ai/task-settings.cjs" record summary finished $$ "$AI_MODEL" "$AI_EFFORT" >/dev/null' EXIT
+print "[$(date -Iseconds)] ${ymd}: Summary 原稿を生成します。"
+"$NODE_BIN" "$ROOT_DIR/local/ai/task-settings.cjs" selected summary > "$AI_FILE"
+AI_SERVICE=$("$NODE_BIN" -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).service)' "$AI_FILE")
+AI_MODEL=$("$NODE_BIN" -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).model)' "$AI_FILE")
+AI_EFFORT=$("$NODE_BIN" -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).effort)' "$AI_FILE")
+print "Summary AI: $AI_SERVICE / $AI_MODEL / $AI_EFFORT"
+"$NODE_BIN" "$ROOT_DIR/local/ai/task-settings.cjs" record summary running $$ "$AI_MODEL" "$AI_EFFORT" "$AI_SERVICE" >/dev/null
+trap 'cleanup; "$NODE_BIN" "$ROOT_DIR/local/ai/task-settings.cjs" record summary finished $$ "$AI_MODEL" "$AI_EFFORT" "$AI_SERVICE" >/dev/null' EXIT
 last_message_file="$LOG_DIR/codex-summary-last-message.txt"
 prompt="入力として読むファイルは ${CONTEXT_FILE} だけ。メモリ、リポジトリ、その他のファイルを調査しない。外部LLM API、ブラウザ、デスクトップLLMアプリ、Gitは使わない。JSON の prompt を内容仕様の唯一の根拠として使い、JSON 内の briefPath と scriptPath に UTF-8 で日本語の brief.md と podcast-script.txt を保存する。予約情報にない事実を補わない。podcast-script.txt の各発話は必ず 進行役: または 専門役: で始める。${CONTEXT_FILE} の読み取りと briefPath/scriptPath への保存に限り、利用可能なファイル操作ツールまたはシェルコマンドを使ってよい。保存後、実施日・対象日・結果だけを短く報告する。"
 
-"$CODEX_BIN" exec \
+if [[ "$AI_SERVICE" == "claude" ]]; then
+  "$NODE_BIN" "$DAILY_BRIEF_DIR/claude-summary.cjs" "$CONTEXT_FILE" "$AI_FILE"
+elif [[ "$AI_SERVICE" == "openai" ]]; then
+  CODEX_BIN=$("$NODE_BIN" "$DAILY_BRIEF_DIR/codex-path.cjs" "${SOSLIST_CODEX_BIN:-}") || exit 1
+  "$CODEX_BIN" exec \
   --ephemeral \
   --model "$AI_MODEL" \
   --config "model_reasoning_effort=\"$AI_EFFORT\"" \
@@ -89,9 +95,13 @@ prompt="入力として読むファイルは ${CONTEXT_FILE} だけ。メモリ�
   --add-dir "$out_dir" \
   --output-last-message "$last_message_file" \
   "$prompt"
+else
+  print -u2 "未対応のSummaryサービスです: $AI_SERVICE"
+  exit 1
+fi
 
 if [[ ! -s "$out_dir/brief.md" || ! -s "$out_dir/podcast-script.txt" ]]; then
-  print -u2 "Codex Summary 原稿生成に失敗しました。brief.md または podcast-script.txt が保存されていません。"
+  print -u2 "Summary 原稿生成に失敗しました。brief.md または podcast-script.txt が保存されていません。"
   if [[ -s "$last_message_file" ]]; then
     print -u2 "Codex last message:"
     sed -n '1,120p' "$last_message_file" >&2
@@ -100,4 +110,4 @@ if [[ ! -s "$out_dir/brief.md" || ! -s "$out_dir/podcast-script.txt" ]]; then
 fi
 
 (cd "$DAILY_BRIEF_DIR" && source .env && "$NODE_BIN" generate-brief.js --finalize-prepared --date "$ymd")
-print "[$(date -Iseconds)] ${ymd}: Codex Summary の後段処理を完了しました。"
+print "[$(date -Iseconds)] ${ymd}: Summary の後段処理を完了しました。"

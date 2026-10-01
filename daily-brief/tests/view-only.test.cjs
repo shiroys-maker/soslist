@@ -54,7 +54,7 @@ test('removed CLI and provider functions cannot generate; native runner uses per
  const s=fs.readFileSync(path.join(dir,'generate-brief.js'),'utf8');
  assert.doesNotMatch(s,/api\.anthropic|require\('openai'\)|createJsonCompletion|PODCAST_FALLBACK_MODEL|async function run\(/);
  const runner=fs.readFileSync(path.join(dir,'run-codex-summary.sh'),'utf8');
- assert.match(runner,/--model "\$AI_MODEL"/);assert.ok(runner.includes('value summary effort'));assert.equal(require('../../local/ai/task-settings.cjs').definitions.summary.model,'gpt-6-astra');
+ assert.match(runner,/--model "\$AI_MODEL"/);assert.ok(runner.includes('selected summary'));assert.equal(require('../../local/ai/task-settings.cjs').definitions.summary.model,'gpt-6-astra');
  for(const mode of ['--scheduled-context','--codex-context','--finalize-prepared'])assert.ok(runner.includes(mode));
 });
 
