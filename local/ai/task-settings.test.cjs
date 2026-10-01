@@ -9,3 +9,26 @@ test('all tasks retain defaults, independent custom IDs survive restart, and act
  assert.throws(()=>api.save({...initial,kana:{...initial.kana,service:'gemini'}}));
  }finally{previous===undefined?delete process.env.SOSLIST_AI_SETTINGS_FILE:process.env.SOSLIST_AI_SETTINGS_FILE=previous;fs.rmSync(dir,{recursive:true,force:true});}
 });
+
+test('Summary saves Claude Opus and keeps separate Codex and Claude selections across restart',()=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'sos-summary-settings-')),previous=process.env.SOSLIST_AI_SETTINGS_FILE;
+ process.env.SOSLIST_AI_SETTINGS_FILE=path.join(dir,'tasks.json');
+ try{
+  const api=require('./task-settings.cjs'),tasks=api.all();
+  tasks.summary.model='gpt-6.1-sol';tasks.summary.effort='medium';tasks.summary=api.save(tasks).summary;
+  tasks.summary={...tasks.summary,service:'claude',model:'opus',effort:'high'};
+  api.save(tasks);
+  const result=spawnSync(process.execPath,[path.join(__dirname,'task-settings.cjs'),'get'],{encoding:'utf8',env:process.env});
+  assert.equal(result.status,0);
+  const saved=JSON.parse(result.stdout).summary;
+  assert.equal(saved.service,'claude');assert.equal(saved.model,'opus');assert.equal(saved.effort,'high');
+  assert.deepEqual(saved.selections.openai,{model:'gpt-6.1-sol',effort:'medium'});
+  assert.deepEqual(saved.selections.claude,{model:'opus',effort:'high'});
+  assert.equal(api.choice('evidence').service,'openai');
+  api.begin('summary',saved);
+  tasks.summary={...saved,service:'openai',model:'gpt-6.1-sol',effort:'medium'};api.save(tasks);
+  const active=api.all().summary.execution;assert.equal(active.service,'claude');assert.equal(active.model,'opus');
+  assert.throws(()=>api.save({...tasks,summary:{...saved,effort:'ultra'}}));
+  assert.throws(()=>api.save({...tasks,evidence:{...tasks.evidence,service:'claude',model:'opus'}}));
+ }finally{previous===undefined?delete process.env.SOSLIST_AI_SETTINGS_FILE:process.env.SOSLIST_AI_SETTINGS_FILE=previous;fs.rmSync(dir,{recursive:true,force:true});}
+});
