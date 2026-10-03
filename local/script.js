@@ -5,7 +5,6 @@ const SOSLIST_TARGET = {
     mobileUI: false,                              // モバイルUIなし
     deleteColumn: true,                           // 削除ボタン列あり
     dbqProcessor: true,                           // DBQ Processor を起動
-    evidenceReview: true,                         // Codex CLIでQTC Evidence Review
     perReferralStatus: true,                      // 紹介先ごとに受診日・受・済を管理
     servicesCellClass: 'col-services services-cell', // 検査内容クリックでClaim詳細を開く
     referralHeaderDateMode: 'visitDate',
@@ -98,76 +97,6 @@ const handledDetailSaveRequests = new Set();
 const handledDetailReferralRequests = new Set();
 const pendingDeleteButtons = new Map();
 let didBackfillReferralHeaderDates = false;
-
-const evidenceController = window.SOSEvidenceReview.createController({
-    send: request => {
-        const handler = window.webkit?.messageHandlers?.startEvidenceReview;
-        if (!handler) throw new Error('取得はSOSList Localアプリから実行してください。');
-        handler.postMessage(request);
-    },
-    onState: state => {
-        renderEvidenceStatus(state);
-    }
-});
-function renderEvidenceStatus(state = evidenceController.state) {
-        const status = document.getElementById('evidenceStatus');
-        status.hidden = !state.message;
-        let progressTime = state.lastProgressAt && (typeof state.lastProgressAt === 'number'
-            ? state.lastProgressAt : Date.parse(state.lastProgressAt));
-        if (progressTime && progressTime < 1e12) progressTime *= 1000;
-        const elapsedMinutes = progressTime && Number.isFinite(progressTime)
-            ? Math.max(0, Math.floor((Date.now() - progressTime) / 60000)) : null;
-        const details = [];
-        if (state.phase) details.push(`段階: ${state.phase}`);
-        if (state.busy && elapsedMinutes !== null) details.push(`最終進捗: ${elapsedMinutes < 1 ? '1分未満' : `${elapsedMinutes}分前`}`);
-        status.textContent = [state.message, ...details].filter(Boolean).join('\n');
-        status.dataset.state = state.state;
-        const stop = document.getElementById('stopEvidenceButton');
-        stop.hidden = !state.busy;
-        stop.disabled = state.state === 'cancelling';
-        const resume = document.getElementById('resumeEvidenceButton');
-        resume.hidden = state.busy || !state.resumeId;
-        resume.disabled = state.busy;
-        const instructionArea = document.getElementById('resumeInstructionArea');
-        const instruction = document.getElementById('resumeInstruction');
-        if (instructionArea && instruction) {
-            instructionArea.hidden = state.busy || !state.resumeId;
-            instruction.disabled = state.busy;
-            if (instruction.dataset.resumeId !== (state.resumeId || '')) instruction.value = '';
-            instruction.dataset.resumeId = state.resumeId || '';
-        }
-        document.getElementById('fetchEvidenceButton').textContent = state.busy ? '取得中…' : '取得';
-        syncEvidenceButtons(state.busy || !!state.resumeId);
-}
-function syncEvidenceButtons(locked = evidenceController.state.busy || !!evidenceController.state.resumeId) {
-    document.querySelectorAll('#fetchEvidenceButton').forEach(button => { button.disabled = evidenceController.state.busy; });
-    document.querySelectorAll('.evidence-btn').forEach(button => { button.disabled = locked; });
-    const state = evidenceController.state;
-    document.querySelectorAll('.evidence-resume-btn').forEach(button => {
-        const matches = !!state.resumeId && !!state.resumeDocId && button.closest('tr')?.dataset.id === state.resumeDocId;
-        button.hidden = !matches;
-        button.disabled = state.busy || !matches;
-    });
-}
-// Firestore can replace rows while a job is running; the lock survives that render.
-new MutationObserver(() => syncEvidenceButtons()).observe(tableBody, { childList: true });
-window.__sosEvidenceStatus = status => evidenceController.receive(status);
-document.getElementById('fetchEvidenceButton').addEventListener('click', () => evidenceController.start('batch'));
-function resumeEvidenceReview(docId) {
-    const state = evidenceController.state;
-    if (state.busy || (docId && docId !== state.resumeDocId)) return;
-    if (state.resumeId) {
-        const instruction = document.getElementById('resumeInstruction');
-        evidenceController.start('resume', { resumeId: evidenceController.state.resumeId,
-            userInstruction: instruction?.value || '' });
-    }
-}
-document.getElementById('resumeEvidenceButton').addEventListener('click', () => resumeEvidenceReview());
-document.getElementById('stopEvidenceButton').addEventListener('click', () => {
-    window.webkit?.messageHandlers?.stopEvidenceReview?.postMessage({ jobId: evidenceController.state.jobId });
-});
-setInterval(() => { if (evidenceController.state.busy) renderEvidenceStatus(); }, 60_000);
-window.webkit?.messageHandlers?.getEvidenceReviewStatus?.postMessage({});
 
 function syncCDMonitorSettingWithNative() {
     const nativeHandler = window.webkit?.messageHandlers?.setCDMonitoringEnabled;
@@ -451,22 +380,6 @@ tableBody.addEventListener('click', (e) => {
     }
     if (target.closest('.contract-cell, .col-contract')) {
         handleViewPdf(docId);
-        return;
-    }
-    if (target.closest('.evidence-resume-btn')) {
-        resumeEvidenceReview(docId);
-        return;
-    }
-    const evidenceButton = target.closest('.evidence-btn');
-    if (evidenceButton) {
-        if (evidenceController.state.busy || evidenceController.state.resumeId) return;
-        evidenceButton.disabled = true;
-        readInteractionAppointment(docId).then(doc => {
-            if (!doc.exists) throw new Error('予約を読み込めません。再接続後に取得してください。');
-            const data = doc.data();
-            evidenceController.start('single', { ...buildDetailsPayload(docId, data),
-                appointmentDateTimeMs: getCorrectedAppointmentDate(data)?.getTime() ?? null });
-        }).catch(error => alert(error.message)).finally(() => syncEvidenceButtons());
         return;
     }
     const dbqButton = target.closest('.dbq-btn');

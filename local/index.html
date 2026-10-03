@@ -59,14 +59,6 @@
             </div>
         </div>
         <div class="secondary-controls">
-            <div class="evidence-area">
-                <h2>QTC</h2>
-                <div class="evidence-controls">
-                    <button type="button" id="fetchEvidenceButton" title="Data Entry全件の201 BillとEvidence Reviewを取得">取得</button>
-                    <button type="button" id="resumeEvidenceButton" title="中断したEvidence Reviewを再開" hidden>再開</button>
-                    <button type="button" id="stopEvidenceButton" hidden>停止</button>
-                </div>
-            </div>
             <div class="invoice-area">
                 <h2>Invoice印刷</h2>
                 <div class="invoice-controls">
@@ -104,11 +96,6 @@
             </div>
             <button type="button" id="ai-settings-open">設定</button>
     </div>
-        <div id="resumeInstructionArea" class="resume-instruction" hidden>
-            <label for="resumeInstruction">再開時の追加指示（任意）</label>
-            <textarea id="resumeInstruction" rows="2" maxlength="4000" placeholder="中断理由への回答や、今回の対象についての補足を入力できます。"></textarea>
-        </div>
-        <div id="evidenceStatus" class="evidence-status" role="status" aria-live="polite" hidden></div>
         <div class="data-section">
             <table id="appointmentsTable" aria-label="予約一覧">
                 <thead>
@@ -236,7 +223,6 @@
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-storage-compat.js"></script>
     <script src="../shared/core.js?v=20260915-results1"></script>
     <script src="connection.js"></script>
-    <script src="evidence-review.js"></script>
     <script src="script.js?v=20260915-results1"></script>
 
     <script src="interaction.js"></script>

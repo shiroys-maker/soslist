@@ -48,12 +48,16 @@ cp "$BIN_PATH" "$APP_DIR/Contents/MacOS/$APP_NAME"
 
 # ランタイムに必要なファイルだけをバンドルする
 # （config.js・mac-app/ソース・README等を同梱しない）
-for f in index.html script.js connection.js interaction.js evidence-review.js style.css details.html details.js; do
+for f in index.html script.js connection.js interaction.js style.css details.html details.js; do
   cp "$LOCAL_SOURCE_DIR/$f" "$WEB_RESOURCES_DIR/local/"
 done
 cp -R "$LOCAL_SOURCE_DIR/ai" "$WEB_RESOURCES_DIR/local/"
 cp "$LOCAL_SOURCE_DIR/ai-settings.js" "$WEB_RESOURCES_DIR/local/"
-cp -R "$LOCAL_SOURCE_DIR/evidence-review" "$WEB_RESOURCES_DIR/local/"
+mkdir -p "$WEB_RESOURCES_DIR/local/evidence-review"
+# Shared AI catalog transport only; retired collection code is never packaged.
+for f in app-server.cjs codex-path.cjs; do
+  cp "$LOCAL_SOURCE_DIR/evidence-review/$f" "$WEB_RESOURCES_DIR/local/evidence-review/"
+done
 for f in core.js ui.css ui.js pdf-viewer.js pdf-viewer.css; do
   cp "$SHARED_SOURCE_DIR/$f" "$WEB_RESOURCES_DIR/shared/"
 done

@@ -418,7 +418,6 @@ function setupRealtimeListener({ preserveRows = false } = {}) {
                   ? `
                       <td class="col-actions">
                         <button class="delete-btn" aria-label="削除">🗑️</button>
-                        ${SOSLIST_TARGET.evidenceReview ? '<button type="button" class="evidence-btn" title="この予約のQTC Evidence Reviewを取得" aria-label="この予約の情報を取得">取得</button><button type="button" class="evidence-resume-btn" title="この予約の中断した取得を再開" aria-label="この予約の取得を再開" hidden>再開</button>' : ''}
                         ${SOSLIST_TARGET.dbqProcessor ? '<button type="button" class="dbq-btn" aria-label="DBQ Processorを開く">DBQ</button>' : ''}
                       </td>`
                   : '';

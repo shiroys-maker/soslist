@@ -93,18 +93,10 @@ records and stalled reads/writes, including late acknowledgements and duplicate 
 Name, date, phone, PDF and age actions also accept clicks on the surrounding cell
 padding, not only on the text-sized button. Keyboard button activation is unchanged.
 
-### QTC「取得」 / Evidence Review
+### QTC収集UIの休止（2026-10-03）
 
-- 各行の「取得」: その予約だけをCodex app-serverで処理する。画面と同じ補正済み予約日時・氏名・完全な契約番号・検査内容・Firestore文書IDを渡し、ポータルで照合する。
-- 上部QTCの「取得」: EdgeのProvider PortalでData Entry全件を列挙し、201 BillをSOSPDFへ保存・取込確認した後、Evidence Reviewを行う。既存PDFは内容またはリンク元で予約を照合し、再保存しない。0件ならファイル・予約を書き換えず終了する。
-- 現行の `~/.codex/skills/qtc-evidence-review/SKILL.md` と必要な参照を毎回読む。臨床根拠は `notes`、DBQ/Claim/IMO依頼内容は `claimDetail`。既存の実質的なメモを保ち、両方の全文を再読込確認する。紹介状・SHAは現行スキルの範囲に従う。署名・提出・紹介状送信は行わない。
-- 201 Bill取込は実稼働の `~/soslist/openai-processor/km_folder_trigger.sh <exact-pdf-path>` を使用する。既存のフォルダアクションと共通の排他・処理済み判定を利用する。インポータのコード・設定は変更しない。
-- 実行中は他の取得を無効化し、現在の段階・最終進捗からの経過時間・結果を表示する。中断時に再開可能なチェックポイントがあれば「再開」を表示し、前回の対象一覧・追加指示・ドラフトから続きを処理する。停止中の上部「取得」は新規開始の確認にクリーンアップを含め、承認後に旧会話をアーカイブし、復旧データを同じ端末の `EvidenceReview/archived/new-start-*` へ退避して、引継ぎのない新規タスクを開始する。拒否・アーカイブ失敗時は旧復旧記録を保持する。実行中・操作所有権が未解放・旧操作プロセスの終了未確認なら新規開始を拒否する。保存済みPDF・メモ・Claim詳細・SHA入力・端末固有設定は保持する。予約行の新規取得は復旧記録が残っている間は無効にする。アプリ再起動時にも最後の状態を読み戻し、実行中だった状態は中断として表示する。
-- 終了処理中は段階 `cleanup` を表示する。Computer Useの終了通知、復旧threadの後処理、app-serverと取得プロセスの終了を待って完了を表示し、成功時の段階は `complete` にする。既存の成功記録も表示時に `complete` に揃える。終了確認が失敗した場合は完了にせず、復旧用のチェックポイントを保持する。
-- 「停止」とアプリ終了はランナーにSIGTERMを送り、アプリ終了時は最大20秒間、ランナー自身の後片付けを待つ。途中まで保存された情報は戻さない。Edgeは処理中に使用される。
-- app-serverはChatGPTの既存ログインと公式Computer Use連携を使う。予約別・一括ともに `gpt-6-astra` / high を実行要求で固定する（Codex共通設定は変更しない）。APIキーを引き継がず、画面操作とアプリ専用のcheckpoint／Importer操作だけを許可する。中断後に同じsessionを再開できるよう、未完了の間だけCodexに復旧履歴を保持する。完了後はリモートthreadのarchive・deleteを確認してからローカルcheckpointを削除する。ログイン/MFAやツール利用が必要な場合は理由を表示して終了し、解決後に再実行する。
-- Computer Useのアプリ利用許可（Edge・SOSList Local・Finder・プレビュー）はSOSList内の確認画面に表示する。「許可」の応答を該当要求へ返して今回のセッションを継続する。拒否・2分の応答待ち時間切れ・停止時は途中状態を保持する。別アプリ、音声録音、外部認証や追加データの要求は受け付けない。
-- 一括取得・その再開では、201 Billの医療情報を含むPDFのDropbox保存、OpenAI/Codexでの解析、SOSList Firebaseへの登録を始める前に保存先・解析先を明示した確認画面を表示する。「許可して続ける」が押された今回の実行だけに承認情報を渡す。前回の承認や復旧記録を新たな承認として再利用しない。拒否・時間切れでは画面操作を開始しない。
-- ランナー・追加手順はアプリに同梱。最後のUI状態は `~/Library/Application Support/SOSList Local/EvidenceReview/last-status.json` にジョブIDを含めず保存する。結果・チェックポイント・診断情報は同じ所有者限定領域で管理する。作業用要求・スキーマ・生の応答は終了時に削除する。プロセス終了コードだけで成功にせず、構造化結果の件数・対象予約・保存検証フラグを検査する。stderrの原文を画面に表示しない。
+「取得」「再開」「停止」、予約行の収集UI、収集AI設定とネイティブ起動配線を撤去しました。専用コードと旧テストは `../Legacy/evidence-review/` に保持し、ビルド対象・同梱対象から外しています。AIモデル一覧でも使用する `local/evidence-review/app-server.cjs` と `codex-path.cjs` は共有部品として残しています。
 
-検証: `node --test local/tests/*.test.cjs`。app-server境界には合成応答を使い、誤対象、未検証保存、不完全な0件列挙、二重起動、異常終了、子プロセスを含む停止、古い予約の時刻補正を検証する。実患者のある取得は別途ライブ確認が必要。
+予約一覧、PDF閲覧、手動Claim詳細・メモ保存、紹介状作成・保存・印刷、DBQ Processor受け渡し、Summary、XR/CD・Audiogram・カナ・TTSの機能は維持します。患者データ、EvidenceReview復旧記録、設定・資格情報、個人Codexスキルは削除・移行しません。移行後の収集はCodexチャットの `qtc-evidence-review` を明示的に開始します。
+
+範囲・復元手順は [APP-AUTOMATION-RETIREMENT.md](../docs/APP-AUTOMATION-RETIREMENT.md) を参照。テストは `node --test local/tests/*.test.cjs local/ai/*.test.cjs`。本番アプリ起動にはCD監視等の既存機能があるため、この撤去の検証では起動していません。
