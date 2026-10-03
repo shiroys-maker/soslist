@@ -157,16 +157,16 @@
       </div>
     </div>
     
-    <div id="claimDetailModal" class="modal">
+    <div id="claimDetailModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="claimDetailTitle">
         <div class="modal-content claim-detail-content">
-          <h3>Claim詳細</h3>
+          <h3 id="claimDetailTitle">Claim詳細</h3>
           <p id="claimDetailIdentity" class="claim-detail-identity"></p>
           <details class="claim-detail-services">
             <summary>検査内容（Service Bill・編集不可）</summary>
             <p id="claimDetailServices"></p>
           </details>
-          <label for="claimDetailTextarea">Claim detail</label>
-          <textarea id="claimDetailTextarea" rows="22" placeholder="Claim内容や関連情報を入力してください。" spellcheck="false"></textarea>
+          <label for="claimDetailTextarea">Claim詳細本文</label>
+          <textarea id="claimDetailTextarea" rows="22" aria-label="Claim詳細本文" aria-describedby="claimDetailIdentity" placeholder="Claim内容や関連情報を入力してください。" spellcheck="false"></textarea>
           <div class="claim-detail-footer">
             <span id="claimDetailStatus" role="status" aria-live="polite"></span>
             <div class="modal-actions">

@@ -47,7 +47,7 @@ function harness({ failure = false, cacheMissing = false, stalledServer = false 
     } };
     const ctx = vm.createContext({ console: { error() {} }, Intl, Date, Error,
         displayedAppointments: new Map(cacheMissing ? [] : [['synthetic-doc', { ...data }]]),
-        claimDetailSaving: false, editingClaimDetailDocId: null, originalClaimDetail: '',
+        claimDetailSaving: false, editingClaimDetailDocId: null, originalClaimDetail: '', claimDetailReturnFocus: null,
         claimDetailTextarea: { value: '', disabled: false }, claimDetailModal: { style: { display: 'none' } },
         saveClaimDetailBtn: { disabled: false }, cancelClaimDetailBtn: { disabled: false },
         normalizeAppointmentDateTimeMs: () => Date.parse('2026-09-15T09:00:00+09:00'),
@@ -61,6 +61,9 @@ function harness({ failure = false, cacheMissing = false, stalledServer = false 
             }
         }
     });
+    const trigger = { isConnected: true, focus() { ctx.document.activeElement = trigger; } };
+    ctx.document.activeElement = trigger;
+    ctx.claimDetailTextarea.focus = () => { ctx.document.activeElement = ctx.claimDetailTextarea; };
     vm.runInContext(modalFunctions, ctx);
     return { ctx, data, elements, writes, docIds, alerts, reads };
 }
@@ -125,4 +128,21 @@ test('clicking the dedicated Claim detail button routes to the matching appointm
     vm.runInNewContext(clickListener, ctx);
     handler({ target: { classList: { contains: () => false }, closest: selector => selector === 'tr' ? { dataset: { id: 'exact-appointment' } } : selector === '.services-cell' ? {} : null }, preventDefault() { prevented = true; } });
     assert.deepEqual(calls, ['exact-appointment']); assert.equal(prevented, true);
+});
+
+test('Claim modal focuses the complete Unicode draft and restores its opener after saving', async () => {
+    const h = harness();
+    const opener = h.ctx.document.activeElement;
+    const full = '合成Claim café e\u0301 🧪👩🏽‍⚕️\n\n'.repeat(1800) + 'END-CLAIM-全文末尾 ✅\n';
+    h.data.claimDetail = full;
+    h.ctx.displayedAppointments.set('synthetic-doc', { ...h.data });
+    h.ctx.openClaimDetailModal('synthetic-doc');
+    assert.equal(h.ctx.document.activeElement, h.ctx.claimDetailTextarea);
+    assert.equal(h.ctx.claimDetailTextarea.value, full);
+    await h.ctx.saveClaimDetail();
+    assert.equal(h.ctx.document.activeElement, opener);
+    h.ctx.openClaimDetailModal('synthetic-doc');
+    assert.equal(h.ctx.document.activeElement, h.ctx.claimDetailTextarea);
+    assert.equal(h.ctx.claimDetailTextarea.value, full);
+    assert.equal(h.data.notes, 'Preserved memo');
 });

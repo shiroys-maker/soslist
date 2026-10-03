@@ -27,3 +27,9 @@
 本番ソースへの適用は差分の `git apply --check` を先に実行し、変更が増えていれば再照合する。アプリ配布/導入/Mini反映は別工程。旧アプリの実行途中のtaskを停止・移行する工程は含まない。
 
 検証の実結果と環境制限は作業フォルダ `RETIREMENT-REPORT.md` と `validation/` のログを参照。
+
+## Claim詳細の通常AX改善（追加依頼）
+
+Claimモーダルにdialog/titleのARIA属性と「Claim詳細本文」の通常ラベルを付け、開くと本文へフォーカス、閉じる/保存すると接続中の元要素へ戻す。本文は既存textarea.valueのままで、隠れた取得API、テキスト複製、clipboard/TextEdit依存は追加しない。
+
+実コードのモーダルと開閉/保存関数だけを非永続WKWebViewへ載せた、ネットワーク・本番native bridgeのない合成GUIで確認。改善前後とも長いUnicode全文の通常AX取得・編集・選択・保存再表示は一致した。改善後はラベル、開いた直後の本文フォーカス、保存後の元要素フォーカスも確認。保存先は合成in-memory transactionであり、患者データ/Firebaseや既存CUA toolのsnapshot取得を検証したものではない。元の「Claim全文が取れない」症状はこの隔離環境では再現せず、全面的解消を主張しない。

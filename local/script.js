@@ -78,6 +78,7 @@ let editingDateTimeDocId = null;
 let editingClaimDetailDocId = null;
 let originalClaimDetail = '';
 let claimDetailSaving = false;
+let claimDetailReturnFocus = null;
 let editingPhoneDocId = null;
 let unsubscribe;
 const CD_MONITOR_ENABLED_KEY = 'soslist-cd-monitor-enabled';
@@ -749,8 +750,10 @@ function openClaimDetailModal(docId) {
         document.getElementById('claimDetailServices').textContent = (data.services || []).join(', ');
         document.getElementById('claimDetailStatus').textContent = '';
         editingClaimDetailDocId = docId;
+        claimDetailReturnFocus = document.activeElement;
         claimDetailModal.style.display = 'flex';
         document.body.classList.add('modal-open');
+        claimDetailTextarea.focus({ preventScroll: true });
     } catch (error) {
         console.error('Claim詳細の表示エラー:', error);
         alert('Claim詳細を取得できませんでした。再接続後に開き直してください。');
@@ -763,6 +766,9 @@ function closeClaimDetailModal() {
     claimDetailModal.style.display = 'none';
     editingClaimDetailDocId = null;
     document.body.classList.remove('modal-open');
+    const opener = claimDetailReturnFocus;
+    claimDetailReturnFocus = null;
+    if (opener && opener.isConnected && typeof opener.focus === 'function') opener.focus({ preventScroll: true });
 }
 
 async function saveClaimDetail() {
