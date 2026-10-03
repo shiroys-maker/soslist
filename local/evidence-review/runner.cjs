@@ -8,6 +8,7 @@ const { ReviewStore, atomic } = require('./store.cjs');
 const { AppServer, browserConfig } = require('./app-server.cjs');
 const { AppApprovals } = require('./app-approvals.cjs');
 const { resolveCodexPath } = require('./codex-path.cjs');
+const { createReporter } = require('./anonymous-reporter.cjs');
 
 function appApprovalRequest(p) {
     const apps = { 'com.apple.finder': 'Finder', 'com.apple.Preview': 'プレビュー',
@@ -144,6 +145,35 @@ function scopeInstructions(request) {
     throw Error('取得対象の元のモードを確認できません。');
 }
 async function runJob(input, options = {}) {
+    // Keep monitoring outside all setup and cleanup. No request data crosses this boundary.
+    // Observability must never replace a workflow result or its original error.
+    const observe = callback => { try { return callback(); } catch (_) {} };
+    const reporterOptions = { category: 'soslist', kind: 'worker' };
+    if (options.environment) reporterOptions.directory = options.environment.CODEX_ACTIVITY_DIRECTORY || null;
+    const reporter = observe(() => createReporter(reporterOptions));
+    const task = observe(() => reporter?.begin());
+    const approvals = new Set();
+    const activity = {
+        outcome: 'failed', stopping: false,
+        wait() {
+            const token = Symbol(); approvals.add(token); observe(() => task?.awaitApproval()); return token;
+        },
+        resume(token) {
+            approvals.delete(token);
+            if (!approvals.size) observe(() => task?.resolveApproval());
+        }
+    };
+    try { return await runJobBody(input, options, activity); }
+    finally {
+        observe(() => {
+            if (activity.stopping) task?.interrupt();
+            else if (activity.outcome === 'succeeded') task?.succeed();
+            else task?.fail();
+        });
+        observe(() => reporter?.close());
+    }
+}
+async function runJobBody(input, options, monitor) {
     const initial = buildRequest(input.mode, input.mode === 'resume' ? input : input.appointment);
     const home = os.homedir();
     const runRoot = options.runRoot || path.join(home, 'Library/Application Support/SOSList Local/EvidenceReview');
@@ -184,6 +214,7 @@ async function runJob(input, options = {}) {
     const fail = error => { if (!done && !stopping) { accepting = false; rejectTurn(error); } };
     const stop = () => {
         if (stopping || done) return; stopping = true; accepting = false;
+        monitor.stopping = true;
         emit('cancelling', '停止しています。途中成果と未確認の保存状態を保持します。');
         rejectTurn(Error('利用者の操作で停止しました。'));
     };
@@ -287,12 +318,13 @@ async function runJob(input, options = {}) {
                 const request = appApprovalRequest(p);
                 let action = 'decline';
                 if (accepting && request && options.requestAppApproval) {
+                    const approval = monitor.wait();
                     emit('progress', `${request.appName}の利用許可を待っています。`);
                     let timeout;
                     try {
                         action = await Promise.race([options.requestAppApproval(request), completion.catch(() => 'decline'),
                             new Promise(resolve => { timeout = setTimeout(() => resolve('decline'), duration('approval', 120000)); })]);
-                    } catch (_) {} finally { clearTimeout(timeout); }
+                    } catch (_) {} finally { clearTimeout(timeout); monitor.resume(approval); }
                 }
                 action = accepting && action === 'accept' ? 'accept' : 'decline';
                 server.write({ id: message.id, result: { action, content: null, _meta: action === 'accept' ? { persist: 'session' } : null } });
@@ -385,10 +417,11 @@ async function runJob(input, options = {}) {
             if (cleanupPending) consent = cleanupConsent(consent, previous.length);
             emit('starting', '資料確認・保存と対象SHA入力の許可を確認しています。');
             let timeout, action;
+            const approval = options.requestIntakeConsent ? monitor.wait() : null;
             try {
                 action = await Promise.race([options.requestIntakeConsent?.(consent), completion.catch(() => 'decline'),
                     new Promise(resolve => { timeout = setTimeout(() => resolve('decline'), duration('approval', 120000)); })]);
-            } finally { clearTimeout(timeout); }
+            } finally { clearTimeout(timeout); if (approval) monitor.resume(approval); }
             if (stopping || action !== 'accept') throw Error('資料確認・保存の許可を確認できません。「再開」で確認画面の内容を承認してください。');
             if (cleanupPending) {
                 phase = 'cleanup'; emit('progress', '旧会話をアーカイブし、前回の復旧データを退避しています。');
@@ -468,6 +501,8 @@ async function runJob(input, options = {}) {
         process.removeListener('SIGTERM', stop); process.removeListener('SIGINT', stop);
         try { if (terminal) emit(terminal.state, terminal.message, terminal); }
         finally { fs.unlinkSync(lockFile); }
+        // A result returned from the try block is insufficient: finally can fail cleanup.
+        monitor.outcome = ['completed', 'no_records'].includes(terminal?.state) ? 'succeeded' : 'failed';
     }
 }
 if (require.main === module) {
