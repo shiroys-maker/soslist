@@ -43,10 +43,12 @@ if [[ ! -x "$NODE_BIN" ]]; then
 fi
 
 
+"$NODE_BIN" "$ROOT_DIR/local/ai/task-settings.cjs" selected summary > "$AI_FILE"
+
 if [[ "$MODE" == "scheduled" ]]; then
-  context_json=$(cd "$DAILY_BRIEF_DIR" && source .env && "$NODE_BIN" generate-brief.js --scheduled-context)
+  context_json=$(cd "$DAILY_BRIEF_DIR" && source .env && "$NODE_BIN" generate-brief.js --scheduled-context --summary-ai-file "$AI_FILE")
 else
-  context_json=$(cd "$DAILY_BRIEF_DIR" && source .env && "$NODE_BIN" generate-brief.js --codex-context --date "$TARGET_DATE")
+  context_json=$(cd "$DAILY_BRIEF_DIR" && source .env && "$NODE_BIN" generate-brief.js --codex-context --date "$TARGET_DATE" --summary-ai-file "$AI_FILE")
 fi
 print -r -- "$context_json" > "$CONTEXT_FILE"
 
@@ -72,7 +74,6 @@ fi
 
 mkdir -p "$out_dir"
 print "[$(date -Iseconds)] ${ymd}: Summary 原稿を生成します。"
-"$NODE_BIN" "$ROOT_DIR/local/ai/task-settings.cjs" selected summary > "$AI_FILE"
 AI_SERVICE=$("$NODE_BIN" -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).service)' "$AI_FILE")
 AI_MODEL=$("$NODE_BIN" -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).model)' "$AI_FILE")
 AI_EFFORT=$("$NODE_BIN" -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).effort)' "$AI_FILE")

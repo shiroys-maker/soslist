@@ -2,7 +2,7 @@
 /**
  * daily-brief / generate-brief.js
  * ------------------------------------------------------------------
- * 翌日(JST)の予約を Firestore から取得し、検査内容(services)・Claim詳細(claimDetail)・メモ(notes)を
+ * 翌日(JST)の予約を Firestore から取得し、検査内容(services)とClaim詳細(claimDetail)を（元メモは前段で要約・保存）
  * Codex用の入力を準備し、作成済みの要約 + 二人対話のポッドキャスト台本から、
  * クラウドTTSで音声(WAV/MP3)を出力する。
  *
@@ -441,20 +441,13 @@ function sampleAppointments() {
   ];
 }
 
-const CLAIM_AND_NOTES_INSTRUCTIONS = `# Claim詳細とメモの読み込み(最重要)
-- claimDetail は独立して保存された「Claim詳細」、notes は予約詳細画面の「メモ」。同じ予約の両方を全文読み、サマリーと台本の両方に反映する。
-- claim名・対象部位・左右・DBQ・IMO依頼は claimDetail を主な情報源とし、notes にだけあるclaim・IMO情報も補完する。claimDetail が空または未設定の従来予約は notes を根拠にする。
-- notes が空でも claimDetail に情報があれば必ず取り入れる。claim・IMOが notes の先頭にあるとは限らない。
-- 同じclaimが両方にあれば重複計上しない。別の予約の情報は混ぜず、同一患者でも契約番号・予約IDごとに扱う。
-- claimDetail と notes の内容が食い違う場合は、どちらかで黙って上書きせず、情報源を添えて相違と要確認事項を明記する。
-- IMO 種類は Direct / 2ndly / TERA などの明記された依頼をclaimごとに抽出する。同一claimに複数種類の依頼があればすべて残す。
-  同一予約内で「片頭痛は Direct、IBS は TERA、頚椎は 2ndly」のように混在しうるため、claim名ごとにIMOを対応づける。
-- 分類の一般ルールより claimDetail・notes の明示的な依頼内容を優先する。IMOの記載がないことだけを理由に「IMO不要」と断定せず、必要な情報がなければ「記載なし／要確認」とする。
-- notes の過去の病歴・受傷機転・手術歴・前回評価・経過・現在症状を時系列の文章で具体的に要約し、claimDetail に病歴があればそれも統合する。services は検査の種類の補足として使う。
-- services の単語の読み上げだけで済ませず、claimDetail と notes の具体情報を今回の検査・問診・DBQの確認点へ結びつける。
-- Audiologyでも claimDetail または notes にIMO依頼や注意点があれば省略しない。両方に特記がない場合だけ、氏名・年齢・性別・「聴覚のみ」と簡潔に述べてよい。
-- 各予約で、検査医が問診時に確認すべき項目を具体的に挙げる。IMOが必要な案件は nexus・受傷機転・発症時期・症状の継続、follow up案件は前回評価との比較・悪化/改善の客観的所見を重視する。
-- 入力にない病歴・診断・依頼を補わない。情報が少ない場合は不足を明記し、分量を満たすために事実を作らない。`;
+const CLAIM_DETAIL_INSTRUCTIONS = `# Claim詳細の読み込み(最重要)
+- claimDetail（Claimリストと保存済みEvidence Review）だけをサマリーと台本の臨床本文の情報源にする。元メモは前段で要約・保存済みで、ここでは入力しない。
+- claim名・部位・左右・DBQ・IMO種類をclaimごとに対応づける。同一予約の別claimや依頼を省略せず、重複計上しない。
+- ClaimリストとEvidence Reviewが食い違う場合は情報源を添えて相違・要確認を明記する。どちらかで黙って上書きしない。
+- Evidence Review内の病歴、受傷、治療、経過、現在症状、前回評価を時系列にまとめ、具体的な検査・問診の確認点へ結びつける。
+- AudiologyでもIMO依頼や注意点を省略しない。入力にない病歴・診断・IMO依頼・否定所見は補わず、不足は記載なし／要確認とする。
+- 予約ID・契約番号ごとに扱い、別予約の情報を混ぜない。servicesは検査種類の補足に使う。`;
 
 function buildGeminiPrompt(appts, ymd) {
   const targetChars = Math.round(PODCAST_MINUTES * 360);
@@ -486,7 +479,7 @@ function buildGeminiPrompt(appts, ymd) {
           「診断(評価)が前回から変わったか=悪化/改善の有無」が焦点。
       II. それ以外(過去にrejectされている、または初回claim): IMOが必要。
 
-${CLAIM_AND_NOTES_INSTRUCTIONS}
+${CLAIM_DETAIL_INSTRUCTIONS}
 
 # claim集計の作り方(必須)
 - 1日全体の claim 集計は書かないこと。` + "`brief.md`" + ` の冒頭に全体集計段落は不要。
@@ -496,7 +489,7 @@ ${CLAIM_AND_NOTES_INSTRUCTIONS}
 - それ以外は「整形以外」に入れる。
 - 各予約の claim まとめの形式は次に合わせる:
   整形以外4件（副鼻腔炎、GERD、片頭痛(direct IMO)、IBS(TERA IMO)）、整形4件（頚椎(2ndly IMO)、腰椎、膝(2ndly IMO)、足）
-- claim 名は claimDetail と notes から日本語で短く正規化し、対象部位・左右を保って重複なく列挙する。同一予約の別claimは省略しない。
+- claim 名は claimDetail から日本語で短く正規化し、対象部位・左右を保って重複なく列挙する。同一予約の別claimは省略しない。
 - IMO 種類が Direct / 2ndly / TERA のものだけ claim 名の後ろに「(<種類> IMO)」を付ける。
 - Direct は表示時に direct IMO、2ndly は 2ndly IMO、TERA は TERA IMO とする。
 
@@ -517,7 +510,7 @@ ${CLAIM_AND_NOTES_INSTRUCTIONS}
 - 聞き手は専門家なので、Audiology / SHA / service connected / IMO / nexus / DBQ 等の用語説明や基礎解説は不要。
 
 # 予約一覧(JSON)
-${JSON.stringify(appts, null, 2)}
+${JSON.stringify(appts.map(({ notes, ...appointment }) => appointment), null, 2)}
 `;
 }
 
@@ -530,6 +523,16 @@ async function collectGenerationInputs(opts = {}) {
     appts = await fetchAppointments(range);
   }
 
+  if (opts.prepareEvidence) {
+    const { prepareAppointmentsEvidence, saveEvidenceReviewBatch, readBackEvidenceReview } = require('./evidence-review.cjs');
+    const { summarizeNote } = require('./note-review-ai.cjs');
+    const selected = opts.selected || require('../local/ai/task-settings.cjs').choice('summary');
+    appts = await prepareAppointmentsEvidence(appts, {
+      summarize: opts.summarize || (notes => summarizeNote(notes, selected)),
+      saveBatch: opts.saveBatch || (changes => saveEvidenceReviewBatch(getFirestore(), changes)),
+      readBack: opts.readBack || (changes => readBackEvidenceReview(getFirestore(), changes)),
+    });
+  }
   return {
     ymd: range.ymd,
     count: appts.length,
@@ -542,7 +545,7 @@ async function collectGenerationInputs(opts = {}) {
  * Codex Scheduledが判断に使う定時実行コンテキスト。
  * 文章生成はCodexに委ね、音声合成・Firestore・Storage保存は既存処理に残す。
  */
-async function getScheduledSummaryContext() {
+async function getScheduledSummaryContext(options = {}) {
   const ymd = await findNextUpcomingAppointmentDate();
   if (!ymd) {
     return { action: 'skip', reason: '翌日以降に予約がありません。' };
@@ -568,7 +571,7 @@ async function getScheduledSummaryContext() {
     };
   }
 
-  const inputs = await collectGenerationInputs({ date: ymd });
+  const inputs = await collectGenerationInputs({ ...options, date: ymd, prepareEvidence: true });
   return {
     action: 'generate',
     ymd,
@@ -584,12 +587,12 @@ async function getScheduledSummaryContext() {
  * 手動の Codex Summary が使う対象日固定のコンテキスト。
  * 既存成果物の判定は UI 側で済ませ、ここでは常に指定日の原稿を作り直す。
  */
-async function getCodexSummaryContext(date) {
+async function getCodexSummaryContext(date, options = {}) {
   if (!date) {
     throw new Error('--codex-context には --date YYYY-MM-DD が必要です。');
   }
 
-  const inputs = await collectGenerationInputs({ date });
+  const inputs = await collectGenerationInputs({ ...options, date, prepareEvidence: true });
   const existing = getExistingBriefResult(inputs.ymd);
   return {
     action: 'generate',
@@ -759,6 +762,11 @@ module.exports = {
   finalizeManualImport,
 };
 
+function summaryOptions() {
+  const index = args.indexOf('--summary-ai-file');
+  return index >= 0 ? { selected: JSON.parse(fs.readFileSync(args[index + 1], 'utf8')) } : {};
+}
+
 // ----------------------------- CLI -----------------------------
 if (require.main === module) {
   (async () => {
@@ -769,13 +777,13 @@ if (require.main === module) {
     }
 
     if (flags.scheduledContext) {
-      const result = await getScheduledSummaryContext();
+      const result = await getScheduledSummaryContext(summaryOptions());
       process.stdout.write(JSON.stringify(result, null, 2));
       return;
     }
 
     if (flags.codexContext) {
-      const result = await getCodexSummaryContext(flags.date);
+      const result = await getCodexSummaryContext(flags.date, summaryOptions());
       process.stdout.write(JSON.stringify(result, null, 2));
       return;
     }

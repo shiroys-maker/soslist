@@ -23,7 +23,7 @@ function harness(t) {
   const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), 'soslist-claim-test-'));
   t.after(() => fs.rmSync(outputDir, { recursive: true, force: true }));
   const ctx = vm.createContext({
-    require, module: { exports: {} }, __dirname: path.dirname(generator),
+    require: require("node:module").createRequire(generator), module: { exports: {} }, __dirname: path.dirname(generator),
     process: { argv: [], env: { OUTPUT_DIR: outputDir } },
     console: { error() {} },
   });
@@ -46,13 +46,11 @@ function harness(t) {
 }
 
 function assertEvidenceRules(prompt) {
-  assert.match(prompt, /claimDetail[^\n]*notes[^\n]*全文/);
-  assert.match(prompt, /notes が空でも claimDetail/);
-  assert.match(prompt, /claimDetail が空または未設定[^\n]*notes/);
+  assert.match(prompt, /claimDetail[^\n]*だけ/);
+  assert.match(prompt, /元メモ[^\n]*入力しない/);
   assert.match(prompt, /重複計上しない/);
   assert.match(prompt, /情報源を添えて相違/);
-  assert.match(prompt, /Audiologyでも claimDetail または notes にIMO依頼や注意点があれば省略しない/);
-  assert.doesNotMatch(prompt, /判定はnotesを最優先|notes\s*先頭から|無い場合だけ「IMO不要」|notesが空のAudiology予約だけ/);
+  assert.equal(promptAppointments(prompt).some(x => 'notes' in x), false);
 }
 
 function promptAppointments(prompt) {
@@ -71,15 +69,16 @@ test('Firestore input preserves separate multiline claims, notes, and same-patie
     assert.equal(appt.notes, records[i].notes);
   }
   assert.equal(inputs.appointments[1].isAudiology, true);
-  assert.equal(JSON.stringify(promptAppointments(inputs.prompt)), JSON.stringify(inputs.appointments));
+  assert.equal(JSON.stringify(promptAppointments(inputs.prompt)), JSON.stringify(inputs.appointments.map(({notes,...x})=>x)));
   assertEvidenceRules(inputs.prompt);
   assert.equal(JSON.stringify(records), before);
 });
 
 test('manual and scheduled contexts deliver the same complete claim-aware prompt', async t => {
   const api = harness(t).module.exports;
-  const manual = await api.getCodexSummaryContext(ymd);
-  const scheduled = await api.getScheduledSummaryContext();
+  const options={selected:{service:'claude',model:'fixture-model',effort:'medium'},summarize:async notes=>'Synthetic digest: '+notes,saveBatch:async()=>{},readBack:async()=>{}};
+  const manual = await api.getCodexSummaryContext(ymd,options);
+  const scheduled = await api.getScheduledSummaryContext(options);
   for (const context of [manual, scheduled]) {
     assert.equal(context.action, 'generate');
     assert.equal(context.ymd, ymd);
