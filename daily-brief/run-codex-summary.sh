@@ -9,10 +9,12 @@ RUNTIME_DIR="$DAILY_BRIEF_DIR/.runtime"
 LOG_DIR="$DAILY_BRIEF_DIR/logs"
 MODE="manual"
 TARGET_DATE=""
+FINALIZE_FLAGS=()
 
 while (( $# > 0 )); do
   case "$1" in
     --scheduled) MODE="scheduled" ;;
+    --skip-prune) FINALIZE_FLAGS+=(--skip-prune) ;;
     --date)
       (( $# >= 2 )) || { print -u2 "--date requires YYYY-MM-DD"; exit 2; }
       TARGET_DATE="$2"
@@ -62,7 +64,7 @@ if [[ "$action" == "skip" ]]; then
 fi
 
 if [[ "$action" == "finalize" ]]; then
-  (cd "$DAILY_BRIEF_DIR" && source .env && "$NODE_BIN" generate-brief.js --finalize-prepared --date "$ymd")
+  (cd "$DAILY_BRIEF_DIR" && source .env && "$NODE_BIN" generate-brief.js --finalize-prepared --date "$ymd" "${FINALIZE_FLAGS[@]}")
   print "[$(date -Iseconds)] ${ymd}: 後段処理を完了しました。"
   exit 0
 fi
@@ -110,5 +112,5 @@ if [[ ! -s "$out_dir/brief.md" || ! -s "$out_dir/podcast-script.txt" ]]; then
   exit 1
 fi
 
-(cd "$DAILY_BRIEF_DIR" && source .env && "$NODE_BIN" generate-brief.js --finalize-prepared --date "$ymd")
+(cd "$DAILY_BRIEF_DIR" && source .env && "$NODE_BIN" generate-brief.js --finalize-prepared --date "$ymd" "${FINALIZE_FLAGS[@]}")
 print "[$(date -Iseconds)] ${ymd}: Summary の後段処理を完了しました。"

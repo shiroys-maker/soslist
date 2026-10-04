@@ -32,5 +32,5 @@ if [[ ! -x "$RUNNER" ]]; then
 fi
 
 print "[$(date -Iseconds)] Codex定時Summary処理を開始します。"
-"$RUNNER" --scheduled
+"$RUNNER" --scheduled "$@"
 print "[$(date -Iseconds)] Codex定時Summary処理を終了しました。"

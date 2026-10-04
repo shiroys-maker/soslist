@@ -60,6 +60,7 @@ const args = process.argv.slice(2);
 const flags = {
   sample: args.includes('--sample'),
   noAudio: args.includes('--no-audio'),
+  skipPrune: args.includes('--skip-prune'),
   dumpPrompt: args.includes('--dump-prompt'),
   finalizeManual: args.includes('--finalize-manual'),
   finalizePrepared: args.includes('--finalize-prepared'),
@@ -355,10 +356,10 @@ async function pruneStoredPodcasts() {
   return datedFiles.slice(0, PODCAST_STORAGE_KEEP_DAYS).map((entry) => entry.ymd);
 }
 
-async function uploadPodcastAndPrune(ymd, audioFile) {
+async function uploadPodcastAndPrune(ymd, audioFile, options = {}) {
   const storagePath = await uploadPodcastToStorage(ymd, audioFile);
   if (!storagePath) return null;
-  await pruneStoredPodcasts();
+  if (options.skipPrune !== true) await pruneStoredPodcasts();
   return storagePath;
 }
 
@@ -375,7 +376,7 @@ function latestLocalPodcastFiles() {
     .slice(0, PODCAST_STORAGE_KEEP_DAYS);
 }
 
-async function syncLatestPodcastAudio() {
+async function syncLatestPodcastAudio(options = {}) {
   const podcasts = latestLocalPodcastFiles();
   if (!podcasts.length) {
     log('同期対象の podcast.mp3 はありません。');
@@ -397,6 +398,7 @@ async function syncLatestPodcastAudio() {
     }, { merge: true });
     uploaded.push({ ymd, audioStoragePath });
   }
+  if (options.skipPrune === true) return { uploaded, retained: null, pruneSkipped: true };
   const retained = await pruneStoredPodcasts();
   return { uploaded, retained };
 }
@@ -744,7 +746,7 @@ async function finalizeManualImport(opts = {}) {
     summaryMarkdown,
     audioFile,
   };
-  result.audioStoragePath = await uploadPodcastAndPrune(result.ymd, result.audioFile);
+  result.audioStoragePath = await uploadPodcastAndPrune(result.ymd, result.audioFile, opts);
   log('Firestore 保存中...');
   await saveBriefToFirestore(result);
   log('完了。');
@@ -789,7 +791,7 @@ if (require.main === module) {
     }
 
     if (flags.finalizeManual || flags.finalizePrepared) {
-      const result = await finalizeManualImport({ date: flags.date, noAudio: flags.noAudio });
+      const result = await finalizeManualImport({ date: flags.date, noAudio: flags.noAudio, skipPrune: flags.skipPrune });
       process.stdout.write(JSON.stringify({
         ymd: result.ymd,
         count: result.count,
@@ -800,7 +802,7 @@ if (require.main === module) {
     }
 
     if (flags.syncAudio) {
-      const result = await syncLatestPodcastAudio();
+      const result = await syncLatestPodcastAudio({ skipPrune: flags.skipPrune });
       process.stdout.write(JSON.stringify(result, null, 2));
       return;
     }

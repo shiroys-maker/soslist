@@ -90,6 +90,7 @@ CLI連携は [Codex公式の非対話モード・構造化出力仕様](https://
 - `node generate-brief.js --finalize-prepared --date YYYY-MM-DD`：保存済み原稿からGemini音声を作成し保存・同期。
 - `--finalize-manual` は同じ後段処理の互換入口。`--no-audio` はこの後段処理でのみ音声を省略。
 - `npm run sync-audio`：既存音声の同期。
+- Storageの古い音声を削除せず処理する場合は `run-codex-summary.sh --date YYYY-MM-DD --skip-prune`。Summary／Evidence Review保存／Podcast／Gemini音声／Storage uploadは通常どおり実行し、Storageの保持数整理だけを省略します。`--finalize-prepared`、`--finalize-manual`、`--no-audio`併用、`node generate-brief.js --sync-audio --skip-prune`、`npm run sync-audio -- --skip-prune`でも利用できます。定時wrapperへの明示指定も後段へ引き継ぎます。flagなしの保持数2件は変更しません。対象日の既存音声へのuploadは通常どおり上書きするため、再生成前のbackupは必要です。
 - 引数なし／旧API生成オプションのみではエラー終了し、生成しません。
 
 必要な設定はFirebase認証、Gemini音声設定、Codex読み変換設定です。
