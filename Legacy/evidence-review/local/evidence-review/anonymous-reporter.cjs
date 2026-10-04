@@ -6,7 +6,7 @@ const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const utc=()=>new Date().toISOString().replace(/\.\d{3}Z$/,'Z');
 const disabled=()=>({enabled:false,begin:()=>({id:null,transition(){},awaitApproval(){return null;},resolveApproval(){},succeed(){},fail(){},interrupt(){}}),heartbeat(){},close(){}});
 // Read only the explicitly installed anonymous-output config; never app/patient settings.
-function configuredDirectory(home=os.homedir()) {
+function configuredSettings(home=os.homedir()) {
  const base=path.join(home,'Library/Application Support/Codex Activity Monitor');let fd;
  try {
   const owner=os.userInfo().uid,dir=fs.lstatSync(base);
@@ -15,12 +15,18 @@ function configuredDirectory(home=os.homedir()) {
   const info=fs.fstatSync(fd);
   if(!info.isFile()||info.uid!==owner||(info.mode&0o077)!==0||info.size>4096)return null;
   const config=JSON.parse(fs.readFileSync(fd,'utf8'));
-  if(Object.keys(config).sort().join(',')!=='reportsDirectory,schemaVersion'||config.schemaVersion!==1||typeof config.reportsDirectory!=='string'||!path.isAbsolute(config.reportsDirectory))return null;
-  return config.reportsDirectory;
+  if(!['reportsDirectory,schemaVersion','deviceID,reportsDirectory,schemaVersion'].includes(Object.keys(config).sort().join(','))||config.schemaVersion!==1||typeof config.reportsDirectory!=='string'||!path.isAbsolute(config.reportsDirectory)||config.deviceID!==undefined&&!['macbook','macMini'].includes(config.deviceID))return null;
+  return {reportsDirectory:config.reportsDirectory,deviceID:config.deviceID||'macbook'};
  } catch {return null;} finally {if(fd!==undefined)try{fs.closeSync(fd);}catch{}}
 }
+function configuredDirectory(home=os.homedir()){return configuredSettings(home)?.reportsDirectory||null;}
+function configuredDevice(home=os.homedir()){
+ const settings=configuredSettings(home);if(settings)return settings.deviceID;
+ try{fs.lstatSync(path.join(home,'Library/Application Support/Codex Activity Monitor/config.json'));return null;}catch(error){return error.code==='ENOENT'?'macbook':null;}
+}
 function defaultDirectory(){return process.env.CODEX_ACTIVITY_DIRECTORY!==undefined?process.env.CODEX_ACTIVITY_DIRECTORY||null:configuredDirectory();}
-function createReporter({category,device='macbook',kind='worker',directory=defaultDirectory()}={}){
+function createReporter({category,device=configuredDevice(),kind='worker',directory=defaultDirectory()}={}){
+ if(device===null)return disabled(); // Invalid private device config must not relabel a worker.
  if(!['soslist','dbq','other'].includes(category)||!['macbook','macMini'].includes(device)||!['app','worker'].includes(kind))throw Error('Invalid anonymous reporter configuration');
  if(!directory||!path.isAbsolute(directory))return disabled();
  try{const s=fs.lstatSync(directory);if(!s.isDirectory()||s.isSymbolicLink()||s.uid!==os.userInfo().uid||(s.mode&0o077)!==0)return disabled();}catch{return disabled();}
@@ -57,3 +63,4 @@ function createReporter({category,device='macbook',kind='worker',directory=defau
 }
 exports.createReporter=createReporter;
 exports.configuredDirectory=configuredDirectory;
+exports.configuredDevice=configuredDevice;
