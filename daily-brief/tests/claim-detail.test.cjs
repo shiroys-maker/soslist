@@ -85,6 +85,8 @@ test('manual and scheduled contexts deliver the same complete claim-aware prompt
     assert.equal(context.count, records.length);
     assertEvidenceRules(context.prompt);
     assert.equal(promptAppointments(context.prompt)[1].claimDetail, records[1].claimDetail);
+    assert.match(promptAppointments(context.prompt)[0].claimDetail,/\nEvidence Review\n/);
+    assert.doesNotMatch(promptAppointments(context.prompt)[0].claimDetail,/\n## Evidence Review\n/);
   }
   assert.equal(manual.prompt, scheduled.prompt);
 });

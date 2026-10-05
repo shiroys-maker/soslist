@@ -3,6 +3,27 @@ const {createHash}=require('node:crypto');
 const checksum=body=>createHash('sha256').update(body,'utf8').digest('hex');
 const BEGIN='<!-- soslist-evidence-review:start -->',END='<!-- soslist-evidence-review:end -->';
 const heading=/^(?:#{1,6}\s+)?Evidence\s*Review\s*:?[ \t]*\r?$/gim;
+function validateEvidenceReviewText(body){
+ if(typeof body!=='string'||!body.trim())throw Error('Evidence Reviewの要約が空または不正です。');
+ // Reject formatting rather than stripping it: conversion can erase clinical
+ // punctuation, table relationships, source URLs or ordered chronology.
+ const markdown=[
+  /^[ \t]{0,3}#{1,6}(?:[ \t]+|$)/m,
+  /^[ \t]*(?:`{3,}|~{3,})/m, /`/,
+  /^(?: {4}|\t)[ \t]*\S/m,
+  /^[ \t]*(?:[-+*][ \t]+|\d+[.)][ \t]+|>)/m,
+  /^[ \t]*(?:[-=]+|(?:-[ \t]*){3,}|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})[ \t]*$/m,
+  /^[ \t]*\|/m, /^[ \t]*\S[^\n]*\|[^\n]*\r?\n[ \t]*:?-+:?[ \t]*\|/m,
+  /\*\*[\s\S]+?\*\*|__[\s\S]+?__|~~[\s\S]+?~~/,
+  /(?:^|[^\w])\*[^\s*][^*]*\*(?=$|[^\w])/m,
+  /(?:^|[^\w])_[^\s_][^_]*_(?=$|[^\w])/m,
+  /!?\[[^\]\n]*\]\([\s\S]*?\)/, /\[[^\]\n]+\]\[[^\]\n]*\]/,
+  /^[ \t]*\[[^\]\n]+\]:[ \t]*\S/m, /\[\^[^\]\n]+\]/,
+  /<!--[\s\S]*?-->|<!--|<\/?[a-z][^>\n]*>|<(?:https?:\/\/|mailto:)[^>\n]+>/i,
+ ];
+ if(markdown.some(pattern=>pattern.test(body))||[...body.matchAll(heading)].length)throw Error('Evidence ReviewがPlain Textではありません。Markdown等を自動変換せず、Claim詳細を保持して保存前に停止します。');
+ return body.trim();
+}
 function reviewRange(text){
  const headings=[...text.matchAll(heading)],begins=[...text.matchAll(/<!-- soslist-evidence-review:start -->/g)],ends=[...text.matchAll(/<!-- soslist-evidence-review:end -->/g)];
  if(headings.length>1||begins.length>1||ends.length>1||begins.length!==ends.length)throw Error('Evidence Reviewの境界が曖昧です。元内容を保持して停止します。');
@@ -18,9 +39,10 @@ function reviewRange(text){
  throw Error('既存Evidence Reviewに管理境界がありません。元内容を保持して停止します。');
 }
 function replaceEvidenceReview(claimDetail,body){
- if(typeof claimDetail!=='string'||typeof body!=='string'||!body.trim()||body.includes(BEGIN)||body.includes(END)||/^#{1,6}\s/m.test(body)||[...body.matchAll(heading)].length)throw Error('Evidence Reviewの要約が空または不正です。');
+ if(typeof claimDetail!=='string')throw Error('Evidence Reviewの保存先が不正です。');
+ body=validateEvidenceReviewText(body);
  const range=reviewRange(claimDetail),prefix=range?claimDetail.slice(0,range.start):claimDetail,suffix=range?claimDetail.slice(range.end):'';
- return prefix.replace(/(?:\r?\n)*$/,'')+'\n\n## Evidence Review\n'+BEGIN+'\n'+body.trim()+'\n'+END+'\n<!-- soslist-evidence-review:sha256:'+checksum(body.trim())+' -->'+(suffix?(suffix.startsWith('\n')?suffix:'\n\n'+suffix):'');
+ return prefix.replace(/(?:\r?\n)*$/,'')+'\n\nEvidence Review\n'+BEGIN+'\n'+body+'\n'+END+'\n<!-- soslist-evidence-review:sha256:'+checksum(body)+' -->'+(suffix?(suffix.startsWith('\n')?suffix:'\n\n'+suffix):'');
 }
 async function prepareAppointmentsEvidence(appointments,{summarize,saveBatch,readBack}){
  const changes=[],prepared=[];
@@ -55,4 +77,4 @@ async function saveEvidenceReviewBatch(db,changes){
   for(const {change,ref}of snapshots)if(change.claimDetail!==change.original)transaction.update(ref,{claimDetail:change.claimDetail});
  });
 }
-module.exports={BEGIN,END,reviewRange,replaceEvidenceReview,prepareAppointmentsEvidence,saveEvidenceReviewBatch,readBackEvidenceReview};
+module.exports={BEGIN,END,validateEvidenceReviewText,reviewRange,replaceEvidenceReview,prepareAppointmentsEvidence,saveEvidenceReviewBatch,readBackEvidenceReview};

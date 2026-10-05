@@ -1,11 +1,24 @@
 const {test}=require('node:test'),assert=require('node:assert/strict');
-const {BEGIN,END,reviewRange,replaceEvidenceReview,prepareAppointmentsEvidence,saveEvidenceReviewBatch,readBackEvidenceReview}=require('../evidence-review.cjs');
+const {BEGIN,END,validateEvidenceReviewText,reviewRange,replaceEvidenceReview,prepareAppointmentsEvidence,saveEvidenceReviewBatch,readBackEvidenceReview}=require('../evidence-review.cjs');
 const claims='## Claims\nDBQ: Neck\nClaim: left knee — TERA\n';
 const body='Synthetic record [fixture.pdf p.2], 2021. Left-sided symptoms.\nPending tests; no full-folder review asserted. 🙂';
 test('claim prefix and suffix preserved; exactly one blank line; managed updates are idempotent',()=>{
- const first=replaceEvidenceReview(claims,body);assert.ok(first.startsWith(claims+'\n## Evidence Review\n'));assert.equal(reviewRange(first).body,body);
+ const first=replaceEvidenceReview(claims,body);assert.ok(first.startsWith(claims+'\nEvidence Review\n'));assert.equal(reviewRange(first).body,body);
  assert.equal(replaceEvidenceReview(first,body),first);
- const suffix='\n\n## Manual remarks\nKEEP EXACT\n',second=replaceEvidenceReview(first+suffix,'New synthetic summary');assert.ok(second.endsWith(suffix));assert.equal(second.match(/## Evidence Review/g).length,1);
+ const suffix='\n\n## Manual remarks\nKEEP EXACT\n',second=replaceEvidenceReview(first+suffix,'New synthetic summary');assert.ok(second.endsWith(suffix));assert.equal(second.match(/^Evidence Review$/gm).length,1);
+});
+test('legacy sealed Markdown heading remains readable; only future generated block uses literal heading',()=>{
+ const suffix='\n\n## Manual remarks\nKEEP EXACT\n';
+ const legacy=replaceEvidenceReview(claims,body).replace('\nEvidence Review\n','\n## Evidence Review\n')+suffix;
+ assert.equal(reviewRange(legacy).body,body);
+ const next=replaceEvidenceReview(legacy,body);assert.equal(next,replaceEvidenceReview(claims,body)+suffix);
+ assert.equal(replaceEvidenceReview(next,body),next);
+});
+const formattedBodies=['# Heading','   ## Heading','**bold**','__bold__','*italic*','_italic_','~~deleted~~','`value`','```text\nKeep this\n```','~~~\nKeep this\n~~~','- item','+ item','* item','1. item','2) item','> quote','Title\n---','Title\n=','***','_ _ _','| Date | Finding |\n| --- | --- |\n| 2021 | Left |','Date | Finding\n- | -\n2021 | Left','[source](https://example.test/source)','![scan](scan.png)','[source][ref]','[ref]: https://example.test/source','Finding[^1]','<b>finding</b>','<!-- marker -->','<!-- incomplete','<https://example.test/source>','    code','\tcode','Evidence Review'];
+test('Markdown and control markup fail closed without lossy clinical text conversion',()=>{
+ for(const text of formattedBodies){assert.throws(()=>validateEvidenceReviewText(text),/Plain Text/,text);assert.throws(()=>replaceEvidenceReview(claims,text),/Plain Text/,text);}
+ const exact='Synthetic [fixture_A.pdf p.2–3], 2021-02-03: left L4_L5, 5/5, -10°, +2, 3*4 mm, SpO2 < 95%, ±2 dB.\n\nSource: https://example.test/source?q=a_b&date=2021-02-03. Conflicting right-sided symptoms; pending MRI; no diagnosis inferred.';
+ assert.equal(validateEvidenceReviewText(exact),exact);assert.equal(reviewRange(replaceEvidenceReview(claims,exact)).body,exact);
 });
 test('unmarked, edited, duplicate and broken managed reviews stop without changing original text',()=>{
  for(const input of [claims+'\nEvidence Review\nManual content',replaceEvidenceReview(claims,body).replace('2021','2022'),claims+'\n'+BEGIN+'\n'+body,replaceEvidenceReview(claims,body)+'\n## Evidence Review\nDuplicate'])assert.throws(()=>replaceEvidenceReview(input,'new'),/Evidence Review/);
@@ -21,6 +34,12 @@ test('AI failure and concurrent edits retain every original Claim and prevent do
   const f=fixture(),before=JSON.stringify(f.records);let calls=0,readback=false;
   await assert.rejects(prepareAppointmentsEvidence(f.appointments(),{summarize:async()=>{if(++calls===2){if(fail==='ai')throw Error('Synthetic failure');if(fail==='notes')f.records.b.notes+=' external';if(fail==='claims')f.records.b.claimDetail+=' external';}return body;},saveBatch:changes=>saveEvidenceReviewBatch(f.db,changes),readBack:async()=>{readback=true;}}));
   assert.equal(f.updates,0);assert.equal(f.records.a.claimDetail,claims);assert.equal(readback,false);if(fail==='ai')assert.equal(JSON.stringify(f.records),before);
+ }
+});
+test('noncompliant AI result on a later appointment prevents the entire batch and downstream',async()=>{
+ for(const text of formattedBodies){const f=fixture(),before=JSON.stringify(f.records);let calls=0,saved=false,read=false;
+  await assert.rejects(prepareAppointmentsEvidence(f.appointments(),{summarize:async()=>++calls===1?body:text,saveBatch:async()=>{saved=true;},readBack:async()=>{read=true;}}),/Plain Text/);
+  assert.equal(saved,false);assert.equal(read,false);assert.equal(JSON.stringify(f.records),before);
  }
 });
 test('readback mismatch stops downstream; empty notes preserve existing Claim',async()=>{
