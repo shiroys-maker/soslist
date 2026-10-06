@@ -3,26 +3,54 @@ const {createHash}=require('node:crypto');
 const checksum=body=>createHash('sha256').update(body,'utf8').digest('hex');
 const BEGIN='<!-- soslist-evidence-review:start -->',END='<!-- soslist-evidence-review:end -->';
 const heading=/^(?:#{1,6}\s+)?Evidence\s*Review\s*:?[ \t]*\r?$/gim;
+// Categories are fixed identifiers, never excerpts of clinical input.
+const formatRules=[
+ ['heading',/^[ \t]{0,3}#{1,6}(?:[ \t]+|$)/m],
+ ['fence',/^[ \t]*(?:`{3,}|~{3,})/m], ['inline-code',/`/],
+ ['indentation',/^(?: {4}|\t)[ \t]*\S/m],
+ ['list-or-quote',/^[ \t]*(?:[-+*][ \t]+|\d+[.)][ \t]+|>)/m],
+ ['divider',/^[ \t]*(?:[-=]+|(?:-[ \t]*){3,}|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})[ \t]*$/m],
+ ['table',/^[ \t]*\|/m], ['table',/^[ \t]*\S[^\n]*\|[^\n]*\r?\n[ \t]*:?-+:?[ \t]*\|/m],
+ ['emphasis',/\*\*[\s\S]+?\*\*|__[\s\S]+?__/], ['strikethrough',/~~[\s\S]+?~~/],
+ ['emphasis',/(?:^|[^\w])\*[^\s*][^*]*\*(?=$|[^\w])/m],
+ ['emphasis',/(?:^|[^\w])_[^\s_][^_]*_(?=$|[^\w])/m],
+ ['link',/!?\[[^\]\n]*\]\([\s\S]*?\)/], ['link',/\[[^\]\n]+\]\[[^\]\n]*\]/],
+ ['reference',/^[ \t]*\[[^\]\n]+\]:[ \t]*\S/m], ['reference',/\[\^[^\]\n]+\]/],
+ ['html-or-marker',/<!--[\s\S]*?-->|<!--|<\/?[a-z][^>\n]*>|<(?:https?:\/\/|mailto:)[^>\n]+>/i],
+ ['evidence-review-heading',heading],
+];
+function evidenceReviewFormatIssues(body){return [...new Set(formatRules.filter(([,pattern])=>{pattern.lastIndex=0;const found=pattern.test(body);pattern.lastIndex=0;return found;}).map(([name])=>name))];}
 function validateEvidenceReviewText(body){
  if(typeof body!=='string'||!body.trim())throw Error('Evidence Reviewの要約が空または不正です。');
  // Reject formatting rather than stripping it: conversion can erase clinical
  // punctuation, table relationships, source URLs or ordered chronology.
- const markdown=[
-  /^[ \t]{0,3}#{1,6}(?:[ \t]+|$)/m,
-  /^[ \t]*(?:`{3,}|~{3,})/m, /`/,
-  /^(?: {4}|\t)[ \t]*\S/m,
-  /^[ \t]*(?:[-+*][ \t]+|\d+[.)][ \t]+|>)/m,
-  /^[ \t]*(?:[-=]+|(?:-[ \t]*){3,}|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})[ \t]*$/m,
-  /^[ \t]*\|/m, /^[ \t]*\S[^\n]*\|[^\n]*\r?\n[ \t]*:?-+:?[ \t]*\|/m,
-  /\*\*[\s\S]+?\*\*|__[\s\S]+?__|~~[\s\S]+?~~/,
-  /(?:^|[^\w])\*[^\s*][^*]*\*(?=$|[^\w])/m,
-  /(?:^|[^\w])_[^\s_][^_]*_(?=$|[^\w])/m,
-  /!?\[[^\]\n]*\]\([\s\S]*?\)/, /\[[^\]\n]+\]\[[^\]\n]*\]/,
-  /^[ \t]*\[[^\]\n]+\]:[ \t]*\S/m, /\[\^[^\]\n]+\]/,
-  /<!--[\s\S]*?-->|<!--|<\/?[a-z][^>\n]*>|<(?:https?:\/\/|mailto:)[^>\n]+>/i,
- ];
- if(markdown.some(pattern=>pattern.test(body))||[...body.matchAll(heading)].length)throw Error('Evidence ReviewがPlain Textではありません。Markdown等を自動変換せず、Claim詳細を保持して保存前に停止します。');
+ const issues=evidenceReviewFormatIssues(body);
+ if(issues.length){const error=Error('Evidence ReviewがPlain Textではありません。Markdown等を自動変換せず、Claim詳細を保持して保存前に停止します。 [format: '+issues.join(', ')+']');error.code='EVIDENCE_REVIEW_FORMAT';error.issues=issues;throw error;}
  return body.trim();
+}
+function formattingOnlyReference(draft){
+ const allowed=new Set(['heading','fence','inline-code','indentation','emphasis','evidence-review-heading']);
+ if(evidenceReviewFormatIssues(draft).some(issue=>!allowed.has(issue)))return null;
+ let reference=draft.trim();
+ // This projection is used ONLY for equality checks, never returned for saving.
+ // Ambiguous structures (tables, lists, deletion markup, links) cannot be repaired.
+ if(evidenceReviewFormatIssues(reference).includes('fence')){
+  const wrapper=reference.match(/^(`{3,}|~{3,})(?:text|plaintext|plain text|markdown|md)?[ \t]*\r?\n([\s\S]*?)\r?\n\1$/i);
+  if(!wrapper)return null;reference=wrapper[2];
+ }
+ reference=reference.replace(heading,'').replace(/^[ \t]{0,3}#{1,6}[ \t]+/gm,'').replace(/^(?: {4}|\t)[ \t]*/gm,'');
+ reference=reference.replace(/(?<!\w)(\*\*|__)(\S[\s\S]*?\S|\S)\1(?!\w)/g,'$2');
+ reference=reference.replace(/(^|[^\w])([*_])([^\s*_][^\n]*?)\2(?=$|[^\w])/gm,'$1$3');
+ reference=reference.replace(/`([^`\r\n]+)`/g,'$1');
+ try{validateEvidenceReviewText(reference);}catch{return null;}
+ return reference.replace(/\s+/g,' ').trim();
+}
+function assertFormattingOnlyCorrection(draft,corrected){
+ validateEvidenceReviewText(corrected);
+ const reference=formattingOnlyReference(draft);
+ if(reference===null||reference!==corrected.replace(/\s+/g,' ').trim()){
+  const error=Error('Evidence Reviewの書式修正で本文の一致を確認できません。Claim詳細を保持して保存前に停止します。');error.code='EVIDENCE_REVIEW_CONTENT_CHANGED';throw error;
+ }
 }
 function reviewRange(text){
  const headings=[...text.matchAll(heading)],begins=[...text.matchAll(/<!-- soslist-evidence-review:start -->/g)],ends=[...text.matchAll(/<!-- soslist-evidence-review:end -->/g)];
@@ -77,4 +105,4 @@ async function saveEvidenceReviewBatch(db,changes){
   for(const {change,ref}of snapshots)if(change.claimDetail!==change.original)transaction.update(ref,{claimDetail:change.claimDetail});
  });
 }
-module.exports={BEGIN,END,validateEvidenceReviewText,reviewRange,replaceEvidenceReview,prepareAppointmentsEvidence,saveEvidenceReviewBatch,readBackEvidenceReview};
+module.exports={BEGIN,END,evidenceReviewFormatIssues,formattingOnlyReference,assertFormattingOnlyCorrection,validateEvidenceReviewText,reviewRange,replaceEvidenceReview,prepareAppointmentsEvidence,saveEvidenceReviewBatch,readBackEvidenceReview};
