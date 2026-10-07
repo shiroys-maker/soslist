@@ -63,6 +63,12 @@ SOSList Localの手動・定時Summaryは `run-codex-summary.sh` からCodex CLI
 | `podcast-speech.txt` | Codexで読みを補正した音声専用の台本 |
 | `podcast-speech.json` | 読みの置換内容・検証結果・元台本に紐づくキャッシュ |
 
+Summaryは完成済み原稿の日付を確認してFirestoreへ先に保存し、本文・件数・音声状態を独立再読取で照合してから、読み変換・TTS・音声アップロードへ進みます。音声失敗時も先行保存したSummaryを保持し、以前の有効な音声メタデータは上書きしません。音声成功後に音声メタデータを保存・再読取し、最後に保持数整理を行います。
+
+`--no-audio` は既存原稿のSummary保存だけを行い、読み変換・TTS・既存音声のupload・保持数整理を呼びません。対象日・保存済み原稿を維持した復旧には `--finalize-prepared --date YYYY-MM-DD --no-audio --skip-prune` を使用します。`--count N` で予約件数を渡せます。件数が指定されない後段再試行では保存済み件数を保持します。CLIの成功出力は日付・件数・保存状態などのメタデータのみで、Summary本文は出しません。
+
+TTSの失敗ログはHTTP状態と固定許可リストにあるAPIエラーコード・正規化したフィールド名・理由だけを出します。キー、患者本文、生API応答、エラーmessageや任意の値はログへ出しません。JSONでない応答や未知のコードは `unclassified` とし、HTTP 400を自動再試行しません。モデル・声・台本を自動変更しません。
+
 ### Gemini 3.8 Flash TTS（既定）
 
 音声は `gemini-3.8-flash-tts` で生成します。`GEMINI_API_KEY`（または `GOOGLE_API_KEY`）を `.env` に設定してください。進行役は女性の `Kore`、専門役は男性の `Alnilam`。話者と「自然で落ち着いた日本語の会話。明瞭に。」という話し方の指定を `speech_metadata` に付け、台本本文とは分けて送ります。本文の書き換えや追加説明は行いません。
@@ -92,9 +98,9 @@ CLI連携は [Codex公式の非対話モード・構造化出力仕様](https://
 - `node generate-brief.js --codex-context --date YYYY-MM-DD`：手動Codex生成の入力を準備。
 - `node generate-brief.js --scheduled-context`：定時Codex生成の入力を準備。
 - `node generate-brief.js --finalize-prepared --date YYYY-MM-DD`：保存済み原稿からGemini音声を作成し保存・同期。
-- `--finalize-manual` は同じ後段処理の互換入口。`--no-audio` はこの後段処理でのみ音声を省略。
+- `--finalize-manual` は同じ後段処理の互換入口。`--no-audio` はこの後段処理でSummary保存だけを行い、音声関連処理を呼びません。
 - `npm run sync-audio`：既存音声の同期。
-- Storageの古い音声を削除せず処理する場合は `run-codex-summary.sh --date YYYY-MM-DD --skip-prune`。Summary／Evidence Review保存／Podcast／Gemini音声／Storage uploadは通常どおり実行し、Storageの保持数整理だけを省略します。`--finalize-prepared`、`--finalize-manual`、`--no-audio`併用、`node generate-brief.js --sync-audio --skip-prune`、`npm run sync-audio -- --skip-prune`でも利用できます。定時wrapperへの明示指定も後段へ引き継ぎます。flagなしの保持数2件は変更しません。対象日の既存音声へのuploadは通常どおり上書きするため、再生成前のbackupは必要です。
+- Storageの古い音声を削除せず処理する場合は `run-codex-summary.sh --date YYYY-MM-DD --skip-prune`。Summary／Evidence Review保存／Podcast／Gemini音声／Storage uploadは通常どおり実行し、Storageの保持数整理だけを省略します。`--finalize-prepared`、`--finalize-manual`、`--no-audio`併用（音声関連処理を省略）、`node generate-brief.js --sync-audio --skip-prune`、`npm run sync-audio -- --skip-prune`でも利用できます。定時wrapperへの明示指定も後段へ引き継ぎます。flagなしの保持数2件は変更しません。対象日の既存音声へのuploadは通常どおり上書きするため、再生成前のbackupは必要です。
 - 引数なし／旧API生成オプションのみではエラー終了し、生成しません。
 
 必要な設定はFirebase認証、Gemini音声設定、Codex読み変換設定です。

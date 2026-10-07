@@ -57,6 +57,8 @@ print -r -- "$context_json" > "$CONTEXT_FILE"
 action=$("$NODE_BIN" -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).action)' "$CONTEXT_FILE")
 ymd=$("$NODE_BIN" -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).ymd || "")' "$CONTEXT_FILE")
 out_dir=$("$NODE_BIN" -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).outDir || "")' "$CONTEXT_FILE")
+count=$("$NODE_BIN" -e 'const value=JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).count;if(value!=null&&(!Number.isSafeInteger(value)||value<0))process.exit(1);process.stdout.write(value==null?"":String(value));' "$CONTEXT_FILE")
+[[ -z "$count" ]] || FINALIZE_FLAGS+=(--count "$count")
 
 if [[ "$action" == "skip" ]]; then
   print "[$(date -Iseconds)] ${ymd:-対象日なし}: $($NODE_BIN -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).reason || "skip")' "$CONTEXT_FILE")"
@@ -106,8 +108,7 @@ fi
 if [[ ! -s "$out_dir/brief.md" || ! -s "$out_dir/podcast-script.txt" ]]; then
   print -u2 "Summary 原稿生成に失敗しました。brief.md または podcast-script.txt が保存されていません。"
   if [[ -s "$last_message_file" ]]; then
-    print -u2 "Codex last message:"
-    sed -n '1,120p' "$last_message_file" >&2
+    print -u2 "Codex最終メッセージはローカルに保持しています。本文はログへ出しません。"
   fi
   exit 1
 fi

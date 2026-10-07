@@ -89,6 +89,46 @@ function extractWav(result) {
   return wav;
 }
 
+const API_ERROR_CODES = new Set([
+  'invalid_request', 'failed_precondition', 'out_of_range', 'parameter_unknown', 'authentication',
+  'payment_required', 'permission_denied', 'not_found', 'model_not_found', 'already_exists', 'aborted',
+  'rate_limit_exceeded', 'quota_exceeded', 'too_many_requests', 'cancelled', 'api_error', 'unimplemented',
+  'service_unavailable', 'deadline_exceeded', 'safety', 'recitation', 'language', 'prohibited_content',
+  'spii', 'blocklist', 'content_blocked',
+]);
+const CANONICAL_STATUSES = new Set(['INVALID_ARGUMENT', 'FAILED_PRECONDITION', 'UNAUTHENTICATED',
+  'PERMISSION_DENIED', 'RESOURCE_EXHAUSTED', 'NOT_FOUND', 'UNAVAILABLE', 'INTERNAL', 'DEADLINE_EXCEEDED']);
+const ERROR_REASONS = new Set(['API_KEY_INVALID', 'API_KEY_EXPIRED', 'API_KEY_SERVICE_BLOCKED',
+  'API_KEY_HTTP_REFERRER_BLOCKED', 'API_KEY_IP_ADDRESS_BLOCKED', 'BILLING_DISABLED', 'SERVICE_DISABLED',
+  'CONSUMER_INVALID', 'ACCESS_TOKEN_SCOPE_INSUFFICIENT']);
+const ERROR_FIELDS = new Set(['model', 'store', 'input', 'response_format', 'response_format.type',
+  'response_format.mime_type', 'response_format.sample_rate', 'generation_config',
+  'generation_config.speech_config', 'generation_config.speech_config.mode',
+  'generation_config.speech_config.speakers', 'generation_config.speech_config.speakers[].speaker',
+  'generation_config.speech_config.speakers[].voice', 'input[].content[].type',
+  'input[].content[].annotations[].type', 'input[].content[].annotations[].speaker',
+  'input[].content[].annotations[].style']);
+function ttsErrorDetails(body) {
+  // All emitted strings come from fixed allowlists. Messages, values and raw bodies are never logged.
+  const error = body?.error;
+  const code = API_ERROR_CODES.has(error?.code) ? error.code : 'unclassified';
+  const status = CANONICAL_STATUSES.has(error?.status) ? error.status : null;
+  const fields = new Set(), reasons = new Set();
+  const addField = field => {
+    if (typeof field !== 'string' || field.length > 160) return;
+    const normalized = field.replace(/\[\d+\]/g, '[]');
+    if (ERROR_FIELDS.has(normalized)) fields.add(normalized);
+  };
+  addField(error?.field);
+  for (const detail of Array.isArray(error?.details) ? error.details.slice(0, 16) : []) {
+    if (detail?.['@type'] === 'type.googleapis.com/google.rpc.BadRequest') {
+      for (const violation of Array.isArray(detail.fieldViolations) ? detail.fieldViolations.slice(0, 16) : []) addField(violation?.field);
+    }
+    if (detail?.['@type'] === 'type.googleapis.com/google.rpc.ErrorInfo' && ERROR_REASONS.has(detail.reason)) reasons.add(detail.reason);
+  }
+  return { code, status, fields: [...fields].slice(0, 8), reasons: [...reasons].slice(0, 8) };
+}
+
 async function requestAudio(dialogue, config, fetchImpl = fetch) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), config.timeoutMs);
@@ -102,8 +142,16 @@ async function requestAudio(dialogue, config, fetchImpl = fetch) {
       const hint = response.status === 401 || response.status === 403 ? 'APIキー・API利用権限を確認してください。'
         : response.status === 429 ? 'APIの割り当て・課金設定を確認してください。'
           : response.status === 404 ? '指定したモデルの利用可否を確認してください。' : 'API設定・接続を確認してください。';
-      // Do not echo provider responses, which can include request content or credential details.
-      throw new Error(`Gemini TTSに失敗しました (HTTP ${response.status})。${hint}`);
+      let details = ttsErrorDetails(null);
+      try { details = ttsErrorDetails(await response.json()); } catch (_) { /* Non-JSON errors stay anonymous. */ }
+      const status = Number.isInteger(response.status) && response.status >= 100 && response.status <= 599 ? response.status : 'unknown';
+      const safeDetail = ['code=' + details.code, ...(details.status ? ['status=' + details.status] : []),
+        ...(details.fields.length ? ['fields=' + details.fields.join(',')] : []),
+        ...(details.reasons.length ? ['reasons=' + details.reasons.join(',')] : [])].join('; ');
+      const error = new Error(`Gemini TTSに失敗しました (HTTP ${status})。${hint} [${safeDetail}]`);
+      error.httpStatus = status;
+      error.providerDetails = details;
+      throw error;
     }
     return extractWav(await response.json());
   } catch (error) {
@@ -143,4 +191,4 @@ async function synthesizeGemini(dialogue, outBase, { runLocalTool, speed, log, f
   } finally { monitor.end('tts',{model:config.model,effort:''});fs.rmSync(workdir, { recursive: true, force: true }); }
 }
 
-module.exports = { settings, validateSettings, splitDialogue, buildRequest, extractWav, requestAudio, synthesizeGemini };
+module.exports = { ttsErrorDetails, settings, validateSettings, splitDialogue, buildRequest, extractWav, requestAudio, synthesizeGemini };

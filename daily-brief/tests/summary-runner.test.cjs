@@ -11,7 +11,7 @@ for(const mode of ['manual','scheduled'])for(const action of ['generate','finali
  fs.copyFileSync(path.join(repo,'daily-brief/claude-summary.cjs'),path.join(daily,'claude-summary.cjs'));
  fs.writeFileSync(path.join(daily,'.env'),'');
  fs.writeFileSync(settings,JSON.stringify({summary:{service:'claude',model:'opus',effort:'high'}}));
- const context={action,ymd:'2099-01-01',outDir:out,briefPath:path.join(out,'brief.md'),scriptPath:path.join(out,'podcast-script.txt'),prompt:'Synthetic appointment-free Summary'};
+ const context={action,count:2,ymd:'2099-01-01',outDir:out,briefPath:path.join(out,'brief.md'),scriptPath:path.join(out,'podcast-script.txt'),prompt:'Synthetic appointment-free Summary'};
  if(action==='finalize')fs.writeFileSync(context.briefPath,'# 2099-01-01 Synthetic existing Summary');
  fs.writeFileSync(path.join(daily,'generate-brief.js'),`const fs=require('fs');if(process.argv.includes('--finalize-prepared')){if(!fs.readFileSync(${JSON.stringify(context.briefPath)},'utf8').includes('2099-01-01'))throw Error('missing Summary');fs.writeFileSync(${JSON.stringify(path.join(root,'finalized.json'))},JSON.stringify(process.argv.slice(2)));}else{const args=process.argv.slice(2),snapshot=JSON.parse(fs.readFileSync(args[args.indexOf('--summary-ai-file')+1]));if(snapshot.model!=='opus'||snapshot.service!=='claude')throw Error('starting snapshot lost');fs.writeFileSync(${JSON.stringify(settings)},JSON.stringify({summary:{service:'openai',model:'changed-during-preprocessing',effort:'low'}}));fs.writeFileSync(${JSON.stringify(path.join(root,'context-mode.json'))},JSON.stringify(process.argv.slice(2)));process.stdout.write(${JSON.stringify(JSON.stringify(context))});}`);
  const exe=path.join(root,'claude');
@@ -22,7 +22,7 @@ for(const mode of ['manual','scheduled'])for(const action of ['generate','finali
  assert.equal(result.status,0,result.stderr);
  if(action==='generate'){const invocation=JSON.parse(fs.readFileSync(capture));assert.equal(invocation.args[invocation.args.indexOf('--model')+1],'opus');assert.equal(invocation.args[invocation.args.indexOf('--effort')+1],'high');}
  else assert.equal(fs.existsSync(capture),false);
- assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root,'finalized.json'))),['--finalize-prepared','--date','2099-01-01',...(skipPrune?['--skip-prune']:[])]);
+ assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root,'finalized.json'))),['--finalize-prepared','--date','2099-01-01',...(skipPrune?['--skip-prune']:[]),'--count','2']);
  const contextMode=JSON.parse(fs.readFileSync(path.join(root,'context-mode.json')));assert.ok(contextMode.includes(mode==='manual'?'--codex-context':'--scheduled-context'));assert.ok(contextMode.includes('--summary-ai-file'));
  if(action==='generate'){const record=JSON.parse(fs.readFileSync(path.join(root,'AIExecutions/summary.json')));assert.equal(record.service,'claude');assert.equal(record.model,'opus');assert.equal(record.effort,'high');assert.equal(record.state,'finished');}
  assert.equal(JSON.parse(fs.readFileSync(settings)).summary.service,'openai');

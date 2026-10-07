@@ -90,3 +90,30 @@ test('failed later chunks retain existing audio; success atomically publishes 1.
   assert.equal(fs.readFileSync(result.mp3Path, 'utf8'), 'new-mp3');
   assert.deepEqual(fs.readdirSync(dir), ['podcast.mp3']);
 });
+
+test('TTS error diagnostics use fixed allowlists and omit patient text, keys, unknown identifiers and raw responses', async () => {
+  const { ttsErrorDetails } = require('../gemini-tts');
+  const secret = 'SYNTHETIC_PRIVATE_VALUE';
+  const body = { error: { code: 'parameter_unknown', message: secret, field: 'generation_config.speech_config.mode',
+    details: [{ '@type': 'type.googleapis.com/google.rpc.BadRequest', fieldViolations: [
+      { field: 'input[0].content[4].annotations[0].speaker', description: secret },
+      { field: secret, description: secret },
+    ] }, { '@type': 'type.googleapis.com/google.rpc.ErrorInfo', reason: 'API_KEY_INVALID', metadata: { key: secret } },
+      { '@type': 'type.googleapis.com/google.rpc.ErrorInfo', reason: secret }] } };
+  assert.deepEqual(ttsErrorDetails(body), { code: 'parameter_unknown', status: null,
+    fields: ['generation_config.speech_config.mode', 'input[].content[].annotations[].speaker'], reasons: ['API_KEY_INVALID'] });
+  assert.deepEqual(ttsErrorDetails({ error: { code: secret, status: secret, message: secret } }), { code: 'unclassified', status: null, fields: [], reasons: [] });
+  assert.deepEqual(ttsErrorDetails({ error: { code: 400, status: 'FAILED_PRECONDITION', message: secret } }), { code: 'unclassified', status: 'FAILED_PRECONDITION', fields: [], reasons: [] });
+  await assert.rejects(requestAudio([{ speaker: 'A', text: 'SYNTHETIC TEXT' }], config,
+    async () => ({ ok: false, status: 400, json: async () => body })), error => {
+      assert.match(error.message, /HTTP 400/);assert.match(error.message, /code=parameter_unknown/);
+      assert.ok(!error.message.includes(secret));assert.ok(!error.stack.includes(secret));assert.ok(!JSON.stringify(error.providerDetails).includes(secret));return true;
+    });
+});
+test('non-JSON or unrecognized provider errors stay anonymous and HTTP 400 is not retried', async () => {
+  for (const json of [async () => { throw Error('SYNTHETIC_PRIVATE_PARSE_CONTEXT'); }, async () => ({ error: { code: 'patient_identifier', message: 'SYNTHETIC_PRIVATE_VALUE' } })]) {
+    let calls = 0;
+    await assert.rejects(requestAudio([], config, async () => { calls++; return { ok: false, status: 400, json }; }), error => /code=unclassified/.test(error.message) && !/SYNTHETIC_PRIVATE|patient_identifier/.test(error.message));
+    assert.equal(calls, 1);
+  }
+});

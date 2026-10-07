@@ -68,9 +68,16 @@ const flags = {
   scheduledContext: args.includes('--scheduled-context'),
   codexContext: args.includes('--codex-context'),
   date: null,
+  count: null,
 };
 const dateIdx = args.indexOf('--date');
 if (dateIdx !== -1 && args[dateIdx + 1]) flags.date = args[dateIdx + 1];
+const countIdx = args.indexOf('--count');
+if (countIdx !== -1) {
+  const value = args[countIdx + 1];
+  if (!/^(?:0|[1-9]\d*)$/.test(value || '') || !Number.isSafeInteger(Number(value))) throw new Error('予約件数の指定が不正です。');
+  flags.count = Number(value);
+}
 
 const OUTPUT_DIR = process.env.OUTPUT_DIR
   ? path.resolve(process.env.OUTPUT_DIR)
@@ -274,41 +281,40 @@ function getExistingBriefResult(ymd) {
   };
 }
 
-async function saveBriefToFirestore(result) {
+async function saveBriefToFirestore(result, { preserveAudio = false } = {}) {
   if (!result?.ymd || !result?.summaryMarkdown) {
     throw new Error('Firestore に保存するブリーフ情報が不足しています。');
   }
-
   const admin = getFirebaseAdmin();
   const db = getFirestore();
-  const audioStoragePath = result.audioStoragePath
-    || (result.audioFile && path.extname(result.audioFile).toLowerCase() === '.mp3'
-      ? podcastStoragePath(result.ymd)
-      : null);
-  const payload = {
-    ymd: result.ymd,
-    summaryMarkdown: result.summaryMarkdown,
-    appointmentCount: Number.isFinite(result.count) ? result.count : null,
-    hasAudio: Boolean(result.audioFile),
-    audioFilename: result.audioFile ? path.basename(result.audioFile) : null,
-    audioStoragePath,
-    outDir: result.outDir || null,
-    mdPath: result.mdPath || null,
-    source: 'daily-brief-local',
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-  };
-
-  await db.collection('appointments').doc(`${DAILY_BRIEF_MIRROR_PREFIX}${result.ymd}`).set({
-    docType: 'dailyBrief',
-    dailyBriefDate: result.ymd,
-    summaryMarkdown: result.summaryMarkdown,
-    appointmentCount: payload.appointmentCount,
-    hasAudio: payload.hasAudio,
-    audioFilename: payload.audioFilename,
-    audioStoragePath: payload.audioStoragePath,
-    source: payload.source,
-    updatedAt: payload.updatedAt,
-  }, { merge: true });
+  const ref = db.collection('appointments').doc(`${DAILY_BRIEF_MIRROR_PREFIX}${result.ymd}`);
+  let expected;
+  await db.runTransaction(async transaction => {
+    const snapshot = await transaction.get(ref);
+    const previous = snapshot.exists ? snapshot.data() : {};
+    const validCount = value => Number.isSafeInteger(value) && value >= 0;
+    const audioStoragePath = result.audioStoragePath
+      || (result.audioFile && path.extname(result.audioFile).toLowerCase() === '.mp3'
+        ? podcastStoragePath(result.ymd) : null);
+    const audio = preserveAudio
+      ? { hasAudio: previous.hasAudio === true, audioFilename: previous.audioFilename || null,
+          audioStoragePath: previous.audioStoragePath || null }
+      : { hasAudio: Boolean(result.audioFile), audioFilename: result.audioFile ? path.basename(result.audioFile) : null,
+          audioStoragePath };
+    expected = {
+      docType: 'dailyBrief', dailyBriefDate: result.ymd, summaryMarkdown: result.summaryMarkdown,
+      appointmentCount: validCount(result.count) ? result.count : validCount(previous.appointmentCount) ? previous.appointmentCount : null,
+      ...audio, source: 'daily-brief-local',
+    };
+    transaction.set(ref, { ...expected, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+  });
+  // Independent readback before any paid audio work. Never print saved clinical text.
+  const readback = await ref.get();
+  const saved = readback.exists ? readback.data() : {};
+  if (!readback.exists || Object.entries(expected).some(([key, value]) => saved[key] !== value)) {
+    throw new Error('Summary保存の再読取が一致しません。後続処理を停止しました。');
+  }
+  return expected;
 }
 
 function podcastStoragePath(ymd) {
@@ -722,33 +728,34 @@ async function finalizeManualImport(opts = {}) {
     }
   }
 
-  const dialogue = parsePodcastScript(scriptTxt);
-  fs.writeFileSync(
-    path.join(outDir, 'dialogue.json'),
-    JSON.stringify(dialogue, null, 2)
-  );
-  log('台本解析完了。');
-
-  let audioFile = null;
-  if (!opts.noAudio) {
-    log(`音声生成中 (${audioDescription()}) ...`);
-    const synthesized = await synthesizePodcast(null, dialogue, path.join(outDir, 'podcast'));
-    audioFile = synthesized.mp3Path || synthesized.wavPath;
-  } else {
-    audioFile = findExistingAudioFile(outDir);
+  const result = {
+    ymd: range.ymd, count: Number.isSafeInteger(opts.count) && opts.count >= 0 ? opts.count : null,
+    outDir, mdPath, summaryMarkdown, audioFile: null,
+  };
+  log('Summaryを音声処理前に保存中...');
+  const initial = await saveBriefToFirestore(result, { preserveAudio: true });
+  result.count = initial.appointmentCount;
+  result.hasAudio = initial.hasAudio;
+  result.audioStoragePath = initial.audioStoragePath;
+  log('Summary先行保存・再読取完了。');
+  if (opts.noAudio) {
+    // Summary-only recovery neither calls AI/TTS nor uploads/prunes existing audio.
+    result.audioFile = findExistingAudioFile(outDir);
+    log('音声処理なしでSummary保存を完了しました。');
+    return result;
   }
 
-  const result = {
-    ymd: range.ymd,
-    count: Number.isFinite(opts.count) ? opts.count : null,
-    outDir,
-    mdPath,
-    summaryMarkdown,
-    audioFile,
-  };
-  result.audioStoragePath = await uploadPodcastAndPrune(result.ymd, result.audioFile, opts);
-  log('Firestore 保存中...');
-  await saveBriefToFirestore(result);
+  const dialogue = parsePodcastScript(scriptTxt);
+  fs.writeFileSync(path.join(outDir, 'dialogue.json'), JSON.stringify(dialogue, null, 2));
+  log('台本解析完了。');
+  log(`音声生成中 (${audioDescription()}) ...`);
+  const synthesized = await synthesizePodcast(null, dialogue, path.join(outDir, 'podcast'));
+  result.audioFile = synthesized.mp3Path || synthesized.wavPath;
+  result.audioStoragePath = await uploadPodcastToStorage(result.ymd, result.audioFile);
+  const complete = await saveBriefToFirestore(result);
+  result.hasAudio = complete.hasAudio;
+  // Retention cleanup must not prevent an uploaded audio/Summary pair from being saved.
+  if (result.audioStoragePath && opts.skipPrune !== true) await pruneStoredPodcasts();
   log('完了。');
   return result;
 }
@@ -791,11 +798,12 @@ if (require.main === module) {
     }
 
     if (flags.finalizeManual || flags.finalizePrepared) {
-      const result = await finalizeManualImport({ date: flags.date, noAudio: flags.noAudio, skipPrune: flags.skipPrune });
+      const result = await finalizeManualImport({ date: flags.date, count: flags.count, noAudio: flags.noAudio, skipPrune: flags.skipPrune });
       process.stdout.write(JSON.stringify({
         ymd: result.ymd,
         count: result.count,
-        summaryMarkdown: result.summaryMarkdown,
+        summarySaved: true,
+        hasAudio: result.hasAudio,
         audioFile: result.audioFile,
       }, null, 2));
       return;
