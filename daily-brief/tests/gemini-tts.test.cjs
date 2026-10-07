@@ -117,3 +117,24 @@ test('non-JSON or unrecognized provider errors stay anonymous and HTTP 400 is no
     assert.equal(calls, 1);
   }
 });
+
+test('array-wrapped Google errors expose API_KEY_INVALID at HTTP 400 without logging values or retrying', async () => {
+  const { ttsErrorDetails } = require('../gemini-tts');
+  const secret = 'SYNTHETIC_PRIVATE_VALUE';
+  const body = [{ error: { code: 400, status: 'INVALID_ARGUMENT', message: secret,
+    details: [{ '@type': 'type.googleapis.com/google.rpc.ErrorInfo', reason: 'API_KEY_INVALID',
+      domain: secret, metadata: { key: secret } }] } }];
+  assert.deepEqual(ttsErrorDetails(body), { code: 'unclassified', status: 'INVALID_ARGUMENT',
+    fields: [], reasons: ['API_KEY_INVALID'] });
+  assert.deepEqual(ttsErrorDetails([null, secret, { error: secret }]),
+    { code: 'unclassified', status: null, fields: [], reasons: [] });
+  let calls = 0;
+  await assert.rejects(requestAudio([], config, async () => {
+    calls++;return { ok: false, status: 400, json: async () => body };
+  }), error => {
+    assert.match(error.message, /HTTP 400/);assert.match(error.message, /status=INVALID_ARGUMENT/);
+    assert.match(error.message, /reasons=API_KEY_INVALID/);assert.match(error.message, /APIキー・API利用権限/);
+    assert.ok(!JSON.stringify(error.providerDetails).includes(secret));assert.ok(!error.stack.includes(secret));return true;
+  });
+  assert.equal(calls, 1);
+});

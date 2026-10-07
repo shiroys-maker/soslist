@@ -110,7 +110,10 @@ const ERROR_FIELDS = new Set(['model', 'store', 'input', 'response_format', 'res
   'input[].content[].annotations[].style']);
 function ttsErrorDetails(body) {
   // All emitted strings come from fixed allowlists. Messages, values and raw bodies are never logged.
-  const error = body?.error;
+  const envelope = Array.isArray(body)
+    ? body.slice(0, 16).find(item => item?.error && typeof item.error === 'object' && !Array.isArray(item.error))
+    : body;
+  const error = envelope?.error;
   const code = API_ERROR_CODES.has(error?.code) ? error.code : 'unclassified';
   const status = CANONICAL_STATUSES.has(error?.status) ? error.status : null;
   const fields = new Set(), reasons = new Set();
@@ -139,11 +142,12 @@ async function requestAudio(dialogue, config, fetchImpl = fetch) {
       body: JSON.stringify(buildRequest(dialogue, config)),
     });
     if (!response.ok) {
-      const hint = response.status === 401 || response.status === 403 ? 'APIキー・API利用権限を確認してください。'
-        : response.status === 429 ? 'APIの割り当て・課金設定を確認してください。'
-          : response.status === 404 ? '指定したモデルの利用可否を確認してください。' : 'API設定・接続を確認してください。';
       let details = ttsErrorDetails(null);
       try { details = ttsErrorDetails(await response.json()); } catch (_) { /* Non-JSON errors stay anonymous. */ }
+      const hint = response.status === 401 || response.status === 403 || details.reasons.some(reason => reason.startsWith('API_KEY_'))
+        ? 'APIキー・API利用権限を確認してください。'
+        : response.status === 429 ? 'APIの割り当て・課金設定を確認してください。'
+          : response.status === 404 ? '指定したモデルの利用可否を確認してください。' : 'API設定・接続を確認してください。';
       const status = Number.isInteger(response.status) && response.status >= 100 && response.status <= 599 ? response.status : 'unknown';
       const safeDetail = ['code=' + details.code, ...(details.status ? ['status=' + details.status] : []),
         ...(details.fields.length ? ['fields=' + details.fields.join(',')] : []),
