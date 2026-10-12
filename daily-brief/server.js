@@ -24,6 +24,20 @@ const OUTPUT_DIR = process.env.OUTPUT_DIR
   ? path.resolve(process.env.OUTPUT_DIR)
   : path.join(__dirname, 'output');
 
+// Viewing local files must not wait for a cloud write or readback.
+const pendingBriefSyncs = new Map();
+
+function queueBriefSync(existing) {
+  if (pendingBriefSyncs.has(existing.ymd)) return;
+  const pending = Promise.resolve()
+    .then(() => saveBriefToFirestore(existing))
+    .catch(() => {
+      console.error('[daily-brief] Background Firestore sync failed.');
+    })
+    .finally(() => pendingBriefSyncs.delete(existing.ymd));
+  pendingBriefSyncs.set(existing.ymd, pending);
+}
+
 
 function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -310,13 +324,6 @@ const server = http.createServer(async (req, res) => {
     try {
       const existing = getExistingBriefResult(ymd);
       if (existing.exists) {
-        let syncWarning = null;
-        try {
-          await saveBriefToFirestore(existing);
-        } catch (error) {
-          console.error('[daily-brief] Firestore sync failed:', error);
-          syncWarning = error.message || String(error);
-        }
         writeJson(res, 200, {
           ok: true,
           exists: true,
@@ -324,15 +331,17 @@ const server = http.createServer(async (req, res) => {
           summaryMarkdown: existing.summaryMarkdown,
           audioUrl: toAudioUrl(existing),
           updatedAt: existing.updatedAt,
-          syncWarning,
+          syncWarning: null,
+          syncStatus: 'background',
         });
+        queueBriefSync(existing);
         return;
       }
 
       writeJson(res, 200, { ok: true, exists: false, ymd });
-    } catch (error) {
-      console.error(error);
-      writeJson(res, 500, { ok: false, error: error.message || String(error) });
+    } catch {
+      console.error('[daily-brief] Local brief read failed.');
+      writeJson(res, 500, { ok: false, error: 'ローカルサマリーを読み込めませんでした。' });
     }
     return;
   }

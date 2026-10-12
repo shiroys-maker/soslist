@@ -8,18 +8,18 @@ const {Writable}=require('node:stream');
 const {once}=require('node:events');
 const {spawnSync}=require('node:child_process');
 const dir=path.resolve(__dirname,'..');
-function harness(t){
+function harness(t,options={}){
  const output=fs.mkdtempSync(path.join(os.tmpdir(),'summary-view-test-'));
  t.after(()=>fs.rmSync(output,{recursive:true,force:true}));
  fs.mkdirSync(path.join(output,'2099-01-01'));
  fs.writeFileSync(path.join(output,'2099-01-01','podcast.mp3'),Buffer.from('synthetic audio'));
- let handler;let syncs=0;
+ let handler;let syncs=0;const errors=[];
  const ctx=vm.createContext({require:n=>n==='http'?{createServer:fn=>{handler=fn;return {listen(){}};}}:
- n==='./generate-brief'?{getExistingBriefResult:date=>({exists:date==='2099-01-01',ymd:date,summaryMarkdown:'# Synthetic brief',audioFile:path.join(output,date,'podcast.mp3')}),
- saveBriefToFirestore:async()=>{syncs++;}}:require(n),
- process:{env:{OUTPUT_DIR:output}},__dirname:dir,URL,console:{log(){},error(){}},fetch:()=>assert.fail('external request')});
+ n==='./generate-brief'?{getExistingBriefResult:options.read|| (date=>({exists:date==='2099-01-01',ymd:date,summaryMarkdown:'# Synthetic brief',audioFile:path.join(output,date,'podcast.mp3')})),
+ saveBriefToFirestore:result=>{syncs++;return options.sync?options.sync(result):Promise.resolve();}}:require(n),
+ process:{env:{OUTPUT_DIR:output}},__dirname:dir,URL,console:{log(){},error(...args){errors.push(args.map(v=>String(v)).join(' '));}},fetch:()=>assert.fail('external request')});
  vm.runInContext(fs.readFileSync(path.join(dir,'server.js'),'utf8'),ctx);
- return {get syncs(){return syncs;},async request(method,url,headers={}){
+ return {get syncs(){return syncs;},errors,async request(method,url,headers={}){
   const chunks=[];const res=new Writable({write(c,e,cb){chunks.push(c);cb();}});
   res.headers={};res.setHeader=(k,v)=>res.headers[k]=v;
   res.writeHead=(status,headers={})=>{res.status=status;Object.assign(res.headers,headers);};
@@ -34,6 +34,58 @@ test('root and legacy generate-mode URL are view-only; removed POST has no work'
   assert.doesNotMatch(r.body,/api\/generate|regenerateButton|id="go"|id="sample"|id="noAudio"/);
  }
  const r=await h.request('POST','/api/generate');assert.equal(r.status,404);assert.equal(h.syncs,0);
+});
+
+async function boundedResponse(promise){
+ let timer;
+ try {
+  const result=await Promise.race([promise,new Promise(resolve=>{timer=setTimeout(()=>resolve(null),100);})]);
+  assert.ok(result,'Local response was blocked by Firestore sync');
+  return result;
+ } finally {clearTimeout(timer);}
+}
+const settleSync=()=>new Promise(resolve=>setImmediate(resolve));
+
+test('local brief response is available while Firestore sync never resolves',async t=>{
+ const h=harness(t,{sync:()=>new Promise(()=>{})});
+ const r=await boundedResponse(h.request('GET','/api/brief-status?date=2099-01-01'));
+ assert.equal(r.status,200);assert.equal(JSON.parse(r.body).summaryMarkdown,'# Synthetic brief');
+});
+
+test('repeated views of the same date share one pending Firestore sync',async t=>{
+ let release;const pending=new Promise(resolve=>{release=resolve;});
+ const h=harness(t,{sync:()=>pending});
+ await boundedResponse(h.request('GET','/api/brief-status?date=2099-01-01'));
+ await boundedResponse(h.request('GET','/api/brief-status?date=2099-01-01'));
+ assert.equal(h.syncs,1);release();await settleSync();
+ await h.request('GET','/api/brief-status?date=2099-01-01');await settleSync();
+ assert.equal(h.syncs,2);
+});
+
+test('background rejection never exposes sensitive error text in response or logs',async t=>{
+ const secret='synthetic-private-error-sentinel';
+ const h=harness(t,{sync:async()=>{throw new Error(secret);}});
+ const r=await h.request('GET','/api/brief-status?date=2099-01-01');await settleSync();
+ assert.equal(r.status,200);assert.equal(JSON.parse(r.body).summaryMarkdown,'# Synthetic brief');
+ assert.ok(!r.body.includes(secret));assert.ok(h.errors.every(line=>!line.includes(secret)));
+ assert.equal(h.errors.length,1);
+});
+
+test('synchronous sync failure is contained and a later view can retry',async t=>{
+ const h=harness(t,{sync:()=>{throw new Error('synthetic-private-error-sentinel');}});
+ const first=await h.request('GET','/api/brief-status?date=2099-01-01');await settleSync();
+ const next=await h.request('GET','/api/brief-status?date=2099-01-01');await settleSync();
+ assert.equal(first.status,200);assert.equal(next.status,200);assert.equal(h.syncs,2);
+ assert.ok(h.errors.every(line=>!line.includes('synthetic-private-error-sentinel')));
+});
+
+test('local read failure returns a generic error without private details',async t=>{
+ const secret='synthetic-private-file-sentinel';
+ const h=harness(t,{read:()=>{throw new Error(secret);}});
+ const r=await h.request('GET','/api/brief-status?date=2099-01-01');
+ assert.equal(r.status,500);assert.equal(JSON.parse(r.body).ok,false);
+ assert.ok(!r.body.includes(secret));assert.ok(h.errors.every(line=>!line.includes(secret)));
+ assert.equal(h.syncs,0);
 });
 test('existing and missing summaries retain status responses and existing sync',async t=>{
  const h=harness(t);const a=await h.request('GET','/api/brief-status?date=2099-01-01');
