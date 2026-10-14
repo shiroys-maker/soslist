@@ -8,6 +8,8 @@ Web版（公開サイト `soslist.niraissc.jp` = ルートの `index.html` / `sc
   リポジトリルートから `python3 -m http.server 8123` などで配信し
   `http://127.0.0.1:8123/local/index.html` を開く（`file://` 直開きはFirebase認証不可）。
 - `details.html` / `details.js` は予約詳細の別ウィンドウ。ネイティブアプリでは
+  一覧のスナップショットを直接渡して表示し、ブラウザ用localStorageには保存しない。
+  過去の詳細キャッシュでlocalStorageが満杯でもネイティブ詳細は表示できる。
   `saveDetails` ブリッジ経由で保存し、ブラウザ配信時は localStorage の
   storageイベントでメインウィンドウに保存を依頼する。
 

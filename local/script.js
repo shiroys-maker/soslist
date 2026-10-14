@@ -499,14 +499,14 @@ function openDetailsModal(docId) {
         }
 
         const payload = buildDetailsPayload(docId, doc.data());
-        localStorage.setItem(`${DETAIL_PAYLOAD_PREFIX}${docId}`, JSON.stringify(payload));
-
-        const detailsUrl = `details.html#id=${encodeURIComponent(docId)}`;
+        // Native popups receive the snapshot directly; browser storage can be full.
         if (window.webkit?.messageHandlers?.openDetailsWindow) {
             window.webkit.messageHandlers.openDetailsWindow.postMessage(payload);
             return;
         }
 
+        localStorage.setItem(`${DETAIL_PAYLOAD_PREFIX}${docId}`, JSON.stringify(payload));
+        const detailsUrl = `details.html#id=${encodeURIComponent(docId)}`;
         const newWindow = window.open('', '_blank', 'popup=yes,width=1280,height=920');
         if (!newWindow) {
             alert('予約詳細ウィンドウを開けませんでした。');
