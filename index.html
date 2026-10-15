@@ -14,6 +14,7 @@
         .visitdate-cell:hover { cursor: pointer; background-color: #f0f8ff; }
     </style>
     <link rel="stylesheet" href="shared/pdf-viewer.css?v=20260927-claim-close1">
+    <link rel="stylesheet" href="shared/summary-markdown.css?v=20261015-summary-markdown1">
 </head>
 <body>
 
@@ -223,7 +224,7 @@
       <div class="modal-content summary-modal-content">
         <h3 id="summaryModalTitle">Summary</h3>
         <div id="summaryModalMeta" class="summary-modal-meta"></div>
-        <div id="summaryModalBody" class="summary-modal-body"></div>
+        <div id="summaryModalBody" class="summary-modal-body summary-markdown"></div>
         <div class="modal-actions" style="text-align: right; margin-top: 12px;">
           <button id="closeSummaryModalButton">閉じる</button>
         </div>
@@ -238,7 +239,9 @@
     
     <script src="shared/core.js?v=20260927-claim-close1"></script>
     <script src="connection.js?v=20260927-claim-close1"></script>
-    <script src="script.js?v=20260927-claim-close1"></script>
+    <script src="shared/vendor/markdown-it/markdown-it.umd.min.js?v=20261015-summary-markdown1"></script>
+    <script src="shared/summary-markdown.js?v=20261015-summary-markdown1"></script>
+    <script src="script.js?v=20261015-summary-markdown1"></script>
 
     <script src="shared/ui.js?v=20260927-claim-close1"></script>
     <script src="shared/pdf-viewer.js?v=20260927-claim-close1"></script>

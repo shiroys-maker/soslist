@@ -1,0 +1,24 @@
+/* Scoped to Summary; appointment details and editors keep their current layout. */
+.summary-markdown { overflow-wrap: anywhere; line-height: 1.75; font-size: 15px; user-select: text; -webkit-user-select: text; }
+.summary-markdown :is(h1,h2,h3,h4,h5,h6) { color: #312e81; line-height: 1.35; margin: 1.35em 0 .55em; font-weight: 700; }
+.summary-markdown h1 { font-size: 1.65em; }
+.summary-markdown h2 { font-size: 1.4em; }
+.summary-markdown h3 { font-size: 1.2em; }
+.summary-markdown :is(h4,h5,h6) { font-size: 1em; }
+.summary-markdown > :first-child { margin-top: 0; }
+.summary-markdown :is(p,ul,ol,blockquote,pre,table) { margin: .7em 0; }
+.summary-markdown :is(ul,ol) { padding-left: 1.65em; }
+.summary-markdown li > :is(ul,ol) { margin: .2em 0; }
+.summary-markdown a { color: #4338ca; text-decoration: underline; }
+.summary-markdown blockquote { border-left: 4px solid #c4b5fd; padding: .1em 1em; margin-left: 0; color: #4b5563; }
+.summary-markdown code { font: .9em ui-monospace, monospace; background: #f3f4f6; padding: .1em .3em; border-radius: 4px; }
+.summary-markdown pre { white-space: pre; overflow: auto; max-width: 100%; background: #f3f4f6; padding: 12px; border-radius: 6px; }
+.summary-markdown pre code { padding: 0; background: none; }
+.summary-markdown table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
+.summary-markdown :is(th,td) { border: 1px solid #d1d5db; padding: .45em .7em; min-width: 5em; }
+.summary-markdown th { background: #f5f3ff; font-weight: 700; }
+.summary-markdown hr { border: 0; border-top: 1px solid #d1d5db; margin: 1.3em 0; }
+.summary-image-alt { color: #6b7280; font-style: italic; }
+.summary-source { width: 100%; min-height: 55vh; resize: vertical; font: 14px/1.6 ui-monospace, monospace; white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; }
+.summary-copy-status { min-height: 1.5em; color: #4b5563; font-size: 14px; }
+.summary-toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
