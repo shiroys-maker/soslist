@@ -75,7 +75,8 @@ function summaryPopupPage(ymd) {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Summery ${safeDate}</title>
+<title>Summary ${safeDate}</title>
+<link rel="stylesheet" href="/shared/summary-markdown.css">
 <style>
   :root { --accent:#3c355e; --accent-2:#6d28d9; --danger:#991b1b; }
   * { box-sizing: border-box; }
@@ -121,7 +122,7 @@ function summaryPopupPage(ymd) {
 </head>
 <body>
   <div class="page">
-    <h1>Summery</h1>
+    <h1>Summary</h1>
     <div class="meta" id="meta">${safeDate}</div>
 
     <section class="card status" id="statusCard">
@@ -134,10 +135,18 @@ function summaryPopupPage(ymd) {
 
     <section class="card hidden" id="summaryCard">
       <h2>Brief</h2>
-      <div id="summary"></div>
+      <div class="summary-toolbar">
+        <button type="button" id="copySummary">原文をコピー</button>
+        <button type="button" id="toggleSummarySource" class="secondary" aria-pressed="false" aria-controls="summarySource">原文を表示</button>
+      </div>
+      <div id="summaryCopyStatus" class="summary-copy-status" role="status"></div>
+      <div id="summary" class="summary-markdown"></div>
+      <textarea id="summarySource" class="summary-source" aria-label="Summary 原文（読み取り専用）" readonly hidden></textarea>
     </section>
   </div>
 
+<script src="/shared/vendor/markdown-it/markdown-it.umd.min.js"></script>
+<script src="/shared/summary-markdown.js"></script>
 <script>
   const ymd = ${JSON.stringify(ymd)};
   const statusEl = document.getElementById('status');
@@ -147,47 +156,48 @@ function summaryPopupPage(ymd) {
   const audioCard = document.getElementById('audioCard');
   const audioEl = document.getElementById('audio');
 
-  function renderInlineMarkdown(text) {
-    return escapeHtml(text)
-      .replace(/\`([^\`]+)\`/g, '<code>$1</code>')
-      .replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>')
-      .replace(/\\*([^*]+)\\*/g, '<em>$1</em>');
+  const sourceEl = document.getElementById('summarySource');
+  const copyStatusEl = document.getElementById('summaryCopyStatus');
+  const toggleSourceButton = document.getElementById('toggleSummarySource');
+
+  function toggleSource() {
+    sourceEl.hidden = !sourceEl.hidden;
+    summaryEl.hidden = !sourceEl.hidden;
+    toggleSourceButton.textContent = sourceEl.hidden ? '原文を表示' : '表示に戻る';
+    toggleSourceButton.setAttribute('aria-pressed', String(!sourceEl.hidden));
   }
 
-  function renderMarkdownToHtml(markdown) {
-    const blocks = String(markdown || '').replace(/\\r/g, '').split(/\\n{2,}/);
-    return blocks.map((block) => {
-      const lines = block.split('\\n').filter(Boolean);
-      if (lines.length === 0) return '';
-      const heading = lines[0].match(/^(#{1,3})\\s+(.+)$/);
-      if (heading && lines.length === 1) {
-        const level = Math.min(heading[1].length, 3);
-        return '<h' + level + '>' + renderInlineMarkdown(heading[2]) + '</h' + level + '>';
-      }
-      const unordered = lines.every((line) => /^-\\s+/.test(line));
-      if (unordered) {
-        return '<ul>' + lines.map((line) => '<li>' + renderInlineMarkdown(line.replace(/^-\\s+/, '')) + '</li>').join('') + '</ul>';
-      }
-      const ordered = lines.every((line) => /^\\d+\\.\\s+/.test(line));
-      if (ordered) {
-        return '<ol>' + lines.map((line) => '<li>' + renderInlineMarkdown(line.replace(/^\\d+\\.\\s+/, '')) + '</li>').join('') + '</ol>';
-      }
-      return '<p>' + lines.map((line) => renderInlineMarkdown(line)).join('<br>') + '</p>';
-    }).join('\\n');
-  }
+  let summarySource = '';
 
-  function escapeHtml(value) {
-    return String(value ?? '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+  async function copySummary() {
+    try {
+      await navigator.clipboard.writeText(summarySource);
+      copyStatusEl.textContent = '原文をコピーしました。';
+    } catch {
+      sourceEl.hidden = false;
+      summaryEl.hidden = true;
+      toggleSourceButton.textContent = '表示に戻る';
+      toggleSourceButton.setAttribute('aria-pressed', 'true');
+      sourceEl.focus();
+      sourceEl.select();
+      copyStatusEl.textContent = '原文を選択しました。⌘C または Ctrl+C でコピーしてください。';
+    }
   }
+  document.getElementById('copySummary').addEventListener('click', copySummary);
+  toggleSourceButton.addEventListener('click', toggleSource);
 
   function renderResult(data) {
     metaEl.textContent = data.ymd + (Number.isFinite(data.count) ? ' / 予約 ' + data.count + ' 件' : '');
     statusEl.textContent = '表示中';
-    summaryEl.innerHTML = renderMarkdownToHtml(data.summaryMarkdown || '(要約なし)');
+    summarySource = String(data.summaryMarkdown ?? '');
+    sourceEl.value = summarySource;
+    const markdown = summarySource || '(要約なし)';
+    if (globalThis.SOSSummaryMarkdown) {
+      summaryEl.innerHTML = SOSSummaryMarkdown.render(markdown);
+    } else {
+      summaryEl.textContent = markdown;
+      summaryEl.style.whiteSpace = 'pre-wrap';
+    }
     summaryCard.classList.remove('hidden');
 
     if (data.audioUrl) {
@@ -283,6 +293,18 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Fixed presentation assets only: never expose arbitrary repository/patient files.
+  const summaryAssets = {
+    '/shared/vendor/markdown-it/markdown-it.umd.min.js': 'text/javascript; charset=utf-8',
+    '/shared/summary-markdown.js': 'text/javascript; charset=utf-8',
+    '/shared/summary-markdown.css': 'text/css; charset=utf-8',
+  };
+  if (req.method === 'GET' && Object.hasOwn(summaryAssets, url.pathname)) {
+    res.writeHead(200, { 'Content-Type': summaryAssets[url.pathname], 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff' });
+    res.end(fs.readFileSync(path.join(__dirname, '..', url.pathname)));
+    return;
+  }
+
   // トップページ
   if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) {
     setCorsHeaders(res);
@@ -298,7 +320,11 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     setCorsHeaders(res);
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.writeHead(200, {
+      'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store',
+      'Content-Security-Policy': "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; media-src 'self'; img-src 'none'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+      'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff',
+    });
     res.end(summaryPopupPage(ymd));
     return;
   }

@@ -171,37 +171,10 @@ function initializeMobileControlsState() {
     }
 }
 
-function renderInlineMarkdown(text) {
-    return escapeHtml(text)
-        .replace(/`([^`]+)`/g, '<code>$1</code>')
-        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*([^*]+)\*/g, '<em>$1</em>');
-}
-
 function renderMarkdownToHtml(markdown) {
-    const blocks = String(markdown || '').replace(/\r/g, '').split(/\n{2,}/);
-    return blocks.map((block) => {
-        const lines = block.split('\n').filter(Boolean);
-        if (lines.length === 0) return '';
-
-        const heading = lines[0].match(/^(#{1,3})\s+(.+)$/);
-        if (heading && lines.length === 1) {
-            const level = Math.min(heading[1].length, 3);
-            return `<h${level}>${renderInlineMarkdown(heading[2])}</h${level}>`;
-        }
-
-        const unordered = lines.every((line) => /^-\s+/.test(line));
-        if (unordered) {
-            return `<ul>${lines.map((line) => `<li>${renderInlineMarkdown(line.replace(/^-\s+/, ''))}</li>`).join('')}</ul>`;
-        }
-
-        const ordered = lines.every((line) => /^\d+\.\s+/.test(line));
-        if (ordered) {
-            return `<ol>${lines.map((line) => `<li>${renderInlineMarkdown(line.replace(/^\d+\.\s+/, ''))}</li>`).join('')}</ol>`;
-        }
-
-        return `<p>${lines.map((line) => renderInlineMarkdown(line)).join('<br>')}</p>`;
-    }).join('\n');
+    return window.SOSSummaryMarkdown
+        ? window.SOSSummaryMarkdown.render(markdown)
+        : '<p style="white-space:pre-wrap">' + escapeHtml(String(markdown ?? '')) + '</p>';
 }
 
 function openSummaryModal(ymd, summaryMarkdown, audioUrl = null) {
