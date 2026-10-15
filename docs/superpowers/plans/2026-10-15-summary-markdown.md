@@ -19,14 +19,14 @@
 - Loopback and cloud use the same renderer without cloud publication.
 
 ### Task 1: Safe renderer and integrations
-- [ ] Add a failing test through the actual generated popup script, using synthetic headings/lists/bold/links/tables.
-- [ ] Vendor verified public package with license; add safe shared adapter and scoped CSS.
-- [ ] Replace popup and cloud renderers; add plain-source/copy controls to popup with safe fallback.
-- [ ] Run all Node suites and test ordinary markup, hostile URLs/HTML/images, source copying, long text and renderer failure.
+- [x] Add a failing test through the actual generated popup script, using synthetic headings/lists/bold/links/tables.
+- [x] Vendor verified public package with license; add safe shared adapter and scoped CSS.
+- [x] Replace popup and cloud renderers; add plain-source/copy controls to popup with safe fallback.
+- [x] Run all Node suites and test ordinary markup, hostile URLs/HTML/images, source copying, long text and renderer failure.
 
 ### Task 2: Local delivery
-- [ ] Test actual generated popup in an isolated browser/WKWebView with no patient services.
-- [ ] Review final diff and preserve 86ae567 exact details behavior.
+- [x] Test actual generated popup in an isolated browser/WKWebView with no patient services.
+- [x] Review final diff and preserve 86ae567 exact details behavior.
 - [ ] Commit, apply only reviewed files to Book source, back up code through project management workflow.
 - [ ] Because daily-brief server is external source, verify installed app remains 86ae567 and next Summary uses updated source without restarting app or discarding editors.
 - [ ] Provide patch/bundle, rollback instructions and concise evidence; do not publish cloud.

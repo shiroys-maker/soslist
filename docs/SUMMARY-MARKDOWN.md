@@ -26,7 +26,8 @@ schemes are inert. Links have `noopener noreferrer` and no-referrer policy.
 Markdown images become selectable alt text; no image element, request or automatic
 external resource is produced. The popup CSP also disables images, objects and
 frames, and limits fetch/media to its own origin. Its asset route is an explicit
-three-file allowlist. No patient content is sent to a renderer service or AI.
+three-file allowlist; unreadable assets return a safe 404 so the text fallback
+can still run without terminating the server. No patient content is sent to a renderer service or AI.
 
 The popup has a read-only source toggle and explicit source-copy button. The button
 copies the original response string, including CRLF. Clipboard denial shows and

@@ -99,3 +99,15 @@ test('prepared cloud deployment includes shared renderer and style assets',()=>{
  const workflow=fs.readFileSync(path.join(root,'.github/workflows/pages.yml'),'utf8');
  assert.match(workflow,/cp[^\n]*shared\/summary-markdown\.js[^\n]*shared\/summary-markdown\.css[^\n]*site\/shared\//);
 });
+
+
+test('unreadable presentation asset completes a safe error response without rejecting handler',async()=>{
+ let handler;const fakeFs={...fs,readFileSync(){throw Object.assign(new Error('synthetic-private-file'),{code:'ENOENT'});}};
+ vm.runInNewContext(fs.readFileSync(path.join(root,'daily-brief/server.js'),'utf8'),{
+  require:n=>n==='http'?{createServer:fn=>{handler=fn;return{listen(){}};}}:n==='fs'?fakeFs:n==='./generate-brief'?{}:require(n),
+  process:{env:{}},__dirname:path.join(root,'daily-brief'),URL,console:{log(){},error(){}}
+ });
+ let status,body;const res={setHeader(){},writeHead:s=>{status=s;},end:s=>{body=s;}};
+ await assert.doesNotReject(()=>handler({method:'GET',url:'/shared/summary-markdown.js',headers:{host:'localhost'}},res));
+ assert.equal(status,404);assert.ok(body!==undefined);assert.doesNotMatch(String(body),/synthetic-private-file/);
+});

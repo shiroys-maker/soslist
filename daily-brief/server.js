@@ -300,8 +300,16 @@ const server = http.createServer(async (req, res) => {
     '/shared/summary-markdown.css': 'text/css; charset=utf-8',
   };
   if (req.method === 'GET' && Object.hasOwn(summaryAssets, url.pathname)) {
+    let asset;
+    try {
+      asset = fs.readFileSync(path.join(__dirname, '..', url.pathname));
+    } catch {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
+      res.end('Summary presentation asset unavailable');
+      return;
+    }
     res.writeHead(200, { 'Content-Type': summaryAssets[url.pathname], 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff' });
-    res.end(fs.readFileSync(path.join(__dirname, '..', url.pathname)));
+    res.end(asset);
     return;
   }
 
