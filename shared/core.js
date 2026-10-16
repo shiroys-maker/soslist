@@ -280,8 +280,15 @@ function isAwaitingResults(data, now = new Date()) {
     return determineReferralDests(data.services || [], null, data).some((dest, index) => {
         if (getReferralStateValue(data, dest, 'isCompleted', 'isCompleted', index) === true) return false;
         // Lab happens onsite at the appointment; its displayed visit-date cell stays blank.
-        const visit = dest === 'LAB' ? appointment
-            : parseResultsVisitDate(getReferralStateValue(data, dest, 'visitDate', 'visitDate', index), data);
+        if (dest === 'LAB') return appointment.getTime() < now.getTime();
+        const rawVisit = getReferralStateValue(data, dest, 'visitDate', 'visitDate', index);
+        // Attendance can be recorded without a date. Count that destination only;
+        // a blank unrequested referral or a nonblank cancellation/invalid date stays excluded.
+        if (rawVisit == null || (typeof rawVisit === 'string' && !rawVisit.trim())) {
+            return getReferralStateValue(data, dest, 'isReceived', 'isReceived', index) === true
+                && appointment.getTime() < now.getTime();
+        }
+        const visit = parseResultsVisitDate(rawVisit, data);
         return visit !== null && visit.getTime() < now.getTime();
     });
 }

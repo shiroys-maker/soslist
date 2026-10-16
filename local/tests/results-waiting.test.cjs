@@ -30,7 +30,7 @@ function harness(mobileUI = true) {
         dateFilter: controls.dateFilter, tableBody, unsubscribe: null, shokaijyoEditingDocId: null,
         setInterval(fn) { timers.set(++timerId, fn); return timerId; }, clearInterval(id) { timers.delete(id); }
     });
-    vm.runInContext(fs.readFileSync(path.join(__dirname, '../../shared/core.js'), 'utf8'), ctx);
+    vm.runInContext(fs.readFileSync(process.env.SOSLIST_CORE_TEST_FILE || path.join(__dirname, '../../shared/core.js'), 'utf8'), ctx);
     const emit = (rows, index = listeners.length - 1) => listeners[index].callback({ forEach: fn => rows.forEach(([id, data]) => fn({ id, data: () => data })) });
     return { ctx, listeners, timers, controls, buttons, tableBody, emit, advance(ms) { clock += ms; for (const fn of timers.values()) fn(); } };
 }
@@ -130,4 +130,78 @@ test('time passing and realtime completion re-evaluate pending results without e
     assert.doesNotMatch(h.tableBody.innerHTML, /data-id="timed"/);
     assert.equal(h.listeners.length, 1);
     h.ctx.unsubscribe(); assert.equal(h.timers.size, 0);
+});
+
+
+test('an attended referral with no date remains waiting after its sibling completes', () => {
+    for (const mobileUI of [true, false]) {
+        const h = harness(mobileUI); h.ctx.setResultsWaitingMode(true);
+        const data = appointment({ referrals: {
+            KIN: { visitDate: '09/14 09:00', isCompleted: false },
+            ANSHIN: { visitDate: '', isReceived: true, isCompleted: false }
+        } });
+        const visible = () => {
+            h.emit([['partial', data]]);
+            assert.match(h.tableBody.innerHTML, /data-id="partial"/);
+            if (mobileUI) assert.match(h.controls.mobileAppointmentsList.innerHTML, /data-id="partial"/);
+        };
+        visible();
+        data.referrals.KIN.isCompleted = true;
+        visible();
+        data.referrals.ANSHIN.isCompleted = true;
+        h.emit([['partial', data]]);
+        assert.doesNotMatch(h.tableBody.innerHTML, /data-id="partial"/);
+        if (mobileUI) assert.doesNotMatch(h.controls.mobileAppointmentsList.innerHTML, /data-id="partial"/);
+        data.referrals.ANSHIN.isCompleted = false;
+        visible();
+        assert.equal(h.listeners.length, 1);
+    }
+});
+
+test('undated attendance is scoped to the active destination and retains the appointment time gate', () => {
+    const { ctx } = harness();
+    const data = appointment({ services: ['ECHOCARDIOGRAPHY'], referrals: { ANSHIN: { isReceived: true } } });
+    assert.equal(ctx.isAwaitingResults(data, NOW), true, 'single attended waiting referral');
+    data.referrals.ANSHIN.isCompleted = true;
+    assert.equal(ctx.isAwaitingResults(data, NOW), false, 'single completed referral');
+    data.referrals.ANSHIN.isCompleted = false;
+    data.appointmentDateTime = timestamp(NOW.toISOString());
+    assert.equal(ctx.isAwaitingResults(data, NOW), false);
+    data.appointmentDateTime = timestamp('2026-09-16T00:00:00Z');
+    assert.equal(ctx.isAwaitingResults(data, NOW), false);
+    const legacy = appointment({ services: ['ECHOCARDIOGRAPHY'], referrals: {}, isReceived: true });
+    assert.equal(ctx.isAwaitingResults(legacy, NOW), true);
+    legacy.referrals.ANSHIN = { isReceived: false };
+    assert.equal(ctx.isAwaitingResults(legacy, NOW), false, 'explicit false overrides legacy attendance');
+    assert.equal(ctx.isAwaitingResults(appointment({ isReceived: true, referrals: { KIN: { isCompleted: true } } }), NOW), false,
+        'first-destination legacy attendance cannot activate a sibling');
+});
+
+test('empty, unrequested, cancelled, future and inactive destinations are not waiting', () => {
+    const { ctx } = harness();
+    for (const raw of [undefined, '', '   ', '取消', 'キャンセル', '未依頼', '紹介なし', 'bad', '09/31 09:00', '09/16 09:00']) {
+        const data = appointment({ services: ['ECHOCARDIOGRAPHY'], referrals: { ANSHIN: { visitDate: raw } } });
+        assert.equal(ctx.isAwaitingResults(data, NOW), false, String(raw));
+        if (raw && raw.trim()) {
+            data.referrals.ANSHIN.isReceived = true;
+            assert.equal(ctx.isAwaitingResults(data, NOW), false, 'nonblank date/status must not use undated fallback: ' + raw);
+        }
+    }
+    const inactive = appointment({ services: [], referrals: { ANSHIN: { isReceived: true, visitDate: '09/14 09:00' } } });
+    assert.equal(ctx.isAwaitingResults(inactive, NOW), false);
+    const none = appointment();
+    none.referralRouting = { version: 1, provider: 'codex', sourceServices: [...none.services], sourceCptCodes: [], destinations: [], purposes: {} };
+    assert.equal(ctx.isAwaitingResults(none, NOW), false, 'explicit no-referral routing');
+});
+
+test('mixed lab and referral completion keeps either remaining result without mutating source data', () => {
+    const { ctx } = harness();
+    for (const [labDone, referralDone, expected] of [[false, false, true], [true, false, true], [false, true, true], [true, true, false]]) {
+        const data = appointment({ services: ['CBC', 'ECHOCARDIOGRAPHY'], referrals: {
+            LAB: { isCompleted: labDone }, ANSHIN: { isReceived: true, isCompleted: referralDone }
+        } });
+        const before = JSON.stringify(data);
+        assert.equal(ctx.isAwaitingResults(data, NOW), expected);
+        assert.equal(JSON.stringify(data), before);
+    }
 });
