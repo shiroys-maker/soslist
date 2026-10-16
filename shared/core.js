@@ -25,6 +25,19 @@ const storage = firebase.storage();
 // Exact records currently rendered in the list; editors can open synchronously.
 const displayedAppointments = new Map();
 
+// Web auth changes invalidate every outstanding sensitive view, including reads
+// started by the previous user. Local callers retain their existing behaviour.
+let sensitiveViewGeneration = 0;
+let sensitiveViewsAllowed = true;
+function setSensitiveViewsAllowed(allowed) {
+    sensitiveViewGeneration++;
+    sensitiveViewsAllowed = allowed === true;
+}
+function captureSensitiveViewSession() {
+    const generation = sensitiveViewGeneration;
+    return () => sensitiveViewsAllowed && generation === sensitiveViewGeneration;
+}
+
 // 2025-10-26 以前に登録されたレコードはUTC相当で保存されているため表示時に-9h補正する
 const APPOINTMENT_TRANSITION_TIMESTAMP = new Date('2025-10-26T00:00:00+09:00').getTime();
 
@@ -110,6 +123,8 @@ function getCorrectedAppointmentDate(data) {
 }
 
 async function initializeSummaryDate() {
+    const viewIsCurrent = captureSensitiveViewSession();
+    if (!viewIsCurrent()) return;
     if (!summaryDateInput) return;
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
@@ -126,6 +141,7 @@ async function initializeSummaryDate() {
             .where("appointmentDateTime", ">=", windowStart)
             .get();
 
+        if (!viewIsCurrent()) return;
         let hasTodayAppointment = false;
         let nextAppointmentDate = null;
 
@@ -164,12 +180,15 @@ function resetLogoutTimer() {
 }
 
 async function jumpToAdjacentReservationDate(direction) {
+    const viewIsCurrent = captureSensitiveViewSession();
+    if (!viewIsCurrent()) return;
     if (!dateFilter.value) {
         return;
     }
 
     try {
         const targetDate = await findAdjacentReservationDate(dateFilter.value, direction);
+        if (!viewIsCurrent()) return;
         if (!targetDate) {
             return;
         }
@@ -213,12 +232,15 @@ async function findAdjacentReservationDate(baseYmd, direction) {
 }
 
 async function jumpToAdjacentSummaryReservationDate(direction) {
+    const viewIsCurrent = captureSensitiveViewSession();
+    if (!viewIsCurrent()) return;
     if (!summaryDateInput?.value) {
         return;
     }
 
     try {
         const targetDate = await findAdjacentReservationDate(summaryDateInput.value, direction);
+        if (!viewIsCurrent()) return;
         if (!targetDate) {
             return;
         }
@@ -294,6 +316,8 @@ function isAwaitingResults(data, now = new Date()) {
 }
 
 function setupRealtimeListener() {
+    const viewIsCurrent = captureSensitiveViewSession();
+    if (!viewIsCurrent()) return;
     if (unsubscribe) {
         unsubscribe();
     }
@@ -424,7 +448,7 @@ function setupRealtimeListener() {
                   mobileCardsHTML += `<h2 class="appointment-day-heading">${escapeHtml(dateLabel)}</h2>`;
               }
               tableRowsHTML += `
-                  <tr data-id="${docId}" class="${rowClass}">
+                  <tr data-id="${escapeHtml(docId)}" class="${rowClass}">
                       <td class="col-show"><button type="button" class="show-toggle-cell status-toggle" aria-label="来院" aria-pressed="${isShown}">${checkmark || '未'}</button></td>
                       <td class="col-date"><button type="button" class="cell-link date-cell" title="予約日時を変更">${displayDate}</button></td>
                       <td class="col-name"><button type="button" class="cell-link name-cell${data.notes ? '' : ' name-no-notes'}" title="予約詳細を開く">${escapeHtml(data.claimantName || '')}</button></td>
@@ -436,7 +460,7 @@ function setupRealtimeListener() {
                   </tr>`;
 
               if (SOSLIST_TARGET.mobileUI) mobileCardsHTML += `
-                  <article class="appointment-card${expandedCardId === docId ? ' is-expanded' : ''}" data-id="${docId}">
+                  <article class="appointment-card${expandedCardId === docId ? ' is-expanded' : ''}" data-id="${escapeHtml(docId)}">
                       <div class="appointment-card-top">
                           <button type="button" class="appointment-card-name name-cell${data.notes ? '' : ' name-no-notes'}">${escapeHtml(data.claimantName || '')}</button>
                           <div class="appointment-card-flags">
@@ -493,6 +517,8 @@ function setupRealtimeListener() {
 }
 
 async function toggleAppointmentStatus(target, docId, field, destKey = null) {
+    const viewIsCurrent = captureSensitiveViewSession();
+    if (!viewIsCurrent()) return;
     if (target.disabled) return;
     const previousFocus = typeof window !== 'undefined' ? window.sosListUI?.captureFocus() : null;
     target.disabled = true;
@@ -500,6 +526,7 @@ async function toggleAppointmentStatus(target, docId, field, destKey = null) {
     try {
         const ref = db.collection('appointments').doc(docId);
         const doc = await ref.get();
+        if (!viewIsCurrent()) return;
         if (!doc.exists) throw new Error('Appointment not found');
         const data = doc.data();
         const destIndex = destKey ? determineReferralDests(data.services || [], null, data).indexOf(destKey) : -1;
@@ -508,6 +535,7 @@ async function toggleAppointmentStatus(target, docId, field, destKey = null) {
             : data[field] === true;
         const key = destKey ? `referrals.${destKey}.${field}` : field;
         await ref.update({ [key]: !current });
+        if (!viewIsCurrent()) return;
         target.setAttribute('aria-pressed', String(!current));
         target.classList.toggle('is-active', !current);
         target.textContent = field === 'isShown' ? (!current ? '✅' : '未') : `${field === 'isReceived' ? '受診' : '完了'}${!current ? '✓' : ''}`;
@@ -517,7 +545,7 @@ async function toggleAppointmentStatus(target, docId, field, destKey = null) {
     } finally {
         target.disabled = false;
         target.removeAttribute('aria-busy');
-        if (previousFocus && document.activeElement === document.body) window.sosListUI?.restoreFocus(previousFocus);
+        if (viewIsCurrent() && previousFocus && document.activeElement === document.body) window.sosListUI?.restoreFocus(previousFocus);
     }
 }
 
@@ -578,7 +606,10 @@ function handleViewPdf(docId) {
 }
 
 function openEditModal(docId) {
+    const viewIsCurrent = captureSensitiveViewSession();
+    if (!viewIsCurrent()) return;
   db.collection('appointments').doc(docId).get().then(doc => {
+        if (!viewIsCurrent()) return;
     if (!doc.exists) return;
     const data = doc.data();
     if (data.appointmentDateTime) {
@@ -609,6 +640,8 @@ function closeEditModal() {
 }
 
 function searchAppointments() {
+    const viewIsCurrent = captureSensitiveViewSession();
+    if (!viewIsCurrent()) return;
     const searchTerm = searchInput.value.trim();
     if (!searchTerm) {
         alert('検索する契約番号または氏名を入力してください。');
@@ -626,6 +659,7 @@ function searchAppointments() {
           .limit(20)
           .get()
           .then(querySnapshot => {
+        if (!viewIsCurrent()) return;
               if (querySnapshot.empty) {
                   alert('該当する契約番号の予約が見つかりませんでした。');
                   return;
@@ -643,6 +677,7 @@ function searchAppointments() {
     db.collection("appointments")
       .get()
       .then(querySnapshot => {
+        if (!viewIsCurrent()) return;
           const matched = querySnapshot.docs.filter(doc => {
               const name = doc.data().claimantName || '';
               return nameMatches(name, searchTerm);
@@ -733,6 +768,8 @@ function calculateAge(dobString) {
 }
 
 function printInvoice() {
+    const viewIsCurrent = captureSensitiveViewSession();
+    if (!viewIsCurrent()) return;
     const selectedYear = invoiceYearSelect.value;
     const selectedMonth = invoiceMonthSelect.value;
     
@@ -755,6 +792,7 @@ function printInvoice() {
       .where("isShown", "==", true)
       .get()
       .then(querySnapshot => {
+        if (!viewIsCurrent()) return;
           if (querySnapshot.empty) {
               alert('SHOWがチェックされたレコードはありませんでした。');
               return;
@@ -950,7 +988,10 @@ function generateNewInvoiceHTML(audiologyRecords, dayRateList, from, to) {
 }
 
 function openPhoneEditModal(docId) {
+    const viewIsCurrent = captureSensitiveViewSession();
+    if (!viewIsCurrent()) return;
     db.collection('appointments').doc(docId).get().then(doc => {
+        if (!viewIsCurrent()) return;
         if (!doc.exists) {
             alert('データが見つかりません');
             return;
@@ -1229,8 +1270,10 @@ async function fetchNameKana(nameEn) {
 }
 
 function autofillShokaijyoKana(nameEn) {
+    const viewIsCurrent = captureSensitiveViewSession();
+    if (!viewIsCurrent()) return;
     fetchNameKana(nameEn).then(kana => {
-        if (!kana) return;
+        if (!viewIsCurrent() || !kana) return;
         shokaijyoSheetContainer.querySelectorAll('[name="name_kana"]').forEach(input => {
             if (!input.value.trim()) input.value = kana;
         });
@@ -1628,6 +1671,8 @@ function parseVisitDateForModal(rawVisitDate, appointmentDateTime) {
 }
 
 function openVisitDateModal(docId, destKey = null) {
+    const viewIsCurrent = captureSensitiveViewSession();
+    if (!viewIsCurrent()) return;
     visitDateEditingDocId = docId;
     visitDateEditingDest = destKey;
     visitDateInput.value = '';
@@ -1636,6 +1681,7 @@ function openVisitDateModal(docId, destKey = null) {
     }
 
     db.collection('appointments').doc(docId).get().then(doc => {
+        if (!viewIsCurrent()) return;
         if (!doc.exists) {
             visitDateModal.style.display = 'flex';
             document.body.classList.add('modal-open');

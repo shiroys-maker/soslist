@@ -207,11 +207,18 @@ function openSummaryModal(ymd, summaryMarkdown, audioUrl = null) {
 function closeSummaryModal() {
     summaryModal.style.display = 'none';
     summaryModalMeta.textContent = '';
+    for (const audio of summaryModalBody.querySelectorAll('audio')) {
+        audio.pause();
+        audio.removeAttribute('src');
+        audio.load();
+    }
     summaryModalBody.innerHTML = '';
     document.body.classList.remove('modal-open');
 }
 
 async function showSummary() {
+    const viewIsCurrent = captureSensitiveViewSession();
+    if (!viewIsCurrent()) return;
     if (!summaryDateInput?.value) {
         alert('Summaryの日付を選んでください。');
         return;
@@ -219,6 +226,7 @@ async function showSummary() {
 
     const targetDate = summaryDateInput.value;
     const summary = await fetchSummary(targetDate);
+    if (!viewIsCurrent()) return;
     let audioUrl = null;
     if (summary.audioStoragePath) {
         try {
@@ -227,6 +235,7 @@ async function showSummary() {
             console.warn('Summary 音声の取得に失敗しました:', error.code, error.message);
         }
     }
+    if (!viewIsCurrent()) return;
     openSummaryModal(targetDate, summary.summaryMarkdown, audioUrl);
 }
 
@@ -248,34 +257,50 @@ async function fetchSummary(targetDate) {
     return { summaryMarkdown: '', audioStoragePath: '' };
 }
 
+// Clear all sensitive DOM before changing users or attempting sign-out.
+function clearSensitiveUi() {
+    window.sosConnection.stop();
+    if (unsubscribe) { unsubscribe(); unsubscribe = null; }
+    clearTimeout(logoutTimer);
+    displayedAppointments.clear();
+    setResultsWaitingMode(false, false);
+    window.sosPdfViewer?.close();
+    closeSummaryModal();
+    closeClaimDetailModal();
+    for (const modal of document.querySelectorAll('.modal')) modal.style.display = 'none';
+    for (const region of [tableBody, mobileAppointmentsList, detailsContentContainer,
+        searchResultsList, shokaijyoSheetContainer]) {
+        if (region) region.innerHTML = '';
+    }
+    for (const input of document.querySelectorAll('.modal input, .modal textarea, .modal select')) input.value = '';
+    searchInput.value = '';
+    loginPasswordInput.value = '';
+    userEmailSpan.textContent = '';
+    detailsModal.dataset.editingId = '';
+    editingDateTimeDocId = editingPhoneDocId = null;
+    shokaijyoEditingDocId = shokaijyoEditingDest = null;
+    visitDateEditingDocId = visitDateEditingDest = null;
+    document.body.classList.remove('modal-open');
+    mainAppContainer.style.display = 'none';
+}
+
 // --- ログイン状態の監視 ---
 auth.onAuthStateChanged(user => {
+    setSensitiveViewsAllowed(false);
+    clearSensitiveUi();
     if (user) {
+        setSensitiveViewsAllowed(true);
         loginContainer.style.display = 'none';
         mainAppContainer.style.display = 'block';
         userEmailSpan.textContent = user.email;
-        
-        // 年選択オプションを生成
         generateYearOptions();
         initializeMobileViewMode();
         initializeMobileControlsState();
         initializeSummaryDate();
-
         window.sosConnection.start();
-
         startLogoutTimer();
     } else {
-        closeClaimDetailModal();
-        displayedAppointments.clear();
-        setResultsWaitingMode(false, false);
-        window.sosPdfViewer?.close();
-        window.sosConnection.stop();
         loginContainer.style.display = 'block';
-        mainAppContainer.style.display = 'none';
-        clearTimeout(logoutTimer);
-        if (unsubscribe) {
-            unsubscribe();
-        }
     }
 });
 
@@ -289,8 +314,14 @@ loginButton.addEventListener('click', () => {
         });
 });
 
-logoutButton.addEventListener('click', () => {
-    auth.signOut();
+logoutButton.addEventListener('click', async () => {
+    setSensitiveViewsAllowed(false);
+    clearSensitiveUi();
+    loginContainer.style.display = 'block';
+    try { await auth.signOut(); }
+    catch (_) {
+        loginError.textContent = 'ログアウトを完了できませんでした。画面の再表示は停止しました。端末を他の人へ渡さず、ページを再読み込みしてログアウトをやり直してください。';
+    }
 });
 
 loginEmailInput.addEventListener('keypress', (e) => {
@@ -515,7 +546,10 @@ function closeClaimDetailModal() {
 // 保存形式: "JONES, JONATHAN"（姓, 名、大文字）
 // 対応: 姓のみ / 名のみ / 姓名 / 名姓 / カンマあり / 大文字小文字不問
 function openDetailsModal(docId) {
+    const viewIsCurrent = captureSensitiveViewSession();
+    if (!viewIsCurrent()) return;
   db.collection('appointments').doc(docId).get().then(doc => {
+        if (!viewIsCurrent()) return;
     if (!doc.exists) {
       alert('データが見つかりません');
       return;
@@ -562,9 +596,12 @@ function openDetailsModal(docId) {
 // ===== 紹介先 分類ロジック =====
 // ===== 紹介状モーダル =====
 function openShokaijyoModal(docId, destKey) {
+    const viewIsCurrent = captureSensitiveViewSession();
+    if (!viewIsCurrent()) return;
     if (!REFERRAL_FULL[destKey]) return;
 
     db.collection('appointments').doc(docId).get().then(doc => {
+        if (!viewIsCurrent()) return;
         if (!doc.exists) return;
         const data = doc.data();
         const saved = data.referrals && data.referrals[destKey];
