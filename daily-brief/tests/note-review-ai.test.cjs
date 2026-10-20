@@ -28,7 +28,7 @@ for(const service of ['claude','openai']){
   const text='Source_A.pdf p.2, 2021: left knee 5/5, -10°; no diagnosis; pending MRI. https://example.test/a_b';
   const f=sequenceFixture(t,[{body:'**'+text+'**'},{body:text}]);
   assert.equal(await summarizeNote('SYNTHETIC MEMO only',selected,{executable:f.executable,env:{...process.env,OPENAI_API_KEY:'never-forward'}}),text);
-  const calls=f.calls();assert.equal(calls.length,2);assert.match(calls[1].input,/Correct formatting ONLY/);assert.match(calls[1].input,/Preserve EVERY other word/);assert.match(calls[1].input,/SYNTHETIC MEMO only/);assert.ok(calls[1].input.includes(JSON.stringify('**'+text+'**')));
+  const calls=f.calls();assert.equal(calls.length,2);assert.match(calls[1].input,/Correct formatting ONLY/);assert.match(calls[1].input,/Preserve EVERY other word/);assert.doesNotMatch(calls[1].input,/SYNTHETIC MEMO only|<appointment-memo>/);assert.ok(calls[1].input.includes(JSON.stringify('**'+text+'**')));
   for(const call of calls){assert.equal(fs.existsSync(call.cwd),false);assert.equal(call.env.OPENAI_API_KEY,undefined);assert.equal(call.args[call.args.indexOf('--model')+1],selected.model);}
  });
  test(`${service} stops after one repair and rejects clinical content changes`,async t=>{
