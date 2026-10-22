@@ -10,12 +10,12 @@ function numericComparisonLine(line){
  if(/^[ \t]*>=?[+-]?(?:\d|\.\d)/.test(line))return true;
  return /^[ \t]*>(?:[ \t]*=)?[ \t]+[+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:[ \t]*(?:%|mm(?:Hg)?|cm|m|mg(?:\/dL)?|g|kg|dB|Hz|bpm|ms|s|°[CF]?))?[ \t]*[.;]?[ \t]*$/i.test(line);
 }
-function listOrQuote(body){return body.split(/\r?\n/).some(line=>/^[ \t]*(?:[-+*][ \t]+|\d+[.)][ \t]+)/.test(line)||(/^[ \t]*>/.test(line)&&!numericComparisonLine(line)));}
+function listOrQuote(body){return body.split(/\r?\n/).some(line=>/^[ \t]*(?:[-+*•][ \t]+|\d+[.)][ \t]+)/.test(line)||(/^[ \t]*>/.test(line)&&!numericComparisonLine(line)));}
 const formatRules=[
  ['heading',/^[ \t]{0,3}#{1,6}(?:[ \t]+|$)/m],
  ['fence',/^[ \t]*(?:`{3,}|~{3,})/m], ['inline-code',/`/],
  ['indentation',/^(?: {4}|\t)[ \t]*\S/m],
- ['list-or-quote',/^[ \t]*(?:[-+*][ \t]+|\d+[.)][ \t]+|>)/m],
+ ['list-or-quote',/^[ \t]*(?:[-+*•][ \t]+|\d+[.)][ \t]+|>)/m],
  ['divider',/^[ \t]*(?:[-=]+|(?:-[ \t]*){3,}|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})[ \t]*$/m],
  ['table',/^[ \t]*\|/m], ['table',/^[ \t]*\S[^\n]*\|[^\n]*\r?\n[ \t]*:?-+:?[ \t]*\|/m],
  // Literal underscores in identifiers and blank/redaction runs are content.
@@ -56,12 +56,13 @@ function formattingOnlyReference(draft){
 function formattingRepairPlan(draft){
  const reference=formattingOnlyReference(draft);
  if(reference!==null)return {kind:'wrappers',reference};
- // Only explicit flat unordered items can be mapped to separate paragraphs.
+ // Only unambiguous Unicode bullets can be mapped to separate paragraphs.
+ // ASCII +/- may encode a positive/negative clinical finding: never erase them.
  // Nested, ordered, mixed prose, numerical-minus and quote structures remain
  // ambiguous. Never erase ordering numbers or quotation meaning.
  const lines=draft.trim().split(/\r?\n/).filter(line=>line.trim());
  if(!lines.length)return null;
- const items=lines.map(line=>line.match(/^[-+*][ \t]+([A-Za-z][^\r\n]*)$/)?.[1]);
+ const items=lines.map(line=>line.match(/^•[ \t]+([A-Za-z][^\r\n]*)$/)?.[1]);
  if(items.some(item=>item===undefined))return null;
  const references=items.map(formattingOnlyReference);
  if(references.some(item=>item===null))return null;

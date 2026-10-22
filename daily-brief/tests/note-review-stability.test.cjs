@@ -3,10 +3,10 @@ const e=require('../evidence-review.cjs'),{summarizeNote}=require('../note-revie
 test('numeric comparisons remain literal while real quotes, lists and nested structure are detected',()=>{
  for(const text of ['> 5','> 5 mm','>= 5 mg','> -0.5 dB','> .5 cm','>5 mm; no diagnosis.','SpO2 < 95%; no diagnosis.'])assert.equal(e.validateEvidenceReviewText(text),text);
  for(const text of ['> No diagnosis was recorded.','> 5 mm ambiguous quote.','>> 5 mm','- No diagnosis.','1. No diagnosis.','  - Nested item.'])assert.throws(()=>e.validateEvidenceReviewText(text),error=>error.issues.includes('list-or-quote'));
- for(const text of ['> No diagnosis.','1. No diagnosis.','- 5 mm','- Left knee.\n  - No diagnosis.','Text.\n- Left knee.'])assert.equal(e.formattingRepairPlan(text),null);
+ for(const text of ['> No diagnosis.','1. No diagnosis.','+ Romberg test.','- Romberg test.','* Source footnote.','- 5 mm','- Left knee.\n  - No diagnosis.','Text.\n- Left knee.'])assert.equal(e.formattingRepairPlan(text),null);
 });
 test('flat items retain paragraph boundaries, numbers, negation, dates and order exactly',()=>{
- const draft='- Source_A.pdf p.2: Left knee 5/5, > 5 mm.\n- No diagnosis; pending MRI, 2026-10-23.';
+ const draft='• Source_A.pdf p.2: Left knee 5/5, > 5 mm.\n• No diagnosis; pending MRI, 2026-10-23.';
  const correct='Source_A.pdf p.2: Left knee 5/5, > 5 mm.\n\nNo diagnosis; pending MRI, 2026-10-23.';
  assert.equal(e.formattingRepairPlan(draft).kind,'flat-list');assert.doesNotThrow(()=>e.assertFormattingOnlyCorrection(draft,correct));
  for(const changed of [correct.replace('Left','Right'),correct.replace('5/5','4/5'),correct.replace('No diagnosis','Diagnosis'),correct.replace('pending','completed'),correct.replace('2026','2025'),correct.replace('> 5','< 5'),correct.replace('\n\n',' '),correct.split('\n\n').reverse().join('\n\n')])assert.throws(()=>e.assertFormattingOnlyCorrection(draft,changed),error=>error.code==='EVIDENCE_REVIEW_CONTENT_CHANGED');
@@ -26,7 +26,7 @@ for(const service of ['claude','openai']){
  });
  for(const mode of ['success','changed','retry-failed','quote'])test(`${service} bounded structured repair ${mode} keeps text out of generic diagnostics`,async t=>{
   const item='SyntheticPrivateMarker: Left 5/5; no diagnosis.',second='Pending MRI; Source_A.pdf p.2.';
-  const first=mode==='quote'?{paragraphs:['> '+item]}:{paragraphs:['- '+item,'- '+second]};
+  const first=mode==='quote'?{paragraphs:['> '+item]}:{paragraphs:['• '+item,'• '+second]};
   const outputs=[first,mode==='retry-failed'?first:{paragraphs:[mode==='changed'?item.replace('no diagnosis','diagnosis'):item,second]}];
   const f=fixture(t,outputs),logs=[],saved=[],diagnostic=createDiagnostic('2099-01-01',{write:line=>logs.push(line)});
   const operation=summarizeNote('SyntheticPrivateOriginalMemo',selected,{executable:f.executable,diagnostic,failureRecorder:record=>{saved.push(record);return true;}});
