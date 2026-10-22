@@ -55,11 +55,12 @@ test('format errors report fixed categories without any clinical excerpts and st
 });
 test('format-only equality preserves all clinical text; ambiguous structures and content edits fail closed',()=>{
  const {formattingOnlyReference,assertFormattingOnlyCorrection}=require('../evidence-review.cjs');
+ assert.equal(formattingOnlyReference('identifier__value__'),'identifier__value__');
  const exact='Source_A.pdf p.2, 2021-02-03: left L4_L5, 5/5, -10°, +2, 3*4 mm, SpO2 < 95%, ±2 dB. No diagnosis; pending MRI. https://example.test/a_b';
  for(const draft of ['**'+exact+'**','# Source\n'+exact,'```text\n'+exact+'\n```','    '+exact,'Evidence Review\n'+exact,'`'+exact+'`','*'+exact+'*']){
   const corrected=draft.startsWith('# Source')?'Source\n'+exact:exact;
   assert.doesNotThrow(()=>assertFormattingOnlyCorrection(draft,corrected));
  }
- for(const input of ['- '+exact,'1. '+exact,'~~'+exact+'~~','| Value | Side |\n| --- | --- |\n| 5 | Left |','[source](https://example.test)','```Source_A.pdf p.2\n'+exact+'\n```','identifier__value__'])assert.equal(formattingOnlyReference(input),null,input);
+ for(const input of ['- '+exact,'1. '+exact,'~~'+exact+'~~','| Value | Side |\n| --- | --- |\n| 5 | Left |','[source](https://example.test)','```Source_A.pdf p.2\n'+exact+'\n```'])assert.equal(formattingOnlyReference(input),null,input);
  for(const changed of [exact.replace('left','right'),exact.replace('5/5','4/5'),exact.replace('No diagnosis','Diagnosis'),exact.replace('2021','2022'),exact.replace('Source_A','Source_B'),exact.replace('pending','completed'),exact.replace('3*4','3x4'),exact+' Additional diagnosis.'])assert.throws(()=>assertFormattingOnlyCorrection('**'+exact+'**',changed),error=>error.code==='EVIDENCE_REVIEW_CONTENT_CHANGED');
 });
