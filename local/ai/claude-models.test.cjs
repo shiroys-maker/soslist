@@ -18,3 +18,9 @@ test('subscription catalog with 1M Opus identifies the resolved version clearly'
  assert.equal(models.find(m=>m.id==='claude-opus-5-5[1m]').name,'Opus 5.5 (1M context)');
  assert.equal(models.filter(m=>m.id==='claude-opus-5-5[1m]').length,1);
 });
+test('newer catalogs with use-case descriptions label pinned versions by display name',()=>{
+ const models=api.parseModels([{value:'opus',resolvedModel:'claude-opus-5-5',displayName:'Opus 5.5',description:'For complex work and everyday tasks'},{value:'fable',resolvedModel:'claude-fable-5-1',displayName:'Fable 5.1',description:'For your toughest challenges'},{value:'default',resolvedModel:'claude-sonnet-5-5',displayName:'Default (recommended)',description:'Use the default model (currently Sonnet 5.5)'}]);
+ assert.equal(models.find(m=>m.id==='claude-opus-5-5').name,'Opus 5.5');
+ assert.equal(models.find(m=>m.id==='claude-fable-5-1').name,'Fable 5.1');
+ assert.equal(models.find(m=>m.id==='claude-sonnet-5-5').name,'Sonnet 5.5');
+});

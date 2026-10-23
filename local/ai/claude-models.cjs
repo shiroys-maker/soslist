@@ -2,6 +2,13 @@
 const fs=require('node:fs'),os=require('node:os'),path=require('node:path'),{spawn}=require('node:child_process');
 const {resolveClaude}=require('./claude-path.cjs');
 const levels=['low','medium','high','xhigh','max'];
+// Older CLIs put the version in the description ("Opus 5.5 · Best for…"); newer ones put it in displayName and describe the use.
+function resolvedName(m){
+ const description=m.description||'',current=description.split(' · ')[0].match(/^Use the default model \(currently (.*)\)$/);
+ if(current)return current[1].trim();
+ if(description.includes(' · '))return description.split(' · ')[0].trim()||m.resolvedModel;
+ return /\d/.test(m.displayName||'')?m.displayName:m.resolvedModel;
+}
 function parseModels(items){
  const models=new Map(),valid=id=>typeof id==='string'&&id.length>0&&id.length<=200&&!/[\r\n\0]/.test(id);
  for(const m of Array.isArray(items)?items:[]){
@@ -9,7 +16,7 @@ function parseModels(items){
   const efforts=(m.supportedEffortLevels||[]).filter(x=>levels.includes(x));
   const name=m.displayName||m.value;
   models.set(m.value,{service:'claude',id:m.value,name:name+(m.value==='opus'?'（最新）':''),efforts});
-  if(valid(m.resolvedModel)&&m.resolvedModel!==m.value&&!models.has(m.resolvedModel))models.set(m.resolvedModel,{service:'claude',id:m.resolvedModel,name:(m.description||'').split(' · ')[0].replace(/^Use the default model \(currently (.*)\)$/,'$1').trim()||m.resolvedModel,efforts});
+  if(valid(m.resolvedModel)&&m.resolvedModel!==m.value&&!models.has(m.resolvedModel))models.set(m.resolvedModel,{service:'claude',id:m.resolvedModel,name:resolvedName(m),efforts});
  }
  if(!models.size)throw Error('Claude Codeのモデル一覧が空です。');
  return [...models.values()];

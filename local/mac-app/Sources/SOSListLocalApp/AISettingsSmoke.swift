@@ -6,7 +6,7 @@ extension AppDelegate {
           document.getElementById('ai-settings-open').click();
           for(let i=0;i<80&&!document.querySelector('fieldset');i++)await wait();
           const models=()=>document.querySelectorAll('select.ai-model-select');
-          if(models().length!==8)throw Error('Missing model dropdowns');
+          if(models().length!==7)throw Error('Missing model dropdowns');
           if(document.querySelector('fieldset input'))throw Error('Unexpected manual model input');
           for(let i=0;i<200&&models()[0].options.length<2;i++)await wait();
           const bill=document.querySelector('[data-task=bill] .ai-model-select');
@@ -29,13 +29,18 @@ extension AppDelegate {
           if(document.getElementById('ai-model-refresh').disabled)throw Error('Model refresh did not finish');
           if(summaryModel().value!==opus55.value||service().value!=='claude')throw Error('Model refresh lost selection');
           if(![...summaryModel().options].some(o=>o.value===opus55.value&&o.text.startsWith('Opus 5.5')))throw Error('Refreshed version label missing');
+          for(const id of ['xray','audiogram','kana','speech']){const s=document.querySelector(`[data-task=${id}] .ai-service-select`);if(![...s.options].some(o=>o.value==='claude'))throw Error('Missing Claude choice: '+id);}
+          const xrService=()=>document.querySelector('[data-task=xray] .ai-service-select'),xrModel=()=>document.querySelector('[data-task=xray] .ai-model-select');
+          xrService().value='claude';xrService().dispatchEvent(new Event('change'));
+          if(xrModel().value!=='opus'||!document.querySelector('[data-task=bill] .ai-service-select')||document.querySelector('[data-task=bill] .ai-service-select').options.length!==1)throw Error('XR Claude default or bill service wrong');
           document.getElementById('ai-settings-save').click();
           for(let i=0;i<80&&!document.getElementById('ai-settings-status').textContent.includes('保存しました');i++)await wait();
           document.getElementById('ai-settings-close').click();document.getElementById('ai-settings-open').click();
           for(let i=0;i<80&&!document.querySelector('dialog[open]');i++)await wait();
           if(document.querySelector('[data-task=bill] .ai-model-select').value!=='gpt-6-luna')throw Error('Saved model not reloaded');
           if(service().value!=='claude'||summaryModel().value!==opus55.value)throw Error('Summary service not reloaded');
-          window.webkit.messageHandlers.aiSettingsSmokeResult.postMessage({ok:true,tasks:8,model:document.querySelector('[data-task=bill] .ai-model-select').value,automaticCatalog:true,refreshedCatalog:true,summaryService:service().value,summaryModel:summaryModel().value});
+          if(xrService().value!=='claude'||xrModel().value!=='opus')throw Error('XR Claude not reloaded');
+          window.webkit.messageHandlers.aiSettingsSmokeResult.postMessage({ok:true,tasks:7,xrayService:xrService().value,model:document.querySelector('[data-task=bill] .ai-model-select').value,automaticCatalog:true,refreshedCatalog:true,summaryService:service().value,summaryModel:summaryModel().value});
         }catch(e){window.webkit.messageHandlers.aiSettingsSmokeResult.postMessage({ok:false,error:e.message});}})();
         """#
         webView.evaluateJavaScript(js, completionHandler: nil)
