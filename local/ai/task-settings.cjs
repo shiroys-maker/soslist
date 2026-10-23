@@ -5,15 +5,15 @@ const file=()=>process.env.SOSLIST_AI_SETTINGS_FILE||path.join(os.homedir(),'Lib
 const definitions={
  bill:{label:'201 Bill取り込み',scope:'手動・Evidence ReviewからのPDF予約情報解析',service:'openai',model:'gpt-6.1-sol',effort:'medium',env:'SOSPDF_CODEX_MODEL'},
  evidence:{label:'Evidence Review',scope:'単独・一括・再開、SHA MEP入力と紹介状保存を含む同一処理',service:'openai',model:'gpt-6-astra',effort:'high'},
- xray:{label:'XR / CD画像解析',scope:'画像アップロードとCD自動取得後の読影',service:'openai',model:'gpt-6-astra',effort:'high',env:'XRAY_CODEX_MODEL'},
- audiogram:{label:'Audiogram読み取り',scope:'聴力画像の数値転記',service:'openai',model:'gpt-6.1-sol',effort:'high',env:'AUDIOGRAM_CODEX_MODEL'},
- kana:{label:'氏名カナ変換',scope:'QTCローカルツールの氏名変換',service:'openai',model:'gpt-6-luna',effort:'low'},
+ xray:{label:'XR / CD画像解析',scope:'画像アップロードとCD自動取得後の読影',service:'openai',model:'gpt-6-astra',effort:'high',env:'XRAY_CODEX_MODEL',services:['openai','claude'],serviceDefaults:{openai:{model:'gpt-6-astra',effort:'high'},claude:{model:'opus',effort:'high'}}},
+ audiogram:{label:'Audiogram読み取り',scope:'聴力画像の数値転記',service:'openai',model:'gpt-6.1-sol',effort:'high',env:'AUDIOGRAM_CODEX_MODEL',services:['openai','claude'],serviceDefaults:{openai:{model:'gpt-6.1-sol',effort:'high'},claude:{model:'opus',effort:'high'}}},
+ kana:{label:'氏名カナ変換',scope:'QTCローカルツールの氏名変換',service:'openai',model:'gpt-6-luna',effort:'low',services:['openai','claude'],serviceDefaults:{openai:{model:'gpt-6-luna',effort:'low'},claude:{model:'opus',effort:'low'}}},
  summary:{label:'Summary / Podcast原稿生成',scope:'両原稿を同じCLIで生成。手動・定時実行共通',service:'openai',model:'gpt-6-astra',effort:'high',services:['openai','claude'],serviceDefaults:{openai:{model:'gpt-6-astra',effort:'high'},claude:{model:'opus',effort:'high'}}},
- speech:{label:'読み上げ用整形',scope:'Podcast原稿の読み変換・キャッシュ',service:'openai',model:'gpt-6.1-sol',effort:'medium',env:'PODCAST_SPEECH_MODEL'},
+ speech:{label:'読み上げ用整形',scope:'Podcast原稿の読み変換・キャッシュ',service:'openai',model:'gpt-6.1-sol',effort:'medium',env:'PODCAST_SPEECH_MODEL',services:['openai','claude'],serviceDefaults:{openai:{model:'gpt-6.1-sol',effort:'medium'},claude:{model:'opus',effort:'medium'}}},
  tts:{label:'音声生成',scope:'Gemini TTS。effort指定は非対応',service:'gemini',model:'gemini-3.8-flash-tts',effort:'',env:'GEMINI_TTS_MODEL'}
 };
 function read(){try{return JSON.parse(fs.readFileSync(file(),'utf8'));}catch(e){if(e.code==='ENOENT')return {};throw e;}}
-function choice(id,fallback={}){const d=definitions[id];if(!d)throw Error('Unknown AI task');const saved=read()[id];const selected={...d,model:(d.env&&process.env[d.env])||d.model,...fallback,...saved};if(id==='summary')selected.selections={...d.serviceDefaults,...saved?.selections,[selected.service]:{model:selected.model,effort:selected.effort}};return selected;}
+function choice(id,fallback={}){const d=definitions[id];if(!d)throw Error('Unknown AI task');const saved=read()[id];const selected={...d,model:(d.env&&process.env[d.env])||d.model,...fallback,...saved};if(d.services)selected.selections={...d.serviceDefaults,...saved?.selections,[selected.service]:{model:selected.model,effort:selected.effort}};return selected;}
 function all(){return Object.fromEntries(Object.keys(definitions).map(id=>{
  let execution;try{execution=JSON.parse(fs.readFileSync(path.join(path.dirname(file()),'AIExecutions',id+'.json'),'utf8'));if(execution.state==='running'){try{process.kill(execution.pid,0);}catch(_){execution.state='interrupted';}}}catch(_){}
  return [id,{...choice(id),execution}];}));}
@@ -25,7 +25,7 @@ function save(input){const previous=read(),next={...previous};for(const [id,d]of
  function valid(service,selected){return typeof selected?.model==='string'&&selected.model.trim()&&!/[\r\n\0]/.test(selected.model)&&selected.model.length<=200&&(service==='gemini'?selected.effort==='':(service==='claude'?['low','medium','high','xhigh','max']:['none','minimal','low','medium','high','xhigh','max','ultra']).includes(selected.effort));}
  if(!v||!(d.services||[d.service]).includes(v.service)||!valid(v.service,v))throw Error('設定を確認してください: '+d.label);
  next[id]={service:v.service,model:v.model.trim(),effort:v.effort};
- if(id==='summary'){
+ if(d.services){
   const prior=previous[id],selections={...d.serviceDefaults,...prior?.selections,...v.selections};
   if(prior&&!v.selections)selections[prior.service]={model:prior.model,effort:prior.effort};
   selections[v.service]={model:v.model.trim(),effort:v.effort};

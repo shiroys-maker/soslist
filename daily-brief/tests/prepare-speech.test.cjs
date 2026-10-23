@@ -93,3 +93,17 @@ test('removed engines fail before conversion or external work', async () => {
     await assert.rejects(ctx.module.exports.synthesizePodcast(null, [], '/tmp/speech/podcast'), /Gemini/);
   }
 });
+
+test('speech conversion runs through Claude Code when the speech task selects Claude', async t => {
+  const dir = temporary(t), bin = path.join(dir, 'claude'), settings = path.join(dir, 'tasks.json');
+  fs.writeFileSync(settings, JSON.stringify({ speech: { service: 'claude', model: 'opus', effort: 'medium' } }));
+  fs.writeFileSync(bin, `#!${process.execPath}\nprocess.stdin.resume();process.stdin.on('end',()=>process.stdout.write(JSON.stringify({type:'result',subtype:'success',is_error:false,structured_output:{edits:[{turn:0,source:'腫脹',occurrence:0,reading:'シュチョウ'}]}})));\n`, { mode: 0o755 });
+  const saved = { file: process.env.SOSLIST_AI_SETTINGS_FILE, bin: process.env.SOSLIST_CLAUDE_BIN };
+  process.env.SOSLIST_AI_SETTINGS_FILE = settings; process.env.SOSLIST_CLAUDE_BIN = bin;
+  t.after(() => { for (const [k, v] of [['SOSLIST_AI_SETTINGS_FILE', saved.file], ['SOSLIST_CLAUDE_BIN', saved.bin]]) v === undefined ? delete process.env[k] : process.env[k] = v; });
+  const logs = [];
+  const spoken = await prepareSpeechDialogue([{ speaker: 'A', text: '腫脹なし。' }], path.join(dir, 'out'), { log: m => logs.push(m) });
+  assert.equal(spoken[0].text, 'シュチョウなし。');
+  assert.ok(logs.some(m => m.includes('Claude Code, opus')));
+  assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'AIExecutions/speech.json'))).service, 'claude');
+});

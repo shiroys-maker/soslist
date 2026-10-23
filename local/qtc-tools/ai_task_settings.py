@@ -4,14 +4,21 @@ import os
 from pathlib import Path
 
 def choice(task, model, effort):
+    return selection(task, model, effort)[1:]
+
+def selection(task, model, effort):
+    """Return (service, model, effort); tasks without a saved service stay on OpenAI/Codex."""
     file = Path(os.environ.get('SOSLIST_AI_SETTINGS_FILE', str(Path.home() / 'Library/Application Support/SOSList Local/ai-tasks.json')))
     try:
         saved = json.loads(file.read_text()).get(task, {})
     except FileNotFoundError:
         saved = {}
-    return saved.get('model', model), saved.get('effort', effort)
+    service = saved.get('service', 'openai')
+    if service != 'claude':
+        service = 'openai'
+    return service, saved.get('model', model), saved.get('effort', effort)
 
-def record(task, model, effort, state):
+def record(task, model, effort, state, service='openai'):
     import datetime
     file = Path(os.environ.get('SOSLIST_AI_SETTINGS_FILE', str(Path.home() / 'Library/Application Support/SOSList Local/ai-tasks.json')))
     try:
@@ -19,7 +26,7 @@ def record(task, model, effort, state):
         directory.mkdir(parents=True, exist_ok=True, mode=0o700)
         target = directory / (task + '.json')
         temp = target.with_suffix('.' + str(os.getpid()) + '.tmp')
-        temp.write_text(json.dumps(dict(model=model, effort=effort, state=state, pid=os.getpid(), at=datetime.datetime.now(datetime.timezone.utc).isoformat())))
+        temp.write_text(json.dumps(dict(service=service, model=model, effort=effort, state=state, pid=os.getpid(), at=datetime.datetime.now(datetime.timezone.utc).isoformat())))
         temp.chmod(0o600)
         temp.replace(target)
     except OSError:

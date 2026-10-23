@@ -46,3 +46,17 @@ test('model refresh replaces each successful provider and preserves only failed 
   const refreshed=await api.models({cacheFile,providers:{claude:async()=>[{service:'claude',id:'new-opus'}]}});assert.equal(refreshed.cached,false);
  }finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
+
+test('XR, Audiogram, kana and speech also switch to Claude Code; agentic tasks stay Codex-only',()=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'sos-claude-tasks-')),previous=process.env.SOSLIST_AI_SETTINGS_FILE;
+ process.env.SOSLIST_AI_SETTINGS_FILE=path.join(dir,'tasks.json');
+ try{
+  const api=require('./task-settings.cjs'),tasks=api.all();
+  for(const id of ['xray','audiogram','kana','speech']){assert.deepEqual(tasks[id].services,['openai','claude']);tasks[id]={...tasks[id],service:'claude',model:'claude-opus-5-5',effort:'max'};}
+  api.save(tasks);
+  const reloaded=JSON.parse(spawnSync(process.execPath,[path.join(__dirname,'task-settings.cjs'),'get'],{encoding:'utf8',env:process.env}).stdout);
+  for(const id of ['xray','audiogram','kana','speech']){assert.equal(reloaded[id].service,'claude');assert.equal(reloaded[id].model,'claude-opus-5-5');assert.ok(reloaded[id].selections.openai.model.startsWith('gpt-'));}
+  assert.throws(()=>api.save({...reloaded,kana:{...reloaded.kana,effort:'ultra'}}));
+  assert.throws(()=>api.save({...reloaded,bill:{...reloaded.bill,service:'claude',model:'opus'}}));
+ }finally{previous===undefined?delete process.env.SOSLIST_AI_SETTINGS_FILE:process.env.SOSLIST_AI_SETTINGS_FILE=previous;fs.rmSync(dir,{recursive:true,force:true});}
+});

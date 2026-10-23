@@ -2,7 +2,7 @@
 
 import math
 import os
-from ai_task_settings import choice
+from ai_task_settings import selection
 
 from codex_images import CODEX_BIN, ReportError, decode_images, run_image_report, serve_report
 
@@ -57,11 +57,11 @@ def validate_report(report):
 
 
 def generate_report(payload):
-    model, effort = choice('audiogram', os.environ.get('AUDIOGRAM_CODEX_MODEL', 'gpt-6.1-sol'), 'high')
+    service, model, effort = selection('audiogram', os.environ.get('AUDIOGRAM_CODEX_MODEL', 'gpt-6.1-sol'), 'high')
     images = decode_images(payload, max_count=1)
     return validate_report(run_image_report(
         images, prompt=report_prompt(), schema=REPORT_SCHEMA,
-        model=model, effort=effort, task='audiogram',
+        model=model, effort=effort, task='audiogram', service=service,
         executable=os.environ.get('AUDIOGRAM_CODEX_BIN', CODEX_BIN),
     ))
 
