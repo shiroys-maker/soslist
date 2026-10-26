@@ -60,7 +60,7 @@ function buildRequest(dialogue, config) {
       annotations: [{ type: 'speech_metadata', speaker: turn.speaker, style: config.style }],
     })) }],
     response_format: { type: 'audio', mime_type: 'audio/wav', sample_rate: 24000 },
-    generation_config: { speech_config: { mode: 'conversational', speakers: [
+    generation_config: { speech_config: { speakers: [
       { speaker: 'A', voice: config.voiceA }, { speaker: 'B', voice: config.voiceB },
     ] } },
   };

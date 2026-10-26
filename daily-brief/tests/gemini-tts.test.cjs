@@ -33,6 +33,15 @@ test('Gemini request separates exact transcript from two-speaker Japanese delive
   assert.equal(req.response_format.mime_type, 'audio/wav');
 });
 
+// A controlled request experiment, not evidence of API acceptance or the HTTP 400 cause.
+test('mode omission trial removes only the optional conversational field', () => {
+  const turns = [{ speaker: 'A', text: '合成テストです。' }, { speaker: 'B', text: '順序を保持します。' }];
+  const req = buildRequest(turns, config);
+  assert.equal(Object.hasOwn(req.generation_config.speech_config, 'mode'), false);
+  assert.deepEqual(Object.keys(req.generation_config.speech_config), ['speakers']);
+  assert.deepEqual(req.input[0].content.map(c => c.text), turns.map(t => t.text));
+});
+
 test('long dialogue splitting preserves order, all text, and surrogate pairs within limits', () => {
   const input = [{ speaker: 'A', text: '長い説明です。'.repeat(400) },
     { speaker: 'B', text: '🙂'.repeat(1400) }, { speaker: 'A', text: '終わりです。' }];
