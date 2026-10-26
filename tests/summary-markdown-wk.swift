@@ -28,12 +28,13 @@ final class Smoke: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
             check(document.querySelectorAll('#summary script,#summary img,#summary svg,#summary iframe').length===0,'unsafe nodes');
             check(globalThis.pwned===undefined,'script execution');
             check(document.querySelectorAll('#summary a').length===1,'unsafe links');
-            const source=document.getElementById('summarySource');
-            const original=source.value;
-            toggleSource();check(source.value===original&&!source.hidden,'source view');toggleSource();
+            check(document.querySelectorAll('#copySummary,#toggleSummarySource,#summarySource,#summaryCopyStatus').length===0,'removed source controls');
+            check(!document.getElementById('summary').hidden,'preview visible');
+            check(!document.getElementById('audioCard').classList.contains('hidden'),'audio UI');
+            check(document.getElementById('audio').controls,'audio controls');
             const range=document.createRange();range.selectNodeContents(document.getElementById('summary'));getSelection().removeAllRanges();getSelection().addRange(range);
             check(getSelection().toString().includes('Fictional findings'),'selection');getSelection().removeAllRanges();
-            window.webkit.messageHandlers.smoke.postMessage({ok:true,engine:'WKWebView',heading:true,table:true,bold:true,xss:true,source:true,selection:true});
+            window.webkit.messageHandlers.smoke.postMessage({ok:true,engine:'WKWebView',heading:true,table:true,bold:true,xss:true,previewOnly:true,audioUI:true,selection:true});
           } catch(e) {window.webkit.messageHandlers.smoke.postMessage({ok:false,error:e.message});}
         })();
         """#, completionHandler: nil)

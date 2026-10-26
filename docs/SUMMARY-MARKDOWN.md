@@ -29,12 +29,13 @@ frames, and limits fetch/media to its own origin. Its asset route is an explicit
 three-file allowlist; unreadable assets return a safe 404 so the text fallback
 can still run without terminating the server. No patient content is sent to a renderer service or AI.
 
-The popup has a read-only source toggle and explicit source-copy button. The button
-copies the original response string, including CRLF. Clipboard denial shows and
-selects the source for the user's normal keyboard copy (textarea selection uses the
-browser's normal LF representation). Rendered content remains selectable. If the
-parser is unavailable, escaped plain text is rendered; if all renderer assets fail,
-textContent with preserved whitespace is used.
+The local popup displays the preview only (2026-10-26 candidate). Its source-copy
+and source-toggle buttons, hidden source field and their handlers are removed.
+Saved Summary text and the status response are unchanged. Rendered content remains
+selectable for normal keyboard/menu copying. If the parser is unavailable, escaped
+plain text is rendered; if all renderer assets fail, textContent with preserved
+whitespace is used. Shared rendering, other screens' copy actions, audio playback
+and native generation are unchanged.
 
 The existing `/api/brief-status` background Firestore mirroring and audio routes
 are untouched. Synthetic verification stubs the data provider and mirroring, so it
@@ -52,12 +53,22 @@ PLAYWRIGHT_MODULE=/path/to/playwright-core SUMMARY_WK_RUNNER=/tmp/summary-markdo
 The browser runner creates its own ephemeral loopback server with synthetic-only
 Summary records. It blocks all external requests and uses a fake clipboard to
 preserve the user's clipboard. It covers desktop/mobile layout, HTML/URL/image XSS,
-original copying and denial fallback, selection, 215,012-character content, exact
-asset delivery, cloud renderer parity, and native detail rendering/edit/save with
+absence of source controls, selection, reload, synthetic WAV playback, saved
+source/audio preservation, missing audio, empty/missing Summary, fetch-failure
+recovery, 215,012-character content, exact asset delivery, cloud renderer parity,
+and native detail rendering/edit/save with
 a deliberately unavailable localStorage payload cache. The Swift runner uses an
 independent nonpersistent WKWebView with no app launch/startup tasks.
 
 ## Book local application
+
+The 2026-10-26 candidate is based on Book commit `74ced5e`. Its only production
+change is `daily-brief/server.js`; tests and this document are updated alongside it.
+Application to Book's registered source and subsequent Book-to-mini distribution
+are pending. No installed app replacement/rebuild or cloud publication is needed
+for this external HTML. Do not run Code Backup during candidate preparation: it
+also queues AppSync delivery to mini. Do not operate mini or the separate passkey
+prototype. The following deployment notes describe the earlier renderer rollout.
 
 Fast-forward the reviewed commit onto Book's source after confirming its baseline
 is 86ae567 and in-scope files have no user modifications. Preserve all untracked

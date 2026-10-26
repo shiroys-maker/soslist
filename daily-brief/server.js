@@ -135,13 +135,7 @@ function summaryPopupPage(ymd) {
 
     <section class="card hidden" id="summaryCard">
       <h2>Brief</h2>
-      <div class="summary-toolbar">
-        <button type="button" id="copySummary">原文をコピー</button>
-        <button type="button" id="toggleSummarySource" class="secondary" aria-pressed="false" aria-controls="summarySource">原文を表示</button>
-      </div>
-      <div id="summaryCopyStatus" class="summary-copy-status" role="status"></div>
       <div id="summary" class="summary-markdown"></div>
-      <textarea id="summarySource" class="summary-source" aria-label="Summary 原文（読み取り専用）" readonly hidden></textarea>
     </section>
   </div>
 
@@ -156,42 +150,10 @@ function summaryPopupPage(ymd) {
   const audioCard = document.getElementById('audioCard');
   const audioEl = document.getElementById('audio');
 
-  const sourceEl = document.getElementById('summarySource');
-  const copyStatusEl = document.getElementById('summaryCopyStatus');
-  const toggleSourceButton = document.getElementById('toggleSummarySource');
-
-  function toggleSource() {
-    sourceEl.hidden = !sourceEl.hidden;
-    summaryEl.hidden = !sourceEl.hidden;
-    toggleSourceButton.textContent = sourceEl.hidden ? '原文を表示' : '表示に戻る';
-    toggleSourceButton.setAttribute('aria-pressed', String(!sourceEl.hidden));
-  }
-
-  let summarySource = '';
-
-  async function copySummary() {
-    try {
-      await navigator.clipboard.writeText(summarySource);
-      copyStatusEl.textContent = '原文をコピーしました。';
-    } catch {
-      sourceEl.hidden = false;
-      summaryEl.hidden = true;
-      toggleSourceButton.textContent = '表示に戻る';
-      toggleSourceButton.setAttribute('aria-pressed', 'true');
-      sourceEl.focus();
-      sourceEl.select();
-      copyStatusEl.textContent = '原文を選択しました。⌘C または Ctrl+C でコピーしてください。';
-    }
-  }
-  document.getElementById('copySummary').addEventListener('click', copySummary);
-  toggleSourceButton.addEventListener('click', toggleSource);
-
   function renderResult(data) {
     metaEl.textContent = data.ymd + (Number.isFinite(data.count) ? ' / 予約 ' + data.count + ' 件' : '');
     statusEl.textContent = '表示中';
-    summarySource = String(data.summaryMarkdown ?? '');
-    sourceEl.value = summarySource;
-    const markdown = summarySource || '(要約なし)';
+    const markdown = String(data.summaryMarkdown ?? '') || '(要約なし)';
     if (globalThis.SOSSummaryMarkdown) {
       summaryEl.innerHTML = SOSSummaryMarkdown.render(markdown);
     } else {

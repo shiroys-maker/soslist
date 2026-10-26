@@ -65,16 +65,15 @@ test('all Markdown image forms display text without any image resource',()=>{
  assert.match(output,/Synthetic image/);assert.match(output,/画像は読み込みません/);
 });
 
-test('plain text, Japanese, CRLF and code remain readable; source copy is byte-for-byte',async()=>{
+test('popup keeps the preview without source controls or clipboard wiring',()=>{
+ const h=popup();
+ assert.doesNotMatch(h.html,/copySummary|toggleSummarySource|summarySource|summaryCopyStatus|navigator\.clipboard|原文をコピー|原文を表示/);
+ assert.match(h.html,/<div id="summary" class="summary-markdown"><\/div>/);
+});
+
+test('plain text, Japanese, CRLF and code remain readable',()=>{
  const h=popup();const source='架空のメモ\r\nLine two & <literal>\r\n\r\n```html\r\n<script>literal</script>\r\n```\r\n';
  const output=h.render(source);assert.match(output,/架空のメモ/);assert.match(output,/<br>/);assert.match(output,/<pre><code/);assert.match(output,/&lt;script&gt;/);
- assert.equal(h.elements.get('summarySource').value,source);
- let copied;h.ctx.navigator.clipboard={writeText:async value=>{copied=value;}};
- await h.ctx.copySummary();assert.equal(copied,source);
- h.ctx.navigator.clipboard={writeText:async()=>{throw new Error('denied');}};
- await h.ctx.copySummary();assert.equal(h.elements.get('summarySource').hidden,false);assert.equal(h.elements.get('summarySource').selected,true);
- assert.match(h.elements.get('summaryCopyStatus').textContent,/⌘C/);
- h.ctx.toggleSource();assert.equal(h.elements.get('summarySource').hidden,true);
 });
 
 test('missing parser or all renderer assets degrade to safe plain text',()=>{
@@ -84,9 +83,9 @@ test('missing parser or all renderer assets degrade to safe plain text',()=>{
  assert.equal(rendererMissing.elements.get('summary').textContent,source);
 });
 
-test('long Summary renders through the final line without truncating original source',()=>{
+test('long Summary preview renders through the final line',()=>{
  const h=popup();const source=('# Synthetic\n\n- **Fiction** only\n\nParagraph 日本語 '.repeat(2500))+'END-SENTINEL';
- const output=h.render(source);assert.match(output,/END-SENTINEL/);assert.equal(h.elements.get('summarySource').value,source);
+ const output=h.render(source);assert.match(output,/END-SENTINEL/);
 });
 
 test('popup restricts image/media/connect origins and prevents stale HTML',()=>{
