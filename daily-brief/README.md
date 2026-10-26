@@ -71,9 +71,11 @@ TTSの失敗ログはHTTP状態と固定許可リストにあるAPIエラーコ�
 
 Googleのエラーが配列で包まれて返る形式も、同じ許可リストで診断します。HTTP 400でも理由が `API_KEY_INVALID` など既知のAPIキー関連コードの場合は、APIキー・利用権限の確認を案内します。認証情報や課金・権限設定を自動変更することはありません。
 
-2026-10-26の診断候補では、要求内の固定フィールド（`input[].type`、`input[].content`、`input[].content[].text`、`input[].content[].annotations`）も構造化エラーから識別します。message中の `Unknown name "field" at 'parent'` という形式は、全文を出さず、完全一致する許可済みフィールド名だけを `unverified_field_hints` として出します。これは引用された入力を含む可能性があり、構造化された `fields` や原因の確定とは区別します。長文・未知の項目名は出しません。通信例外・成功応答のJSON解析例外も固定文へ置き換え、元の例外・cause・応答断片を出しません。要求本文、モデル、声、台本、読み変換、保存先、再試行方針は変更しません。
+2026-10-26の診断改善では、要求内の固定フィールド（`input[].type`、`input[].content`、`input[].content[].text`、`input[].content[].annotations`）も構造化エラーから識別します。message中の `Unknown name "field" at 'parent'` という形式は、全文を出さず、完全一致する許可済みフィールド名だけを `unverified_field_hints` として出します。これは引用された入力を含む可能性があり、構造化された `fields` や原因の確定とは区別します。長文・未知の項目名は出しません。通信例外・成功応答のJSON解析例外も固定文へ置き換え、元の例外・cause・応答断片を出しません。診断処理は要求本文、モデル、声、台本、読み変換、保存先、再試行方針を変更しません。
 
-要求形式には公式資料間の食い違いがあります。[音声ガイド](https://ai.google.dev/gemini-api/docs/speech-generation)のREST例は `generation_config.speech_config.mode: conversational` を明示的にサポートしますが、[API参照](https://ai.google.dev/api/interactions-api)と[OpenAPI](https://ai.google.dev/static/api/interactions.openapi.json)は `structured_speech_config` を定義し、`SpeakerConfig` に `mode` はありません。この差だけでは実際のHTTP 400の原因は確定しません。合成テストは本文保持・停止・保全・診断の検証であり、実API適合や音声復旧の証明ではありません。単一フィールドを変える実験は別パッチで扱い、自動フォールバックやHTTP 400の再送を追加しません。
+要求形式には公式資料間の食い違いがあります。[音声ガイド](https://ai.google.dev/gemini-api/docs/speech-generation)のREST例は `generation_config.speech_config.mode: conversational` を明示的にサポートしますが、[API参照](https://ai.google.dev/api/interactions-api)と[OpenAPI](https://ai.google.dev/static/api/interactions.openapi.json)は `structured_speech_config` を定義し、`SpeakerConfig` に `mode` はありません。この差だけでは実際のHTTP 400の原因は確定しません。合成テストは本文保持・停止・保全・診断の検証であり、実API適合や音声復旧の証明ではありません。自動フォールバックやHTTP 400の再送は追加しません。
+
+同日のMiniで、他の要求項目を保持して `generation_config.speech_config.mode` だけを省略した音声復旧が5/5チャンク成功しました。完成MP3の全体デコード、Storage再取得ハッシュ一致、元の要約・台本・読み変換キャッシュと他日の音声の不変も復旧タスクで確認されました。この成功版の診断改善と `mode` 省略をBook正本へ採用します。モデル、送信先、声、台本、読み変換、保存先は保持します。これは同じ復旧での実測であり、朝の欠落やHTTP 400の元原因を確定するものではありません。Bookからの実API再送は行っていません。
 
 ### Gemini 3.8 Flash TTS（既定）
 
