@@ -101,9 +101,11 @@ const CANONICAL_STATUSES = new Set(['INVALID_ARGUMENT', 'FAILED_PRECONDITION', '
 const ERROR_REASONS = new Set(['API_KEY_INVALID', 'API_KEY_EXPIRED', 'API_KEY_SERVICE_BLOCKED',
   'API_KEY_HTTP_REFERRER_BLOCKED', 'API_KEY_IP_ADDRESS_BLOCKED', 'BILLING_DISABLED', 'SERVICE_DISABLED',
   'CONSUMER_INVALID', 'ACCESS_TOKEN_SCOPE_INSUFFICIENT']);
-const ERROR_FIELDS = new Set(['model', 'store', 'input', 'response_format', 'response_format.type',
+const ERROR_FIELDS = new Set(['model', 'store', 'input', 'input[].type', 'input[].content',
+  'input[].content[].text', 'input[].content[].annotations', 'response_format', 'response_format.type',
   'response_format.mime_type', 'response_format.sample_rate', 'generation_config',
   'generation_config.speech_config', 'generation_config.speech_config.mode',
+  'generation_config.structured_speech_config',
   'generation_config.speech_config.speakers', 'generation_config.speech_config.speakers[].speaker',
   'generation_config.speech_config.speakers[].voice', 'input[].content[].type',
   'input[].content[].annotations[].type', 'input[].content[].annotations[].speaker',
@@ -116,11 +118,11 @@ function ttsErrorDetails(body) {
   const error = envelope?.error;
   const code = API_ERROR_CODES.has(error?.code) ? error.code : 'unclassified';
   const status = CANONICAL_STATUSES.has(error?.status) ? error.status : null;
-  const fields = new Set(), reasons = new Set();
-  const addField = field => {
+  const fields = new Set(), reasons = new Set(), fieldHints = new Set();
+  const addField = (field, target = fields) => {
     if (typeof field !== 'string' || field.length > 160) return;
     const normalized = field.replace(/\[\d+\]/g, '[]');
-    if (ERROR_FIELDS.has(normalized)) fields.add(normalized);
+    if (ERROR_FIELDS.has(normalized)) target.add(normalized);
   };
   addField(error?.field);
   for (const detail of Array.isArray(error?.details) ? error.details.slice(0, 16) : []) {
@@ -129,18 +131,31 @@ function ttsErrorDetails(body) {
     }
     if (detail?.['@type'] === 'type.googleapis.com/google.rpc.ErrorInfo' && ERROR_REASONS.has(detail.reason)) reasons.add(detail.reason);
   }
-  return { code, status, fields: [...fields].slice(0, 8), reasons: [...reasons].slice(0, 8) };
+  // Messages may quote submitted text, so these references are hints, never structured evidence.
+  // Never emit the message or arbitrary matches: the complete path must be allowlisted.
+  if (!fields.size && typeof error?.message === 'string' && error.message.length <= 8192) {
+    for (const match of error.message.matchAll(/Unknown name "([a-z_]+)" at ['"]([a-z0-9_.\[\]]+)['"]/g)) {
+      addField(match[2] + '.' + match[1], fieldHints);
+    }
+  }
+  return { code, status, fields: [...fields].slice(0, 8), reasons: [...reasons].slice(0, 8),
+    ...(fieldHints.size ? { fieldHints: [...fieldHints].slice(0, 8) } : {}) };
 }
 
 async function requestAudio(dialogue, config, fetchImpl = fetch) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), config.timeoutMs);
   try {
-    const response = await fetchImpl(ENDPOINT, {
-      method: 'POST', signal: controller.signal,
-      headers: { 'content-type': 'application/json', 'x-goog-api-key': config.apiKey },
-      body: JSON.stringify(buildRequest(dialogue, config)),
-    });
+    let response;
+    try {
+      response = await fetchImpl(ENDPOINT, {
+        method: 'POST', signal: controller.signal,
+        headers: { 'content-type': 'application/json', 'x-goog-api-key': config.apiKey },
+        body: JSON.stringify(buildRequest(dialogue, config)),
+      });
+    } catch {
+      throw new Error('Gemini TTSの通信に失敗しました。 [code=transport_error]');
+    }
     if (!response.ok) {
       let details = ttsErrorDetails(null);
       try { details = ttsErrorDetails(await response.json()); } catch (_) { /* Non-JSON errors stay anonymous. */ }
@@ -151,13 +166,17 @@ async function requestAudio(dialogue, config, fetchImpl = fetch) {
       const status = Number.isInteger(response.status) && response.status >= 100 && response.status <= 599 ? response.status : 'unknown';
       const safeDetail = ['code=' + details.code, ...(details.status ? ['status=' + details.status] : []),
         ...(details.fields.length ? ['fields=' + details.fields.join(',')] : []),
+        ...(details.fieldHints?.length ? ['unverified_field_hints=' + details.fieldHints.join(',')] : []),
         ...(details.reasons.length ? ['reasons=' + details.reasons.join(',')] : [])].join('; ');
       const error = new Error(`Gemini TTSに失敗しました (HTTP ${status})。${hint} [${safeDetail}]`);
       error.httpStatus = status;
       error.providerDetails = details;
       throw error;
     }
-    return extractWav(await response.json());
+    let result;
+    try { result = await response.json(); }
+    catch { throw new Error('Gemini TTSの応答を解析できませんでした。 [code=response_json_invalid]'); }
+    return extractWav(result);
   } catch (error) {
     if (controller.signal.aborted) throw new Error(`Gemini TTSが${config.timeoutMs / 1000}秒以内に完了しませんでした。`);
     throw error;

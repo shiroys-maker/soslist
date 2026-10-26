@@ -138,3 +138,117 @@ test('array-wrapped Google errors expose API_KEY_INVALID at HTTP 400 without log
   });
   assert.equal(calls, 1);
 });
+
+test('structured field diagnostics recognize request containers without exposing their values', () => {
+  const { ttsErrorDetails } = require('../gemini-tts');
+  for (const field of ['input[0].type', 'input[0].content', 'input[0].content[4].text',
+    'input[0].content[4].annotations']) {
+    const details = ttsErrorDetails({ error: { code: 'invalid_request', field,
+      message: 'SYNTHETIC_PRIVATE_VALUE' } });
+    assert.deepEqual(details.fields, [field.replace(/\[\d+\]/g, '[]')]);
+    assert.ok(!JSON.stringify(details).includes('SYNTHETIC_PRIVATE_VALUE'));
+  }
+});
+
+test('unknown-field messages disclose only exact allowlisted request paths', async () => {
+  const { ttsErrorDetails } = require('../gemini-tts');
+  const secret = 'SYNTHETIC_PRIVATE_VALUE';
+  for (const [message, expected] of [
+    [`Invalid JSON payload received. Unknown name "mode" at 'generation_config.speech_config': ${secret}`, 'generation_config.speech_config.mode'],
+    [`Unknown name "speech_config" at 'generation_config': ${secret}`, 'generation_config.speech_config'],
+    [`Unknown name "speaker" at 'input[0].content[2].annotations[0]': ${secret}`, 'input[].content[].annotations[].speaker'],
+    [`Unknown name "structured_speech_config" at 'generation_config': ${secret}`, 'generation_config.structured_speech_config'],
+    [`Unknown name "${secret}" at 'generation_config': Cannot find field.`, null],
+    [`Unknown name "mode" at '${secret}': Cannot find field.`, null],
+    [`Verbatim transcript mentions generation_config.speech_config.mode ${secret}`, null],
+  ]) {
+    const body = { error: { code: 'invalid_request', message } };
+    assert.deepEqual(ttsErrorDetails(body).fields, []);
+    assert.deepEqual(ttsErrorDetails(body).fieldHints || [], expected ? [expected] : []);
+    await assert.rejects(requestAudio([], config, async () => ({ ok: false, status: 400,
+      json: async () => body })), error => {
+      assert.ok(!error.stack.includes(secret));
+      assert.ok(!JSON.stringify(error.providerDetails).includes(secret));
+      assert.ok(!error.message.includes('Unknown name'));
+      return true;
+    });
+  }
+  const long = ttsErrorDetails({ error: { message: 'x'.repeat(8192) +
+    'Unknown name "mode" at \'generation_config.speech_config\'' } });
+  assert.deepEqual(long.fields, []);assert.equal(long.fieldHints, undefined);
+  const structured = ttsErrorDetails({ error: { field: 'input[0].type', message:
+    'Unknown name "mode" at \'generation_config.speech_config\'' } });
+  assert.deepEqual(structured.fields, ['input[].type']);assert.equal(structured.fieldHints, undefined);
+});
+
+test('transport failures do not expose exception text, causes or retries', async () => {
+  const secret = 'SYNTHETIC_PRIVATE_TRANSPORT_VALUE';
+  let calls = 0;
+  await assert.rejects(requestAudio([], config, async () => {
+    calls++;throw new Error(secret, { cause: new Error(config.apiKey) });
+  }), error => {
+    assert.match(error.message, /code=transport_error/);
+    assert.ok(!error.stack.includes(secret));assert.equal(error.cause, undefined);
+    return true;
+  });
+  assert.equal(calls, 1);
+});
+
+test('successful HTTP responses with invalid JSON do not expose parser context', async () => {
+  const secret = 'SYNTHETIC_PRIVATE_RESPONSE_VALUE';
+  await assert.rejects(requestAudio([], config, async () => ({ ok: true,
+    json: async () => { throw new SyntaxError(secret); } })), error => {
+    assert.match(error.message, /code=response_json_invalid/);
+    assert.ok(!error.stack.includes(secret));assert.equal(error.cause, undefined);
+    return true;
+  });
+});
+
+test('a quoted unknown-field phrase remains an unverified hint rather than structured field evidence', async () => {
+  const body = { error: { code: 'invalid_request', message:
+    'Echoed SYNTHETIC_PRIVATE_TEXT: Unknown name "mode" at \'generation_config.speech_config\'' } };
+  const { ttsErrorDetails } = require('../gemini-tts');
+  assert.deepEqual(ttsErrorDetails(body).fields, []);
+  assert.deepEqual(ttsErrorDetails(body).fieldHints, ['generation_config.speech_config.mode']);
+  await assert.rejects(requestAudio([], config, async () => ({ ok: false, status: 400,
+    json: async () => body })), error => {
+    assert.match(error.message, /unverified_field_hints=generation_config.speech_config.mode/);
+    assert.doesNotMatch(error.message, /\[fields=|; fields=/);
+    assert.ok(!error.stack.includes('SYNTHETIC_PRIVATE_TEXT'));return true;
+  });
+});
+
+test('HTTP 400 stops on the first of five chunks and preserves saved source, speech cache and old audio', async t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gemini-first-chunk-test-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const saved = { key: process.env.GEMINI_API_KEY, settings: process.env.SOSLIST_AI_SETTINGS_FILE };
+  process.env.GEMINI_API_KEY = 'synthetic-only-key';
+  process.env.SOSLIST_AI_SETTINGS_FILE = path.join(dir, 'ai-settings.json');
+  t.after(() => {
+    for (const [name, value] of [['GEMINI_API_KEY', saved.key], ['SOSLIST_AI_SETTINGS_FILE', saved.settings]]) {
+      if (value === undefined) delete process.env[name]; else process.env[name] = value;
+    }
+  });
+  const originals = { 'brief.md': '# Synthetic Summary', 'podcast-script.txt': 'Synthetic script',
+    'podcast-speech.txt': 'Synthetic spoken script', 'podcast-speech.json': '{"synthetic":true}',
+    'podcast.mp3': 'old mp3', 'podcast.wav': 'old wav' };
+  for (const [name, text] of Object.entries(originals)) fs.writeFileSync(path.join(dir, name), text);
+  const dialogue = [{ speaker: 'A', text: '合成です。'.repeat(600) },
+    { speaker: 'B', text: '合成です。'.repeat(600) }];
+  const chunks = splitDialogue(dialogue);assert.equal(chunks.length, 5);
+  const before = JSON.stringify(dialogue);let calls = 0;const logs = [];
+  await assert.rejects(synthesizeGemini(dialogue, path.join(dir, 'podcast'), {
+    speed: 1.3, log: message => logs.push(message), runLocalTool() { assert.fail('No partial encoding'); },
+    fetchImpl: async (_, options) => {
+      calls++;const request = JSON.parse(options.body);
+      assert.deepEqual(request.input[0].content.map(c => c.text), chunks[0].map(turn => turn.text));
+      assert.deepEqual(request.input[0].content.map(c => c.annotations[0].speaker), chunks[0].map(turn => turn.speaker));
+      return { ok: false, status: 400, json: async () => ({ error: { code: 'invalid_request',
+        message: 'SYNTHETIC_PRIVATE_VALUE' } }) };
+    },
+  }), /HTTP 400/);
+  assert.equal(calls, 1);assert.equal(JSON.stringify(dialogue), before);
+  for (const [name, text] of Object.entries(originals)) assert.equal(fs.readFileSync(path.join(dir, name), 'utf8'), text);
+  assert.equal(fs.readdirSync(dir).some(name => name.startsWith('.gemini-tts-')), false);
+  assert.ok(logs.every(line => !line.includes('SYNTHETIC_PRIVATE_VALUE')));
+});
