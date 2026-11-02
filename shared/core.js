@@ -1053,7 +1053,7 @@ function isReferralSheetDest(destKey) {
 
 function getCodexReferralRouting(data) {
     const routing = data?.referralRouting;
-    if (!routing || routing.version !== 1 || routing.provider !== 'codex') return null;
+    if (!routing || routing.version !== 1 || !['codex', 'openai-api'].includes(routing.provider)) return null;
     // Parenthesized request notes are editable independently of ordered examinations.
     if (!Array.isArray(routing.sourceServices) ||
         JSON.stringify(normalizeServiceTokens(routing.sourceServices)) !== JSON.stringify(normalizeServiceTokens(data.services)) ||
