@@ -141,3 +141,38 @@ test('inline spaced/full-width/nested test details remain available to classific
   assert.equal(c.has_echo, false);
   assert.equal(c.has_ortho, false);
 });
+
+
+test('OpenAI API onsite-only routing does not show a false review notice or alter data', () => {
+  const data = fixture();
+  data.services = ['Routine medical opinion', 'Focused examination'];
+  data.cptCode = [];
+  data.referralRouting = {version:1,provider:'openai-api',sourceServices:[...data.services],sourceCptCodes:[],destinations:[],purposes:{},reviewRequired:false,assignments:data.services.map((_,serviceIndex)=>({serviceIndex,category:'onsite',destination:'NONE',examJa:'',reason:'院内実施'}))};
+  const before = JSON.stringify(data);
+  assert.equal(ctx.buildReferralReviewHTML(data), '');
+  assert.deepEqual(Array.from(ctx.determineReferralDests(data.services,null,data)), []);
+  assert.equal(JSON.stringify(data), before);
+});
+
+test('OpenAI API preserves genuine review reasons, external routing and saved referral edits', () => {
+  const data = fixture();data.referralRouting.provider = 'openai-api';
+  assert.ok(ctx.getCodexReferralRouting(data));
+  assert.deepEqual(Array.from(ctx.determineReferralDests(data.services,null,data)), ['KIN','ANSHIN','LAB']);
+  assert.match(ctx.buildReferralReviewHTML(data), /MRI brain: 紹介先未設定/);
+  assert.match(ctx.buildSheetHTML(data,'KIN',null,null), /右踵骨X線の依頼/);
+  assert.match(ctx.buildSheetHTML(data,'KIN',{purpose:'手修正した目的'},null), /手修正した目的/);
+  data.cptCode.push('CHANGED');
+  assert.equal(ctx.getCodexReferralRouting(data), null);
+  assert.match(ctx.buildReferralReviewHTML(data), /紹介先要確認/);
+});
+
+test('only supported provider and schema versions can supply generated referral routing', () => {
+  for(const provider of ['codex','openai-api']) {
+    const data=fixture();data.referralRouting.provider=provider;
+    assert.ok(ctx.getCodexReferralRouting(data));
+    data.referralRouting.version=2;assert.equal(ctx.getCodexReferralRouting(data),null);
+  }
+  const data=fixture();data.referralRouting.provider='unknown-provider';
+  assert.equal(ctx.getCodexReferralRouting(data),null);
+  assert.match(ctx.buildReferralReviewHTML(data),/紹介先要確認/);
+});
