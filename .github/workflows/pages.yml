@@ -34,6 +34,7 @@ jobs:
           cp script.js connection.js site/
           cp shared/core.js shared/ui.css shared/ui.js shared/pdf-viewer.js shared/pdf-viewer.css shared/summary-markdown.js shared/summary-markdown.css site/shared/
           cp -R shared/vendor site/shared/
+          cp -R usual-passkey site/
           cp style.css site/
           cp CNAME site/
           cp stamp.png site/

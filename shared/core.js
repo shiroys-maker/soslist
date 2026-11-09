@@ -18,10 +18,15 @@ const firebaseConfig = {
 // ▲▲▲ ここまで ▲▲▲
 
 // Firebaseの初期化
-firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
-const db = firebase.firestore();
-const storage = firebase.storage();
+if (window.sosNativeBootstrap?.legacyCleanup === true) window.sosNativeBootstrap.configureLegacy(firebaseConfig, firebase);
+const usualPasskey = window.sosNativeBootstrap?.enabled === true
+    && window.sosNativeBootstrap.target === 'root-web'
+    && ['/', '/index.html'].includes(window.location.pathname);
+const nativeFirebase = usualPasskey ? window.sosNativeBootstrap.configure(firebaseConfig, firebase) : null;
+if (!usualPasskey) firebase.initializeApp(firebaseConfig);
+const auth = usualPasskey ? nativeFirebase.auth : firebase.auth();
+const db = usualPasskey ? nativeFirebase.db : firebase.firestore();
+const storage = usualPasskey ? nativeFirebase.storage : firebase.storage();
 // Exact records currently rendered in the list; editors can open synchronously.
 const displayedAppointments = new Map();
 
@@ -123,6 +128,7 @@ function getCorrectedAppointmentDate(data) {
 }
 
 async function initializeSummaryDate() {
+    const passkeyEpoch = usualPasskey ? window.sosUsualWeb.capture() : null;
     const viewIsCurrent = captureSensitiveViewSession();
     if (!viewIsCurrent()) return;
     if (!summaryDateInput) return;
@@ -142,6 +148,7 @@ async function initializeSummaryDate() {
             .get();
 
         if (!viewIsCurrent()) return;
+        if (usualPasskey) window.sosUsualWeb.assert(passkeyEpoch);
         let hasTodayAppointment = false;
         let nextAppointmentDate = null;
 
@@ -180,6 +187,7 @@ function resetLogoutTimer() {
 }
 
 async function jumpToAdjacentReservationDate(direction) {
+    const passkeyEpoch = usualPasskey ? window.sosUsualWeb.capture() : null;
     const viewIsCurrent = captureSensitiveViewSession();
     if (!viewIsCurrent()) return;
     if (!dateFilter.value) {
@@ -189,6 +197,7 @@ async function jumpToAdjacentReservationDate(direction) {
     try {
         const targetDate = await findAdjacentReservationDate(dateFilter.value, direction);
         if (!viewIsCurrent()) return;
+        if (usualPasskey) window.sosUsualWeb.assert(passkeyEpoch);
         if (!targetDate) {
             return;
         }
@@ -232,6 +241,7 @@ async function findAdjacentReservationDate(baseYmd, direction) {
 }
 
 async function jumpToAdjacentSummaryReservationDate(direction) {
+    const passkeyEpoch = usualPasskey ? window.sosUsualWeb.capture() : null;
     const viewIsCurrent = captureSensitiveViewSession();
     if (!viewIsCurrent()) return;
     if (!summaryDateInput?.value) {
@@ -241,6 +251,7 @@ async function jumpToAdjacentSummaryReservationDate(direction) {
     try {
         const targetDate = await findAdjacentReservationDate(summaryDateInput.value, direction);
         if (!viewIsCurrent()) return;
+        if (usualPasskey) window.sosUsualWeb.assert(passkeyEpoch);
         if (!targetDate) {
             return;
         }
@@ -517,6 +528,7 @@ function setupRealtimeListener() {
 }
 
 async function toggleAppointmentStatus(target, docId, field, destKey = null) {
+    const passkeyEpoch = usualPasskey ? window.sosUsualWeb.capture() : null;
     const viewIsCurrent = captureSensitiveViewSession();
     if (!viewIsCurrent()) return;
     if (target.disabled) return;
@@ -528,6 +540,7 @@ async function toggleAppointmentStatus(target, docId, field, destKey = null) {
         const doc = await ref.get();
         if (!viewIsCurrent()) return;
         if (!doc.exists) throw new Error('Appointment not found');
+            if (usualPasskey) window.sosUsualWeb.assert(passkeyEpoch);
         const data = doc.data();
         const destIndex = destKey ? determineReferralDests(data.services || [], null, data).indexOf(destKey) : -1;
         const current = destKey
@@ -535,6 +548,7 @@ async function toggleAppointmentStatus(target, docId, field, destKey = null) {
             : data[field] === true;
         const key = destKey ? `referrals.${destKey}.${field}` : field;
         await ref.update({ [key]: !current });
+            if (usualPasskey) window.sosUsualWeb.assert(passkeyEpoch);
         if (!viewIsCurrent()) return;
         target.setAttribute('aria-pressed', String(!current));
         target.classList.toggle('is-active', !current);
@@ -590,6 +604,12 @@ function startLogoutTimer() {
 }
 
 function handleViewPdf(docId) {
+    if (usualPasskey) return window.sosPdfViewer.open(async () => {
+        const stamp = window.sosUsualWeb.capture();
+        await db.collection('appointments').doc(docId).get();
+        window.sosUsualWeb.assert(stamp);
+        return window.sosUsualWeb.files.get(docId, 'pdf');
+    });
     return window.sosPdfViewer.open(async () => {
         const sourceError = message => Object.assign(new Error(message), { pdfSourceError: true });
         const doc = await db.collection('appointments').doc(docId).get();
@@ -606,9 +626,11 @@ function handleViewPdf(docId) {
 }
 
 function openEditModal(docId) {
+    const passkeyEpoch = usualPasskey ? window.sosUsualWeb.capture() : null;
     const viewIsCurrent = captureSensitiveViewSession();
     if (!viewIsCurrent()) return;
   db.collection('appointments').doc(docId).get().then(doc => {
+        if (usualPasskey) window.sosUsualWeb.assert(passkeyEpoch);
         if (!viewIsCurrent()) return;
     if (!doc.exists) return;
     const data = doc.data();
@@ -628,6 +650,7 @@ function openEditModal(docId) {
     editModal.style.display = 'flex';
     document.body.classList.add('modal-open');
   }).catch(error => {
+        if (usualPasskey && !viewIsCurrent()) return;
       console.error('日時編集モーダルの表示エラー:', error);
       alert('データの取得に失敗しました。');
   });
@@ -640,6 +663,7 @@ function closeEditModal() {
 }
 
 function searchAppointments() {
+    const passkeyEpoch = usualPasskey ? window.sosUsualWeb.capture() : null;
     const viewIsCurrent = captureSensitiveViewSession();
     if (!viewIsCurrent()) return;
     const searchTerm = searchInput.value.trim();
@@ -659,6 +683,7 @@ function searchAppointments() {
           .limit(20)
           .get()
           .then(querySnapshot => {
+        if (usualPasskey) window.sosUsualWeb.assert(passkeyEpoch);
         if (!viewIsCurrent()) return;
               if (querySnapshot.empty) {
                   alert('該当する契約番号の予約が見つかりませんでした。');
@@ -677,6 +702,7 @@ function searchAppointments() {
     db.collection("appointments")
       .get()
       .then(querySnapshot => {
+        if (usualPasskey) window.sosUsualWeb.assert(passkeyEpoch);
         if (!viewIsCurrent()) return;
           const matched = querySnapshot.docs.filter(doc => {
               const name = doc.data().claimantName || '';
@@ -739,6 +765,7 @@ function closeDetailsModal() {
 }
 
 function saveNotes() {
+    if (usualPasskey) return; // Existing readonly UI stays readonly in passkey mode.
     const docId = detailsModal.dataset.editingId;
     if (!docId) return;
     db.collection('appointments').doc(docId).update({
@@ -768,6 +795,7 @@ function calculateAge(dobString) {
 }
 
 function printInvoice() {
+    const passkeyEpoch = usualPasskey ? window.sosUsualWeb.capture() : null;
     const viewIsCurrent = captureSensitiveViewSession();
     if (!viewIsCurrent()) return;
     const selectedYear = invoiceYearSelect.value;
@@ -792,6 +820,7 @@ function printInvoice() {
       .where("isShown", "==", true)
       .get()
       .then(querySnapshot => {
+        if (usualPasskey) window.sosUsualWeb.assert(passkeyEpoch);
         if (!viewIsCurrent()) return;
           if (querySnapshot.empty) {
               alert('SHOWがチェックされたレコードはありませんでした。');
@@ -988,9 +1017,11 @@ function generateNewInvoiceHTML(audiologyRecords, dayRateList, from, to) {
 }
 
 function openPhoneEditModal(docId) {
+    const passkeyEpoch = usualPasskey ? window.sosUsualWeb.capture() : null;
     const viewIsCurrent = captureSensitiveViewSession();
     if (!viewIsCurrent()) return;
     db.collection('appointments').doc(docId).get().then(doc => {
+        if (usualPasskey) window.sosUsualWeb.assert(passkeyEpoch);
         if (!viewIsCurrent()) return;
         if (!doc.exists) {
             alert('データが見つかりません');
@@ -1003,6 +1034,7 @@ function openPhoneEditModal(docId) {
         editPhoneModal.style.display = 'flex';
         document.body.classList.add('modal-open');
     }).catch(error => {
+        if (usualPasskey && !viewIsCurrent()) return;
         console.error('電話編集モーダルの表示エラー:', error);
         alert('データの取得に失敗しました。');
     });
@@ -1018,6 +1050,9 @@ function savePhone() {
     if (!editingPhoneDocId) return;
 
     const newPhone = phoneInput.value.trim();
+    if (usualPasskey) return window.sosUsualWeb.runEdit({key:'phone',button:confirmPhoneEditBtn,
+        write:()=>db.collection('appointments').doc(editingPhoneDocId).update({japanCellPhone:newPhone}),
+        onSuccess:closePhoneEditModal,onFailure:()=>alert('更新を確認できませんでした。再読込して内容を確認してください。')});
 
     db.collection('appointments').doc(editingPhoneDocId).update({
         japanCellPhone: newPhone
@@ -1558,6 +1593,7 @@ function closeShokaijyoModal() {
 }
 
 function saveShokaijyo() {
+    if (usualPasskey) return; // Existing readonly UI stays readonly in passkey mode.
     if (!shokaijyoEditingDocId || !shokaijyoEditingDest) return;
     const sheet = shokaijyoSheetContainer.querySelector('.sheet');
     if (!sheet) return;
@@ -1671,6 +1707,7 @@ function parseVisitDateForModal(rawVisitDate, appointmentDateTime) {
 }
 
 function openVisitDateModal(docId, destKey = null) {
+    const passkeyEpoch = usualPasskey ? window.sosUsualWeb.capture() : null;
     const viewIsCurrent = captureSensitiveViewSession();
     if (!viewIsCurrent()) return;
     visitDateEditingDocId = docId;
@@ -1681,6 +1718,7 @@ function openVisitDateModal(docId, destKey = null) {
     }
 
     db.collection('appointments').doc(docId).get().then(doc => {
+        if (usualPasskey) window.sosUsualWeb.assert(passkeyEpoch);
         if (!viewIsCurrent()) return;
         if (!doc.exists) {
             visitDateModal.style.display = 'flex';
@@ -1698,6 +1736,7 @@ function openVisitDateModal(docId, destKey = null) {
         visitDateModal.style.display = 'flex';
         document.body.classList.add('modal-open');
     }).catch(err => {
+        if (usualPasskey && !viewIsCurrent()) return;
         console.error(err);
         visitDateModal.style.display = 'flex';
         document.body.classList.add('modal-open');
@@ -1725,6 +1764,9 @@ function saveVisitDate() {
         ? { [`referrals.${visitDateEditingDest}.visitDate`]: visitDateValue }
         : { visitDate: visitDateValue };
 
+    if (usualPasskey) return window.sosUsualWeb.runEdit({key:'visit',button:confirmVisitDateBtn,
+        write:()=>db.collection('appointments').doc(visitDateEditingDocId).update(updatePayload),
+        onSuccess:closeVisitDateModal,onFailure:()=>alert('更新を確認できませんでした。再読込して内容を確認してください。')});
     db.collection('appointments').doc(visitDateEditingDocId).update(updatePayload)
         .then(() => closeVisitDateModal())
         .catch(err => { console.error(err); alert('保存に失敗しました'); });

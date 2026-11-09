@@ -177,66 +177,115 @@ function renderMarkdownToHtml(markdown) {
         : '<p style="white-space:pre-wrap">' + escapeHtml(String(markdown ?? '')) + '</p>';
 }
 
-function openSummaryModal(ymd, summaryMarkdown, audioUrl = null) {
+// Candidate summary-only replacement. No retention changes, writes, retries or path search.
+let summaryRequest = 0;
+let summaryAbort = null;
+function summaryPasskeyEnabled() {
+    return typeof usualPasskey !== 'undefined' && usualPasskey;
+}
+function stopSummaryAudio() {
+    for (const audio of summaryModalBody.querySelectorAll('audio')) {
+        audio.pause(); audio.removeAttribute('src'); audio.load();
+    }
+}
+function summaryAudioMessage(error) {
+    const code = error?.code;
+    if (code === 'NOT_FOUND' || code === 'storage/object-not-found' || error?.status === 404)
+        return 'この日の音声は現在利用できません。本文は引き続き読めます。';
+    if (['FORBIDDEN', 'UNAUTHENTICATED', 'SESSION_BLOCKED', 'SESSION_EXPIRED', 'SESSION_REVOKED', 'SESSION_INVALID', 'INVALID_SESSION', 'storage/unauthorized', 'storage/unauthenticated'].includes(code) || [401, 403].includes(error?.status))
+        return '音声へのアクセスを確認できません。ログイン状態をご確認ください。';
+    if (['AUDIO_TIMEOUT','TOTAL_DEADLINE','REQUEST_DEADLINE'].includes(code)) return '音声の読み込みが時間内に完了しませんでした。本文は引き続き読めます。';
+    if (['INVALID_RESPONSE','VERSION_CHANGED'].includes(code)) return '音声データを確認できませんでした。本文は引き続き読めます。';
+    return '音声を読み込めませんでした。本文は引き続き読めます。';
+}
+function openSummaryModal(ymd, summaryMarkdown) {
+    stopSummaryAudio();
     summaryModalTitle.textContent = 'Summary';
     summaryModalMeta.textContent = ymd;
     summaryModalBody.innerHTML = summaryMarkdown
-        ? renderMarkdownToHtml(summaryMarkdown)
-        : '<p>サマリーは未作成です。</p>';
-
-    if (audioUrl) {
-        const playerSection = document.createElement('section');
-        playerSection.className = 'summary-audio-player';
-
-        const label = document.createElement('div');
-        label.className = 'summary-audio-label';
-        label.textContent = 'Summary 音声';
-
-        const player = document.createElement('audio');
-        player.controls = true;
-        player.preload = 'metadata';
-        player.src = audioUrl;
-
-        playerSection.append(label, player);
-        summaryModalBody.prepend(playerSection);
-    }
+        ? renderMarkdownToHtml(summaryMarkdown) : '<p>サマリーは未作成です。</p>';
     summaryModal.style.display = 'flex';
     document.body.classList.add('modal-open');
 }
-
 function closeSummaryModal() {
+    ++summaryRequest;
+    summaryAbort?.abort();summaryAbort=null;
+    if(summaryPasskeyEnabled())window.sosUsualWeb.files.cancel?.('summary-audio');
+    stopSummaryAudio();
     summaryModal.style.display = 'none';
     summaryModalMeta.textContent = '';
-    for (const audio of summaryModalBody.querySelectorAll('audio')) {
-        audio.pause();
-        audio.removeAttribute('src');
-        audio.load();
-    }
     summaryModalBody.innerHTML = '';
     document.body.classList.remove('modal-open');
 }
-
 async function showSummary() {
-    const viewIsCurrent = captureSensitiveViewSession();
+    const viewIsCurrent = typeof captureSensitiveViewSession === 'function'
+        ? captureSensitiveViewSession() : () => true;
     if (!viewIsCurrent()) return;
-    if (!summaryDateInput?.value) {
-        alert('Summaryの日付を選んでください。');
+    if (!summaryDateInput?.value) { alert('Summaryの日付を選んでください。'); return; }
+    closeSummaryModal();
+    const request = summaryRequest;
+    const operation = new AbortController();summaryAbort=operation;
+    const targetDate = summaryDateInput.value;
+    const passkey = summaryPasskeyEnabled();
+    let epoch;
+    const current = () => {
+        if (request !== summaryRequest || targetDate !== summaryDateInput.value) return false;
+        if (!viewIsCurrent()) { closeSummaryModal(); return false; }
+        if (passkey) {
+            try { window.sosUsualWeb.assert(epoch); }
+            catch { closeSummaryModal(); return false; }
+        }
+        return true;
+    };
+    let summary;
+    try {
+        epoch = passkey ? window.sosUsualWeb.capture() : null;
+        summary = await fetchSummary(targetDate);
+    } catch {
+        if (current()) alert('Summaryを読み込めませんでした。');
         return;
     }
-
-    const targetDate = summaryDateInput.value;
-    const summary = await fetchSummary(targetDate);
-    if (!viewIsCurrent()) return;
-    let audioUrl = null;
-    if (summary.audioStoragePath) {
-        try {
-            audioUrl = await storage.ref(summary.audioStoragePath).getDownloadURL();
-        } catch (error) {
-            console.warn('Summary 音声の取得に失敗しました:', error.code, error.message);
-        }
+    if (!current()) return;
+    // Text is useful independently of audio and must not wait for it.
+    openSummaryModal(targetDate, summary.summaryMarkdown);
+    const section = document.createElement('section');
+    section.className = 'summary-audio-player';
+    const status = document.createElement('div');
+    status.setAttribute('role', 'status');
+    section.append(status);
+    summaryModalBody.prepend(section);
+    if (!summary.audioStoragePath) {
+        status.textContent = 'この日の音声は登録されていません。';
+        return;
     }
-    if (!viewIsCurrent()) return;
-    openSummaryModal(targetDate, summary.summaryMarkdown, audioUrl);
+    status.textContent = '音声を読み込んでいます。';
+    let timer;
+    try {
+        // Native files.get assembles a Blob; its transport owns 180s/25s deadlines.
+        const audioUrl = passkey
+            ? await window.sosUsualWeb.files.get(SUMMARY_MIRROR_DOC_PREFIX + targetDate, 'summary-audio', {signal:operation.signal})
+            : await Promise.race([
+                storage.ref(summary.audioStoragePath).getDownloadURL(),
+                new Promise((_, reject) => { timer=setTimeout(()=>reject({code:'AUDIO_TIMEOUT'}),15000); })
+            ]);
+        if (!current()) return;
+        if (typeof audioUrl !== 'string' || !/^(https:\/\/|blob:)/.test(audioUrl)) throw {code:'INVALID_RESPONSE'};
+        const player = document.createElement('audio');
+        player.controls = true;
+        player.preload = 'metadata';
+        if (passkey) player.crossOrigin = 'use-credentials';
+        // Media events have no reliable HTTP status. Never label them as expired/404.
+        player.addEventListener('error', () => {
+            if (!current()) return;
+            status.textContent = summaryAudioMessage({});
+            player.pause(); player.removeAttribute('src'); player.load(); player.remove();
+        }, {once:true});
+        player.src = audioUrl;
+        status.textContent = 'Summary 音声';
+        section.append(player);
+    } catch (error) {
+        if (current()) status.textContent = summaryAudioMessage(error);
+    } finally { clearTimeout(timer); }
 }
 
 async function fetchSummary(targetDate) {
@@ -285,7 +334,37 @@ function clearSensitiveUi() {
 }
 
 // --- ログイン状態の監視 ---
+if (usualPasskey) {
+    window.sosUsualWeb.bindUI({
+        displayedAppointments,
+        unsubscribe: () => { if (unsubscribe) { unsubscribe(); unsubscribe = null; } },
+        reset: () => {
+            closeSummaryModal(); closeClaimDetailModal(); closeDetailsModal(); closeShokaijyoModal();
+            closeEditModal(); closePhoneEditModal(); closeVisitDateModal();
+            editingDateTimeDocId = null; editingPhoneDocId = null;
+            shokaijyoEditingDocId = null; shokaijyoEditingDest = null;
+            visitDateEditingDocId = null; visitDateEditingDest = null;
+            clearTimeout(logoutTimer);
+        }
+    });
+    document.getElementById('passkeyLoginButton')?.addEventListener('click', () => { void window.sosUsualWeb.beginPasskeyLogin().catch(() => {}); });
+    document.getElementById('retryEndButton')?.addEventListener('click', () => { void window.sosUsualWeb.client.retryEnd().catch(() => {}); });
+    document.getElementById('resumeSessionButton')?.addEventListener('click', () => { void window.sosUsualWeb.gate.resume().catch(() => {}); });
+}
+function syncNativeLoginControls() {
+    if (!usualPasskey) return;
+    const phase = window.sosUsualWeb.client.state().phase;
+    const setHidden = (id, hidden) => { const node = document.getElementById(id); if (node) node.hidden = hidden; };
+    setHidden('passkeyLoginButton', false);
+    setHidden('retryEndButton', !['end-pending', 'storage-blocked'].includes(phase));
+    setHidden('resumeSessionButton', !['blocked', 'signed-out'].includes(phase));
+    loginEmailInput.hidden = true; loginPasswordInput.hidden = true;
+    loginButton.textContent = '従来のログインを使う';
+    logoutButton.textContent = '利用終了';
+    loginError.textContent = ['end-pending', 'storage-blocked'].includes(phase) ? '利用終了を確認できません。再試行してください。' : '';
+}
 auth.onAuthStateChanged(user => {
+    syncNativeLoginControls();
     setSensitiveViewsAllowed(false);
     clearSensitiveUi();
     if (user) {
@@ -306,6 +385,7 @@ auth.onAuthStateChanged(user => {
 
 // --- イベントリスナー ---
 loginButton.addEventListener('click', () => {
+    if (usualPasskey) { void window.sosUsualWeb.useLegacy().catch(() => {}); return; }
     const email = loginEmailInput.value;
     const password = loginPasswordInput.value;
     auth.signInWithEmailAndPassword(email, password)
@@ -315,6 +395,7 @@ loginButton.addEventListener('click', () => {
 });
 
 logoutButton.addEventListener('click', async () => {
+    if (usualPasskey) { void window.sosUsualWeb.end().catch(() => {}); return; }
     setSensitiveViewsAllowed(false);
     clearSensitiveUi();
     loginContainer.style.display = 'block';
@@ -397,6 +478,13 @@ function handleAppointmentInteraction(target, docId, event) {
     }
     if (target.classList.contains('age-cell')) {
         const docRef = db.collection('appointments').doc(docId);
+        if (usualPasskey) {
+            const isPink = !target.classList.contains('pink');
+            return window.sosUsualWeb.runEdit({key:'age:'+docId,button:target,
+                write:()=>docRef.update({isAgePink:isPink}),
+                onSuccess:()=>target.classList.toggle('pink',isPink),
+                onFailure:()=>alert('更新を確認できませんでした。再読込して内容を確認してください。')});
+        }
         const isPink = target.classList.toggle('pink');
         docRef.update({ isAgePink: isPink }).catch(error => {
             // 書き込み失敗時は先行して切り替えた表示を元に戻す
@@ -439,6 +527,7 @@ mobileAppointmentsList?.addEventListener('click', (e) => {
 });
 
 confirmEditBtn.addEventListener('click', () => {
+    const passkeyEpoch = usualPasskey ? window.sosUsualWeb.capture() : null;
     if (!dateSelect.value || !hourSelect.value || !minuteSelect.value || !editingDateTimeDocId) return;
     const timeValue = `${hourSelect.value}:${minuteSelect.value}`;
 
@@ -460,8 +549,11 @@ confirmEditBtn.addEventListener('click', () => {
         processedAt: processedAt // 処理日時を記録（タイムスタンプ判定用）
     };
     
+    if (usualPasskey) return window.sosUsualWeb.runEdit({key:'appointment',button:confirmEditBtn,
+        write:()=>db.collection('appointments').doc(editingDateTimeDocId).update(dataToUpdate),
+        onSuccess:closeEditModal,onFailure:()=>alert('更新を確認できませんでした。再読込して内容を確認してください。')});
     db.collection('appointments').doc(editingDateTimeDocId).update(dataToUpdate)
-      .then(() => closeEditModal())
+      .then(() => { if (usualPasskey) window.sosUsualWeb.assert(passkeyEpoch); closeEditModal(); })
       .catch(error => {
           console.error('更新エラー:', error);
           alert('更新に失敗しました。');
@@ -472,14 +564,11 @@ cancelEditBtn.addEventListener('click', closeEditModal);
 saveNotesButton.addEventListener('click', saveNotes);
 closeDetailsModalButton.addEventListener('click', closeDetailsModal);
 printInvoiceButton.addEventListener('click', printInvoice);
-summaryPrevDateButton?.addEventListener('click', () => jumpToAdjacentSummaryReservationDate(-1));
-summaryNextDateButton?.addEventListener('click', () => jumpToAdjacentSummaryReservationDate(1));
-showSummaryButton?.addEventListener('click', () => {
-    showSummary().catch(error => {
-        console.error('Summary display error:', error);
-        alert(`Summaryの表示に失敗しました: ${error.message}`);
-    });
-});
+summaryPrevDateButton?.addEventListener('click', () => { closeSummaryModal(); return jumpToAdjacentSummaryReservationDate(-1); });
+summaryNextDateButton?.addEventListener('click', () => { closeSummaryModal(); return jumpToAdjacentSummaryReservationDate(1); });
+showSummaryButton?.addEventListener('click', () => { void showSummary(); });
+summaryDateInput?.addEventListener('change', closeSummaryModal);
+summaryModal?.addEventListener('keydown', event => { if (event.key === 'Escape') closeSummaryModal(); });
 closeSummaryModalButton?.addEventListener('click', closeSummaryModal);
 closeClaimDetailButton.addEventListener('click', closeClaimDetailModal);
 claimDetailModal.addEventListener('keydown', event => {
@@ -546,9 +635,11 @@ function closeClaimDetailModal() {
 // 保存形式: "JONES, JONATHAN"（姓, 名、大文字）
 // 対応: 姓のみ / 名のみ / 姓名 / 名姓 / カンマあり / 大文字小文字不問
 function openDetailsModal(docId) {
+    const passkeyEpoch = usualPasskey ? window.sosUsualWeb.capture() : null;
     const viewIsCurrent = captureSensitiveViewSession();
     if (!viewIsCurrent()) return;
   db.collection('appointments').doc(docId).get().then(doc => {
+        if (usualPasskey) window.sosUsualWeb.assert(passkeyEpoch);
         if (!viewIsCurrent()) return;
     if (!doc.exists) {
       alert('データが見つかりません');
@@ -596,11 +687,13 @@ function openDetailsModal(docId) {
 // ===== 紹介先 分類ロジック =====
 // ===== 紹介状モーダル =====
 function openShokaijyoModal(docId, destKey) {
+    const passkeyEpoch = usualPasskey ? window.sosUsualWeb.capture() : null;
     const viewIsCurrent = captureSensitiveViewSession();
     if (!viewIsCurrent()) return;
     if (!REFERRAL_FULL[destKey]) return;
 
     db.collection('appointments').doc(docId).get().then(doc => {
+        if (usualPasskey) window.sosUsualWeb.assert(passkeyEpoch);
         if (!viewIsCurrent()) return;
         if (!doc.exists) return;
         const data = doc.data();
