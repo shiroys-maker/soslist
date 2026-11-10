@@ -63,12 +63,12 @@ export function createBridgeClient({api,sdk,storage,withLock,views,broadcast=()=
   },
   async resume(){
    if(pendingEnd){await pendingEnd;return state();}
-   if(endOutstanding){clear('end-pending','END_PENDING');return state();}
-   if(!clear('checking','')){set('blocked','VIEW_CLEAR_FAILED');return state();}controller=new AbortController();const attempt=revision;let marker;
+   if(endOutstanding)return client.end();
+   if(!clear('checking',''))return client.end();controller=new AbortController();const attempt=revision;let marker;
    try{
     probe();marker=read();const kind=type(marker);
-    if(kind==='login'){showGuard();return state();}
-    if(kind==='end'||kind==='ended')return client.observeGuard();
+    if(kind==='end'||kind==='login')return client.end();
+    if(kind==='ended')return client.observeGuard();
     await withLock(async()=>{
      own(attempt,marker);const inspected=await api.inspect({signal:controller.signal});own(attempt,marker);
      if(!exact(inspected,['authenticated','identity'])||inspected.authenticated!==true||!identityValid(inspected.identity))deny('SESSION_DENIED');
@@ -80,7 +80,7 @@ export function createBridgeClient({api,sdk,storage,withLock,views,broadcast=()=
    }catch{
     if(attempt===revision){let current;try{current=read();}catch{set('storage-blocked','STORAGE_DENIED');return state();}
      if(current!==marker){showGuard();return state();}
-     clear('blocked','RESUME_UNCONFIRMED');return state();
+     return client.end();
     }
    }
    return state();

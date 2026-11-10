@@ -347,33 +347,21 @@ if (usualPasskey) {
             clearTimeout(logoutTimer);
         }
     });
-    document.getElementById('passkeyLoginButton')?.addEventListener('click', () => { void window.sosUsualWeb.beginPasskeyLogin().catch(() => { syncNativeLoginControls(); if (!loginError.textContent) loginError.textContent = '操作を確認できませんでした。画面の案内をご確認ください。'; }); });
-    document.getElementById('retryEndButton')?.addEventListener('click', () => { void window.sosUsualWeb.client.retryEnd().catch(() => { syncNativeLoginControls(); if (!loginError.textContent) loginError.textContent = '操作を確認できませんでした。画面の案内をご確認ください。'; }); });
-    document.getElementById('resumeSessionButton')?.addEventListener('click', () => { void window.sosUsualWeb.gate.resume().catch(() => { syncNativeLoginControls(); if (!loginError.textContent) loginError.textContent = '操作を確認できませんでした。画面の案内をご確認ください。'; }); });
+    document.getElementById('passkeyLoginButton')?.addEventListener('click', () => { void window.sosUsualWeb.beginPasskeyLogin().catch(() => {}); });
+    document.getElementById('retryEndButton')?.addEventListener('click', () => { void window.sosUsualWeb.client.retryEnd().catch(() => {}); });
+    document.getElementById('resumeSessionButton')?.addEventListener('click', () => { void window.sosUsualWeb.gate.resume().catch(() => {}); });
 }
 function syncNativeLoginControls() {
     if (!usualPasskey) return;
-    const state = window.sosUsualWeb.client.state();
-    const phase = state.phase;
-    const messages = {
-        'end-pending': '利用終了の確認が完了していません。「利用終了を再試行」を押してください。',
-        'storage-blocked': 'ブラウザの保存状態を確認できないため操作を停止しています。データを消さずにサポートへご相談ください。',
-        'auth-busy': '別のタブでログイン処理中です。そのタブで操作を続け、完了後に「再接続」で確認してください。',
-        'ending': '利用終了を確認しています。完了するまでお待ちください。',
-        'checking': 'このタブのログイン状態を確認しています。',
-        'blocked': 'このタブのログイン状態を確認できません。「再接続」で確認できます。',
-        'signed-out': 'このタブではまだログインしていません。「パスキーでログイン」を押してください。'
-    };
-    loginError.dataset.passkeyPhase = phase;
-    loginError.dataset.passkeyReason = state.reason || '';
+    const phase = window.sosUsualWeb.client.state().phase;
     const setHidden = (id, hidden) => { const node = document.getElementById(id); if (node) node.hidden = hidden; };
     setHidden('passkeyLoginButton', false);
-    setHidden('retryEndButton', phase !== 'end-pending');
-    setHidden('resumeSessionButton', !['blocked', 'signed-out', 'auth-busy'].includes(phase));
+    setHidden('retryEndButton', !['end-pending', 'storage-blocked'].includes(phase));
+    setHidden('resumeSessionButton', !['blocked', 'signed-out'].includes(phase));
     loginEmailInput.hidden = true; loginPasswordInput.hidden = true;
     loginButton.textContent = '従来のログインを使う';
     logoutButton.textContent = '利用終了';
-    loginError.textContent = messages[phase] || '';
+    loginError.textContent = ['end-pending', 'storage-blocked'].includes(phase) ? '利用終了を確認できません。再試行してください。' : '';
 }
 auth.onAuthStateChanged(user => {
     syncNativeLoginControls();
@@ -397,7 +385,7 @@ auth.onAuthStateChanged(user => {
 
 // --- イベントリスナー ---
 loginButton.addEventListener('click', () => {
-    if (usualPasskey) { void window.sosUsualWeb.useLegacy().catch(() => { syncNativeLoginControls(); if (!loginError.textContent) loginError.textContent = '操作を確認できませんでした。画面の案内をご確認ください。'; }); return; }
+    if (usualPasskey) { void window.sosUsualWeb.useLegacy().catch(() => {}); return; }
     const email = loginEmailInput.value;
     const password = loginPasswordInput.value;
     auth.signInWithEmailAndPassword(email, password)
@@ -407,7 +395,7 @@ loginButton.addEventListener('click', () => {
 });
 
 logoutButton.addEventListener('click', async () => {
-    if (usualPasskey) { void window.sosUsualWeb.end().catch(() => { syncNativeLoginControls(); if (!loginError.textContent) loginError.textContent = '操作を確認できませんでした。画面の案内をご確認ください。'; }); return; }
+    if (usualPasskey) { void window.sosUsualWeb.end().catch(() => {}); return; }
     setSensitiveViewsAllowed(false);
     clearSensitiveUi();
     loginContainer.style.display = 'block';

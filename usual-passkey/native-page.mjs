@@ -1,9 +1,9 @@
 // Browser bootstrap candidate. Feature defaults off; import performs no initialization or I/O.
-import {createNativeEntry,createNativeBridgeAPI} from './native-entry.mjs?v=20261110-passive-resume1';
+import {createNativeEntry,createNativeBridgeAPI} from './native-entry.mjs';
 import {prepareNamedFirebaseAuth} from './sdk-adapters.mjs';
-import {createBridgeClient,BRIDGE_GUARD_KEY,BRIDGE_LOCK_NAME} from './client.mjs?v=20261110-passive-resume1';
+import {createBridgeClient,BRIDGE_GUARD_KEY,BRIDGE_LOCK_NAME} from './client.mjs';
 import {consumeNativeReturnIntent,takeNativeReturnIntent} from './auth-return.mjs';
-export const ORIGINAL_SCRIPT_SOURCES=Object.freeze(["https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js", "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js", "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js", "https://www.gstatic.com/firebasejs/9.6.1/firebase-storage-compat.js", "shared/core.js?v=20261017-security1", "connection.js?v=20260927-claim-close1", "shared/vendor/markdown-it/markdown-it.umd.min.js?v=20261015-summary-markdown1", "shared/summary-markdown.js?v=20261015-summary-markdown1", "script.js?v=20261110-passive-resume1", "shared/ui.js?v=20260927-claim-close1", "shared/pdf-viewer.js?v=20260927-claim-close1"]);
+export const ORIGINAL_SCRIPT_SOURCES=Object.freeze(["https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js", "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js", "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js", "https://www.gstatic.com/firebasejs/9.6.1/firebase-storage-compat.js", "shared/core.js?v=20261017-security1", "connection.js?v=20260927-claim-close1", "shared/vendor/markdown-it/markdown-it.umd.min.js?v=20261015-summary-markdown1", "shared/summary-markdown.js?v=20261015-summary-markdown1", "script.js?v=20261017-security1", "shared/ui.js?v=20260927-claim-close1", "shared/pdf-viewer.js?v=20260927-claim-close1"]);
 const fail=()=>{throw Error('NATIVE_START_FAILED');};
 function guardType(value){return value===null?'none':/^v1\.(login|active|end|ended)\.[A-Za-z0-9_-]{16,64}$/.exec(value)?.[1]??'invalid';}
 function scriptLoader(document){return src=>new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=src;script.async=false;script.onload=()=>resolve();script.onerror=()=>reject(Error('NATIVE_START_FAILED'));document.head.appendChild(script);});}
