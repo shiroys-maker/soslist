@@ -1,5 +1,5 @@
 // LOCAL injected seam; importing does not initialize any SDK or perform I/O.
-import {createBridgeClient,BRIDGE_GUARD_KEY} from './client.mjs';
+import {createBridgeClient,BRIDGE_GUARD_KEY} from './client.mjs?v=20261110-passive-resume1';
 import {createFixedMediaTransport} from './media.mjs';
 import {teardownPatientUI} from './vendor/adapter.mjs';
 const MAIN='https://soslist.niraissc.jp',ACCESS='https://access.soslist.niraissc.jp',AUTH='https://auth.soslist.niraissc.jp/?returnTo=usual-web';
