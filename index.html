@@ -20,11 +20,13 @@
 
     <div id="login-container">
         <h1>Login</h1>
+        <div id="passkeyLoginArea" hidden>
+            <button id="passkeyLoginButton" type="button" class="passkey-login-button">パスキーでログイン</button>
+            <p class="passkey-hint">共用PCでは「別の端末を使用」を選び、ご自分のスマホでQRコードを読み取ってください。</p>
+            <p class="passkey-divider">またはパスワードでログイン</p>
+        </div>
         <input type="email" id="loginEmail" placeholder="Email" value="sos@niraissc.jp">
         <input type="password" id="loginPassword" placeholder="Password">
-        <button id="passkeyLoginButton" type="button" hidden>パスキーでログイン</button>
-        <button id="retryEndButton" type="button" hidden>利用終了を再試行</button>
-        <button id="resumeSessionButton" type="button" hidden>再接続</button>
         <button id="loginButton">ログイン</button>
         <p id="loginError" style="color: red;"></p>
     </div>
@@ -34,6 +36,7 @@
             Nirai Seaside Clinic Appointments
             <div id="auth-status">
                 <p>ログイン中: <span id="userEmail"></span></p>
+                <button id="passkeyManageButton" type="button" hidden>パスキー</button>
                 <button id="logoutButton">ログアウト</button>
             </div>
         </h1>
@@ -116,6 +119,18 @@
             </table>
             <div id="mobileAppointmentsList" class="mobile-appointments-list"></div>
         </div>
+    </div>
+
+    <div id="passkeyModal" class="modal">
+      <div class="modal-content">
+        <h3>パスキー</h3>
+        <p>この端末（またはスマホ）にパスキーを登録すると、次回からパスワードなしでログインできます。</p>
+        <button id="passkeyRegisterButton" type="button">この端末にパスキーを登録</button>
+        <p id="passkeyStatus" class="passkey-status" role="status"></p>
+        <h4>登録済みのパスキー</h4>
+        <ul id="passkeyList" class="passkey-list"></ul>
+        <button id="passkeyCloseButton" type="button">閉じる</button>
+      </div>
     </div>
 
     <div id="editModal" class="modal">
@@ -235,9 +250,20 @@
     </div>
     
 
-    <script type="module">
-      import { startNativePage } from "./usual-passkey/native-page.mjs?v=20261110-passive-resume2";
-      startNativePage({ enabled: true });
-    </script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-storage-compat.js"></script>
+    
+    <script src="shared/core.js?v=20261017-security1"></script>
+    <script src="connection.js?v=20260927-claim-close1"></script>
+    <script src="shared/vendor/markdown-it/markdown-it.umd.min.js?v=20261015-summary-markdown1"></script>
+    <script src="shared/summary-markdown.js?v=20261015-summary-markdown1"></script>
+    <script src="script.js?v=20261017-security1"></script>
+
+    <script src="shared/ui.js?v=20260927-claim-close1"></script>
+    <script src="shared/pdf-viewer.js?v=20260927-claim-close1"></script>
+    <script src="shared/vendor/simplewebauthn/browser-13.3.0.umd.min.js?v=20261111-passkey1"></script>
+    <script src="shared/passkey.js?v=20261111-passkey1"></script>
 </body>
 </html>

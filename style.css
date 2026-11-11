@@ -1478,3 +1478,11 @@ button.claim-detail-link {
     #claimDetailModal .claim-detail-content { height: 96vh; height: 96dvh; padding: 14px; }
     button.claim-detail-link { min-height: 36px; }
 }
+
+/* パスキー */
+.passkey-login-button { font-size: 1.1em; padding: 0.7em 1.4em; font-weight: bold; }
+.passkey-hint { font-size: 0.85em; color: #555; margin: 0.4em 0; }
+.passkey-divider { margin: 1.2em 0 0.4em; color: #777; font-size: 0.9em; }
+.passkey-status { min-height: 1.2em; color: #0a5; }
+.passkey-list { padding-left: 1.2em; }
+.passkey-list li { margin: 0.4em 0; }
