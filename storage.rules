@@ -1,12 +1,14 @@
 rules_version = '2';
 // Approved temporary containment, 2026-10-17 JST.
+// 2026-11-11: passkey sessions expire 6 hours after sign-in (auth_time).
 // 2026-11-11: passkey custom-token sessions (passkey=true) are accepted like password sessions.
 service firebase.storage {
   match /b/{bucket}/o {
     function knownReader() {
       return request.auth != null
         && (request.auth.token.firebase.sign_in_provider == 'password'
-          || (request.auth.token.firebase.sign_in_provider == 'custom' && request.auth.token.get('passkey', false) == true))
+          || (request.auth.token.firebase.sign_in_provider == 'custom' && request.auth.token.get('passkey', false) == true
+            && request.time < timestamp.value(request.auth.token.auth_time * 1000) + duration.value(6, 'h')))
         && request.auth.uid in ['MsMNpta5iBfNnXh0sXGiAsIQKw22', 'jpnoE4ygk5ZqR8rsaJnzRSy5poA3'];
     }
     match /{allPaths=**} {

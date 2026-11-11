@@ -2,6 +2,7 @@ rules_version = '2';
 // Approved temporary containment, 2026-10-17 JST.
 // Temporary containment: preserves the legacy writer's existing local workflow.
 // This does NOT yet meet the final cloud field restriction requirement.
+// 2026-11-11: passkey sessions expire 6 hours after sign-in (auth_time).
 // 2026-11-11: passkey login (passkey-server) issues custom tokens with passkey=true
 // for the same accounts; treated exactly like a password session. Old bridge rules removed.
 service cloud.firestore {
@@ -9,7 +10,8 @@ service cloud.firestore {
     function signedIn() {
       return request.auth != null
         && (request.auth.token.firebase.sign_in_provider == 'password'
-          || (request.auth.token.firebase.sign_in_provider == 'custom' && request.auth.token.get('passkey', false) == true));
+          || (request.auth.token.firebase.sign_in_provider == 'custom' && request.auth.token.get('passkey', false) == true
+            && request.time < timestamp.value(request.auth.token.auth_time * 1000) + duration.value(6, 'h')));
     }
     function knownReader() {
       return signedIn() && request.auth.uid in ['MsMNpta5iBfNnXh0sXGiAsIQKw22', 'jpnoE4ygk5ZqR8rsaJnzRSy5poA3'];

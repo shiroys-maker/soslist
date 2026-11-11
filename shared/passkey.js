@@ -193,12 +193,28 @@
         });
     }
 
-    // ログイン中の表示に「誰のパスキーか」を添える
+    // パスキーでのログインは6時間で自動終了（データベース側の規則でも6時間を過ぎると拒否される）
+    const SESSION_LIMIT_MS = 6 * 60 * 60 * 1000;
+    let sessionEndsAt = null;
+    function checkSessionLimit() {
+        if (sessionEndsAt === null || !auth.currentUser || Date.now() < sessionEndsAt) return;
+        sessionEndsAt = null;
+        document.getElementById('logoutButton').click();
+        loginError.textContent = 'パスキーでのログインから6時間たったため、自動でログアウトしました。もう一度「パスキーでログイン」を押してください。';
+    }
+    setInterval(checkSessionLimit, 30 * 1000);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkSessionLimit(); });
+
+    // ログイン中の表示に「誰のパスキーか」を添える ＋ 6時間の期限を設定
     auth.onAuthStateChanged(async user => {
+        sessionEndsAt = null;
         if (!user) return;
         try {
             const { claims } = await user.getIdTokenResult();
-            if (claims.passkey && claims.staffEmail && auth.currentUser === user) {
+            if (auth.currentUser !== user || !claims.passkey) return;
+            sessionEndsAt = Number(claims.auth_time) * 1000 + SESSION_LIMIT_MS;
+            checkSessionLimit();
+            if (claims.staffEmail && auth.currentUser) {
                 const span = document.getElementById('userEmail');
                 span.textContent = `${user.email}（パスキー: ${claims.staffEmail}）`;
             }
