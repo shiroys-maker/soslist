@@ -20,8 +20,9 @@ const AUDIENCE = 'https://identitytoolkit.googleapis.com/google.identity.identit
 class Fail extends Error { constructor(code, message) { super(message); this.code = code; } }
 
 function readAdc() {
-  const file = process.env.GOOGLE_APPLICATION_CREDENTIALS
-    || path.join(os.homedir(), '.config', 'gcloud', 'application_default_credentials.json');
+  // GOOGLE_APPLICATION_CREDENTIALS は意図的に見ない（daily-brief の .env が管理用キーを指すため）。
+  // 常にこの Mac の利用者本人の gcloud 認証を使う。
+  const file = path.join(os.homedir(), '.config', 'gcloud', 'application_default_credentials.json');
   let adc;
   try { adc = JSON.parse(fs.readFileSync(file, 'utf8')); }
   catch { throw new Fail('ADC_MISSING', 'この Mac の Google Cloud 認証がありません（gcloud auth application-default login が必要）。'); }
