@@ -20,11 +20,10 @@
 <body>
 
     <div id="login-container">
-        <h1>Login</h1>
-        <input type="email" id="loginEmail" placeholder="Email" value="sos@niraissc.jp">
-        <input type="password" id="loginPassword" placeholder="Password">
-        <button id="loginButton">ログイン</button>
+        <h1>SOSList Local</h1>
+        <p id="loginStatus">接続中…</p>
         <p id="loginError" style="color: red;"></p>
+        <button id="loginRetryButton" type="button" hidden>再試行</button>
     </div>
 
     <div id="main-app-container">
@@ -37,7 +36,6 @@
             </span>
             <div id="auth-status">
                 <p>ログイン中: <span id="userEmail"></span></p>
-                <button id="logoutButton">ログアウト</button>
             </div>
         </h1>
 

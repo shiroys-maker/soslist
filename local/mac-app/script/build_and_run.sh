@@ -53,6 +53,8 @@ for f in index.html script.js connection.js interaction.js style.css details.htm
 done
 cp -R "$LOCAL_SOURCE_DIR/ai" "$WEB_RESOURCES_DIR/local/"
 cp "$LOCAL_SOURCE_DIR/ai-settings.js" "$WEB_RESOURCES_DIR/local/"
+mkdir -p "$WEB_RESOURCES_DIR/local/login"
+cp "$LOCAL_SOURCE_DIR/login/local-token.cjs" "$WEB_RESOURCES_DIR/local/login/"
 mkdir -p "$WEB_RESOURCES_DIR/local/evidence-review"
 # Shared AI catalog transport only; retired collection code is never packaged.
 for f in app-server.cjs codex-path.cjs; do

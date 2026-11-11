@@ -248,6 +248,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             try? JSONSerialization.data(withJSONObject: data).write(to: URL(fileURLWithPath: file + ".result.json"), options: .atomic)
             exit(data["ok"] as? Bool == true ? 0 : 1)
         }
+        // パスワード不要の自動ログイン: この Mac の認証で Firebase カスタムトークンを作り、メイン画面にだけ返す。
+        if message.name == "localLogin" {
+            guard message.frameInfo.isMainFrame, message.frameInfo.request.url?.isFileURL == true,
+                  let view = message.webView, view === webView else { return }
+            let script = Bundle.main.resourceURL!.appendingPathComponent("local-web/local/login/local-token.cjs")
+            DispatchQueue.global(qos: .userInitiated).async {
+                let process = Process(), output = Pipe()
+                process.executableURL = URL(fileURLWithPath: dailyBriefNodePath)
+                process.arguments = [script.path]
+                process.environment = self.makeDailyBriefEnvironment()
+                process.standardOutput = output
+                process.standardError = FileHandle.nullDevice
+                var reply = "{\"error\":\"FAILED\",\"message\":\"ログイン処理を開始できませんでした。\"}"
+                do {
+                    try process.run()
+                    let data = output.fileHandleForReading.readDataToEndOfFile()
+                    process.waitUntilExit()
+                    if let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                       let json = try? JSONSerialization.data(withJSONObject: parsed),
+                       let text = String(data: json, encoding: .utf8) { reply = text }
+                } catch {}
+                DispatchQueue.main.async { view.evaluateJavaScript("window.localLoginReply && window.localLoginReply(\(reply))", completionHandler: nil) }
+            }
+            return
+        }
         if message.name == "aiSettings" {
             guard message.frameInfo.isMainFrame, let request = message.body as? [String: Any],
                   let id = request["id"] as? String, let action = request["action"] as? String,
@@ -530,6 +555,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         configuration.userContentController.add(self, name: "runUtilityTool")
         configuration.userContentController.add(self, name: "aiSettingsSmokeResult")
         configuration.userContentController.add(self, name: "aiSettings")
+        configuration.userContentController.add(self, name: "localLogin")
         configuration.userContentController.add(self, name: "openDBQProcessor")
         configuration.userContentController.add(self, name: "printHTML")
         configuration.userContentController.add(self, name: "openExternalURL")

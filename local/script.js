@@ -14,10 +14,8 @@ const SOSLIST_TARGET = {
 // --- DOM要素の取得 ---
 const loginContainer = document.getElementById('login-container');
 const mainAppContainer = document.getElementById('main-app-container');
-const loginButton = document.getElementById('loginButton');
-const logoutButton = document.getElementById('logoutButton');
-const loginEmailInput = document.getElementById('loginEmail');
-const loginPasswordInput = document.getElementById('loginPassword');
+const loginStatus = document.getElementById('loginStatus');
+const loginRetryButton = document.getElementById('loginRetryButton');
 const loginError = document.getElementById('loginError');
 const userEmailSpan = document.getElementById('userEmail');
 const tableBody = document.querySelector("#appointmentsTable tbody");
@@ -296,29 +294,43 @@ auth.onAuthStateChanged(user => {
 window.addEventListener('storage', handleDetailStorageEvent);
 
 // --- イベントリスナー ---
-loginButton.addEventListener('click', () => {
-    const email = loginEmailInput.value;
-    const password = loginPasswordInput.value;
-    auth.signInWithEmailAndPassword(email, password)
-        .catch(error => {
-            loginError.textContent = `ログインに失敗しました: ${error.message}`;
-        });
-});
-
-logoutButton.addEventListener('click', () => {
-    auth.signOut();
-});
-
-loginEmailInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-        loginButton.click();
+// --- 自動ログイン（パスワード不要） ---
+// アプリ本体がこの Mac の認証でログイン用トークンを作る（local/login/local-token.cjs）。
+let localLoginBusy = false;
+function requestLocalLogin() {
+    if (localLoginBusy || auth.currentUser) return;
+    const handler = window.webkit?.messageHandlers?.localLogin;
+    loginError.textContent = '';
+    loginRetryButton.hidden = true;
+    if (!handler) {
+        loginStatus.textContent = '';
+        loginError.textContent = 'SOSList Local アプリから開いてください。';
+        return;
     }
-});
-
-loginPasswordInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-        loginButton.click();
+    localLoginBusy = true;
+    loginStatus.textContent = '接続中…';
+    handler.postMessage({});
+}
+window.localLoginReply = async reply => {
+    try {
+        if (!reply?.token) throw new Error(reply?.message || 'ログイン用トークンを取得できませんでした。');
+        await auth.signInWithCustomToken(reply.token);
+    } catch (error) {
+        loginStatus.textContent = '';
+        loginError.textContent = `接続できませんでした: ${error.message}`;
+        loginRetryButton.hidden = false;
+    } finally {
+        localLoginBusy = false;
     }
+};
+loginRetryButton.addEventListener('click', requestLocalLogin);
+// 以前のパスワードでのログインが残っていれば、自動ログインへ切り替える
+auth.onAuthStateChanged(async user => {
+    if (!user) { requestLocalLogin(); return; }
+    try {
+        const { claims } = await user.getIdTokenResult();
+        if (claims.local !== true && auth.currentUser === user) await auth.signOut();
+    } catch (_) {}
 });
 
 dateFilter.addEventListener('change', () => {
