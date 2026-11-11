@@ -12,6 +12,14 @@ SA_NAME=sos-local-signer
 SA="${SA_NAME}@${PROJECT}.iam.gserviceaccount.com"
 SERVICE=soslist-local-login
 HERE="${0:A:h}"
+ADC="$HOME/.config/gcloud/application_default_credentials.json"
+[[ -f "$ADC" ]] || { echo "この Mac の Google Cloud 認証(ADC)がありません。gcloud auth application-default login を実行してください"; exit 1; }
+ADC_TYPE=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("type",""))' "$ADC")
+
+if [[ "$ADC_TYPE" == service_account ]]; then
+  # Mac mini 等: 管理用サービスアカウント鍵で直接署名するため、署名権限の設定は不要
+  echo "この Mac は管理用サービスアカウント鍵で署名します（署名権限の設定は不要）"
+else
 ME=$(gcloud config get-value account 2>/dev/null)
 [[ -n "$ME" ]] || { echo "gcloud にログインしていません（gcloud auth login）"; exit 1; }
 
@@ -24,9 +32,7 @@ for i in {1..12}; do
   echo "サービスアカウントの反映待ち… ($i)"; sleep 10
 done
 echo "署名権限: $ME → $SA"
-
-[[ -f "$HOME/.config/gcloud/application_default_credentials.json" ]] \
-  || { echo "この Mac の Google Cloud 認証(ADC)がありません。gcloud auth application-default login を実行してください"; exit 1; }
+fi
 
 if ! /usr/bin/security find-generic-password -s "$SERVICE" -a "$USER" >/dev/null 2>&1; then
   /usr/bin/security add-generic-password -s "$SERVICE" -a "$USER" -l "SOSList Local login key" \
