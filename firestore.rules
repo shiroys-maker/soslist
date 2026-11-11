@@ -4,7 +4,7 @@ rules_version = '2';
 // 2026-11-11 passkey login (passkey-server issues custom tokens with passkey=true for the same accounts):
 //  - passkey sessions expire 6 hours after sign-in (auth_time)
 //  - passkey sessions may read like password sessions, but may only make the edits the web screen offers
-//    (no create/delete, no other fields, no dailyBrief_ documents). Password sessions (local tools) unchanged.
+//    (no create/delete, no other fields, no dailyBrief_ documents). Password and SOSList Local sessions unchanged.
 service cloud.firestore {
   match /databases/{database}/documents {
     function passwordSession() {
@@ -15,6 +15,16 @@ service cloud.firestore {
         && request.auth.token.firebase.sign_in_provider == 'custom'
         && request.auth.token.get('passkey', false) == true
         && request.time < timestamp.value(request.auth.token.auth_time * 1000) + duration.value(6, 'h');
+    }
+    // SOSList Local (local/login/local-token.cjs): custom token signed by sos-local-signer with this Mac's
+    // Keychain key. Full rights like the password session. Hashes come from local/login/key-hashes.txt.
+    function localSession() {
+      return request.auth != null
+        && request.auth.token.firebase.sign_in_provider == 'custom'
+        && request.auth.token.get('local', false) == true
+        && hashing.sha256(request.auth.token.get('localKey', '')).toHexString().lower() in [
+          '237b7e79b7999499815fff072132a748acd7dbd740e484098a86b6dc59afe2ec'  // MacBook Air (2)
+        ];
     }
     function readerUid() { return request.auth.uid in ['MsMNpta5iBfNnXh0sXGiAsIQKw22', 'jpnoE4ygk5ZqR8rsaJnzRSy5poA3']; }
     function writerUid() { return request.auth.uid == 'jpnoE4ygk5ZqR8rsaJnzRSy5poA3'; }
@@ -66,8 +76,8 @@ service cloud.firestore {
     }
 
     match /appointments/{docId} {
-      allow read: if (passwordSession() || passkeySession()) && readerUid();
-      allow write: if passwordSession() && writerUid();
+      allow read: if (passwordSession() || localSession() || passkeySession()) && readerUid();
+      allow write: if (passwordSession() || localSession()) && writerUid();
       allow update: if passkeySession() && writerUid() && !docId.matches('^dailyBrief_.*') && webEditOk();
     }
     match /{document=**} {
