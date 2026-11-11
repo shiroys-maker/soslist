@@ -1486,3 +1486,4 @@ button.claim-detail-link {
 .passkey-status { min-height: 1.2em; color: #0a5; }
 .passkey-list { padding-left: 1.2em; }
 .passkey-list li { margin: 0.4em 0; }
+.passkey-link-button { background: none; border: none; color: #4a3f8c; text-decoration: underline; padding: 0.3em 0; cursor: pointer; font-size: 0.9em; }

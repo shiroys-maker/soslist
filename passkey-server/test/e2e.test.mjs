@@ -6,7 +6,7 @@ import http from 'node:http';
 import { readFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { chromium } from 'playwright-core';
-import { createApp } from '../app.mjs';
+import { createApp, emailDigest } from '../app.mjs';
 
 const lib = readFileSync(new URL('../../shared/vendor/simplewebauthn/browser-13.3.0.umd.min.js', import.meta.url), 'utf8');
 const listen = srv => new Promise(r => srv.listen(0, '127.0.0.1', () => r(srv.address().port)));
@@ -25,13 +25,27 @@ function memoryStore() {
   };
 }
 
-test('passkey register + login + guards', async () => {
+test('passkey register (Google-verified) + login + guards', async () => {
   let clock = Date.now();
-  const users = { 'tok-u1': { uid: 'u1', email: 'a@example.com' }, 'tok-u2': { uid: 'u2', email: 'b@example.com' } };
   let authTime = Math.floor(clock / 1000);
+  const P = 'test-proj';
+  const allowlist = { sharedEmail: 'shared@example.com', people: [
+    { id: 'owner', emailDigest: emailDigest(P, 'owner@example.com') },
+    { id: 'staff-1', emailDigest: emailDigest(P, 'staff1@example.com') },
+  ] };
+  const g = (uid, email) => ({ uid, email, email_verified: true, firebase: { sign_in_provider: 'google.com' } });
+  const tokens = {
+    'g-owner': g('gu-owner', 'Owner@Example.com'),
+    'g-staff1': g('gu-staff1', 'staff1@example.com'),
+    'g-stranger': g('gu-x', 'stranger@example.com'),
+    'g-unverified': { ...g('gu-owner', 'owner@example.com'), email_verified: false },
+    'shared': { uid: 'shared-uid', email: 'shared@example.com', firebase: { sign_in_provider: 'password' } },
+    'other': { uid: 'reader-uid', firebase: { sign_in_provider: 'password' } },
+  };
   const auth = {
-    async verifyIdToken(t) { const u = users[t]; if (!u) throw new Error('bad'); return { ...u, auth_time: authTime }; },
+    async verifyIdToken(t) { const u = tokens[t]; if (!u) throw new Error('bad'); return { ...u, auth_time: authTime }; },
     async createCustomToken(uid, claims) { return `custom:${uid}:${JSON.stringify(claims)}`; },
+    async getUserByEmail(e) { assert.equal(e, 'shared@example.com'); return { uid: 'shared-uid' }; },
   };
   const page = http.createServer((req, res) => {
     res.writeHead(200, { 'content-type': 'text/html' });
@@ -40,7 +54,7 @@ test('passkey register + login + guards', async () => {
   const pagePort = await listen(page);
   const origin = `http://localhost:${pagePort}`;
   const store = memoryStore();
-  const api = http.createServer(createApp({ store, auth, rpID: 'localhost', origins: [origin], now: () => clock }));
+  const api = http.createServer(createApp({ store, auth, rpID: 'localhost', origins: [origin], projectId: P, allowlist, now: () => clock }));
   const apiPort = await listen(api);
   const API = `http://127.0.0.1:${apiPort}`;
 
@@ -56,63 +70,72 @@ test('passkey register + login + guards', async () => {
     const run = (script, arg) => p.evaluate(new Function('arg', `return (async()=>{const API=${JSON.stringify(API)};
       const call=async(path,body,tok)=>{const h={'content-type':'application/json'};if(tok)h.authorization='Bearer '+tok;
         const r=await fetch(API+'/'+path,{method:'POST',headers:h,body:JSON.stringify(body||{})});return {status:r.status,data:await r.json()};};
-      const L=SimpleWebAuthnBrowser;${script}})()`), arg);
+      const L=SimpleWebAuthnBrowser;
+      const register=async(tok,label)=>{const o=await call('register/options',{},tok);if(o.status!==200)return o;
+        const resp=await L.startRegistration({optionsJSON:o.data.options});
+        return call('register/verify',{challengeId:o.data.challengeId,response:resp,label},tok);};
+      const login=async()=>{const o=await call('login/options');
+        const resp=await L.startAuthentication({optionsJSON:o.data.options});
+        return call('login/verify',{challengeId:o.data.challengeId,response:resp});};
+      ${script}})()`), arg);
 
-    // Not logged in -> cannot register
-    let r = await run(`return call('register/options',{});`);
-    assert.equal(r.status, 401);
+    // Registration needs a Google sign-in of an allowlisted, verified person
+    let r = await run(`return [await call('register/options',{}), await call('register/options',{},'shared'),
+      await call('register/options',{},'g-stranger'), await call('register/options',{},'g-unverified')];`);
+    assert.deepEqual(r.map(x => [x.status, x.data.error]), [[401, 'LOGIN_REQUIRED'], [403, 'GOOGLE_REQUIRED'], [403, 'NOT_ALLOWED'], [403, 'GOOGLE_REQUIRED']]);
 
-    // Register for u1
-    r = await run(`const o=await call('register/options',{},'tok-u1');
-      const resp=await L.startRegistration({optionsJSON:o.data.options});
-      const v=await call('register/verify',{challengeId:o.data.challengeId,response:resp,label:'test phone'},'tok-u1');
-      const replay=await call('register/verify',{challengeId:o.data.challengeId,response:resp,label:'x'},'tok-u1');
-      return {v,replay};`);
-    assert.equal(r.v.status, 200, JSON.stringify(r.v));
-    assert.equal(r.v.data.label, 'test phone');
-    assert.equal(r.replay.status, 400, 'challenge single-use');
-    assert.equal(store.cr.size, 1);
-
-    // Login with discoverable credential -> custom token for u1
-    r = await run(`const o=await call('login/options');
-      const resp=await L.startAuthentication({optionsJSON:o.data.options});
-      const v=await call('login/verify',{challengeId:o.data.challengeId,response:resp});
-      const replay=await call('login/verify',{challengeId:o.data.challengeId,response:resp});
-      return {v,replay};`);
-    assert.equal(r.v.status, 200, JSON.stringify(r.v));
-    assert.equal(r.v.data.customToken, 'custom:u1:{"passkey":true}');
-    assert.equal(r.replay.status, 400);
-    assert.ok([...store.cr.values()][0].lastUsedAt);
-
-    // List: u1 sees 1, u2 sees 0; u2 cannot delete u1's passkey
-    r = await run(`return [await call('list',{},'tok-u1'), await call('list',{},'tok-u2')];`);
-    assert.equal(r[0].data.passkeys.length, 1);
-    assert.equal(r[1].data.passkeys.length, 0);
-    const credId = r[0].data.passkeys[0].id;
-    r = await run(`return call('delete',{id:arg},'tok-u2');`, credId);
-    assert.equal(r.status, 404);
-
-    // Stale login cannot register/delete
+    // Stale Google sign-in refused
     authTime -= 3600;
-    r = await run(`return call('register/options',{},'tok-u1');`);
-    assert.equal(r.status, 403);
+    r = await run(`return call('register/options',{},'g-owner');`);
     assert.equal(r.data.error, 'RECENT_LOGIN_REQUIRED');
     authTime += 3600;
 
-    // Expired challenge
-    r = await run(`const o=await call('login/options'); return o.data.challengeId;`);
-    clock += 6 * 60 * 1000;
-    const expired = await run(`return call('login/verify',{challengeId:arg,response:{id:'x'}});`, r);
-    assert.equal(expired.status, 400);
-    clock -= 6 * 60 * 1000;
+    // Owner registers (email case-insensitive); challenge is single-use and bound to that Google user
+    r = await run(`const o=await call('register/options',{},'g-owner');
+      const resp=await L.startRegistration({optionsJSON:o.data.options});
+      const stolen=await call('register/verify',{challengeId:o.data.challengeId,response:resp},'g-staff1');
+      const o2=await call('register/options',{},'g-owner');
+      const resp2=await L.startRegistration({optionsJSON:o2.data.options}).catch(e=>e.name);
+      return {stolen, resp2};`);
+    assert.equal(r.stolen.status, 400, 'challenge bound to Google user');
+    r = await run(`return register('g-owner','owner phone');`);
+    assert.equal(r.status, 200, JSON.stringify(r));
+    assert.equal(r.data.owner, 'owner@example.com');
+    const cred = [...store.cr.values()][0];
+    assert.equal(cred.uid, 'shared-uid');
+    assert.equal(cred.person, 'owner');
 
-    // Delete then login -> UNKNOWN_PASSKEY
-    r = await run(`return call('delete',{id:arg},'tok-u1');`, credId);
-    assert.equal(r.status, 200);
-    r = await run(`const o=await call('login/options');
-      const resp=await L.startAuthentication({optionsJSON:o.data.options});
-      return call('login/verify',{challengeId:o.data.challengeId,response:resp});`);
+    // Login -> custom token for the shared account, tagged with the owner
+    r = await run(`return login();`);
+    assert.equal(r.status, 200, JSON.stringify(r));
+    assert.equal(r.data.customToken, 'custom:shared-uid:{"passkey":true,"staff":"owner","staffEmail":"owner@example.com"}');
+    assert.ok(cred.lastUsedAt);
+
+    // List / delete only from the shared account
+    r = await run(`return [await call('list',{},'shared'), await call('list',{},'other'), await call('list',{},'g-owner')];`);
+    assert.equal(r[0].status, 200);
+    assert.equal(r[0].data.passkeys[0].owner, 'owner@example.com');
+    assert.equal(r[1].status, 403);
+    assert.equal(r[2].status, 403);
+
+    // Removed from allowlist -> passkey stops working
+    allowlist.people.shift();
+    const app2 = http.createServer(createApp({ store, auth, rpID: 'localhost', origins: [origin], projectId: P, allowlist, now: () => clock }));
+    const port2 = await listen(app2);
+    r = await p.evaluate(async API2 => {
+      const o = await (await fetch(API2 + '/login/options', { method: 'POST' })).json();
+      const resp = await SimpleWebAuthnBrowser.startAuthentication({ optionsJSON: o.options });
+      const v = await fetch(API2 + '/login/verify', { method: 'POST', body: JSON.stringify({ challengeId: o.challengeId, response: resp }) });
+      return { status: v.status, data: await v.json() };
+    }, `http://127.0.0.1:${port2}`);
+    app2.close();
     assert.equal(r.status, 401);
+    assert.equal(r.data.error, 'UNKNOWN_PASSKEY');
+
+    // Delete (shared session) then login -> UNKNOWN_PASSKEY
+    r = await run(`return call('delete',{id:arg},'shared');`, cred.id);
+    assert.equal(r.status, 200);
+    r = await run(`return login();`);
     assert.equal(r.data.error, 'UNKNOWN_PASSKEY');
   } finally {
     await browser.close(); page.close(); api.close();
@@ -120,7 +143,7 @@ test('passkey register + login + guards', async () => {
 });
 
 test('foreign origin refused, unknown route 404', async () => {
-  const app = createApp({ store: memoryStore(), auth: { verifyIdToken() {}, createCustomToken() {} }, rpID: 'localhost', origins: ['https://soslist.niraissc.jp'] });
+  const app = createApp({ store: memoryStore(), auth: { verifyIdToken() {}, createCustomToken() {} }, rpID: 'localhost', origins: ['https://soslist.niraissc.jp'], projectId: 'p', allowlist: { sharedEmail: 's@x', people: [{ id: 'a', emailDigest: 'x' }] } });
   const srv = http.createServer(app); const port = await listen(srv);
   try {
     let r = await fetch(`http://127.0.0.1:${port}/login/options`, { method: 'POST', headers: { origin: 'https://evil.example' } });

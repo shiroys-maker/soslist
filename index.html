@@ -23,6 +23,8 @@
         <div id="passkeyLoginArea" hidden>
             <button id="passkeyLoginButton" type="button" class="passkey-login-button">パスキーでログイン</button>
             <p class="passkey-hint">共用PCでは「別の端末を使用」を選び、ご自分のスマホでQRコードを読み取ってください。</p>
+            <button id="passkeyFirstRegisterButton" type="button" class="passkey-link-button">初めての方・新しいスマホ：パスキーを登録</button>
+            <p id="passkeyLoginStatus" class="passkey-status" role="status"></p>
             <p class="passkey-divider">またはパスワードでログイン</p>
         </div>
         <input type="email" id="loginEmail" placeholder="Email" value="sos@niraissc.jp">
@@ -124,8 +126,8 @@
     <div id="passkeyModal" class="modal">
       <div class="modal-content">
         <h3>パスキー</h3>
-        <p>この端末（またはスマホ）にパスキーを登録すると、次回からパスワードなしでログインできます。</p>
-        <button id="passkeyRegisterButton" type="button">この端末にパスキーを登録</button>
+        <p>ご自分のGoogleアカウントで本人確認してから、この端末にパスキーを登録します。次回からパスワードなしでログインできます。</p>
+        <button id="passkeyRegisterButton" type="button">Googleで本人確認してパスキーを登録</button>
         <p id="passkeyStatus" class="passkey-status" role="status"></p>
         <h4>登録済みのパスキー</h4>
         <ul id="passkeyList" class="passkey-list"></ul>
@@ -264,6 +266,6 @@
     <script src="shared/ui.js?v=20260927-claim-close1"></script>
     <script src="shared/pdf-viewer.js?v=20260927-claim-close1"></script>
     <script src="shared/vendor/simplewebauthn/browser-13.3.0.umd.min.js?v=20261111-passkey1"></script>
-    <script src="shared/passkey.js?v=20261111-passkey1"></script>
+    <script src="shared/passkey.js?v=20261111-passkey2"></script>
 </body>
 </html>

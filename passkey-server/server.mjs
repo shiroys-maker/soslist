@@ -4,9 +4,11 @@ import { randomBytes } from 'node:crypto';
 import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
+import { readFileSync } from 'node:fs';
 import { createApp } from './app.mjs';
 
-initializeApp({ projectId: process.env.GOOGLE_CLOUD_PROJECT || 'sos-list-4d150' });
+const projectId = process.env.GOOGLE_CLOUD_PROJECT || 'sos-list-4d150';
+initializeApp({ projectId });
 const db = getFirestore();
 // Clients cannot read these collections: firestore.rules denies everything except appointments.
 const challenges = db.collection('passkeyChallenges');
@@ -43,6 +45,8 @@ const store = {
 const handler = createApp({
   store,
   auth: getAuth(),
+  projectId,
+  allowlist: JSON.parse(readFileSync(new URL('./allowlist.json', import.meta.url), 'utf8')),
   rpID: process.env.RP_ID || 'soslist.niraissc.jp',
   origins: (process.env.ORIGINS || 'https://soslist.niraissc.jp').split(',').map(s => s.trim()).filter(Boolean),
 });

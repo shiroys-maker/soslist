@@ -14,6 +14,8 @@
     const statusEl = $('passkeyStatus');
     const listEl = $('passkeyList');
     const loginError = $('loginError');
+    const firstRegisterButton = $('passkeyFirstRegisterButton');
+    const loginStatus = $('passkeyLoginStatus');
 
     // 旧パスキー方式がブラウザに残した状態を削除（旧方式は撤去済み）
     try {
@@ -30,9 +32,11 @@
 
     const MESSAGES = {
         LOGIN_REQUIRED: 'ログインし直してください。',
-        RECENT_LOGIN_REQUIRED: '安全のため、いったんログアウトしてもう一度ログインしてから登録してください。',
+        RECENT_LOGIN_REQUIRED: '安全のため、もう一度ログインし直してから操作してください。',
+        GOOGLE_REQUIRED: 'Googleアカウントでの本人確認が必要です。',
+        NOT_ALLOWED: 'このGoogleアカウントは登録が許可されていません。管理者に連絡してください。',
         CHALLENGE_EXPIRED: '時間切れです。もう一度お試しください。',
-        UNKNOWN_PASSKEY: 'このパスキーは登録されていないか、削除されています。パスワードでログインして登録し直してください。',
+        UNKNOWN_PASSKEY: 'このパスキーは登録されていないか、削除されています。「パスキーを登録」から登録し直してください。',
         VERIFY_FAILED: 'パスキーを確認できませんでした。もう一度お試しください。',
         ORIGIN_DENIED: 'このページからは利用できません。',
     };
@@ -54,12 +58,23 @@
     }
 
     // --- パスキーでログイン ---
+    // iPhoneのSafari対策: ログイン用チャレンジを事前に取得しておき、タップ直後にパスキーを呼び出す
+    let prepared = null; // { challengeId, options, at }
+    async function prefetchLogin() {
+        if (auth.currentUser) return;
+        try { prepared = { ...(await call('login/options')), at: Date.now() }; } catch (_) { prepared = null; }
+    }
+    auth.onAuthStateChanged(user => { if (!user) prefetchLogin(); else prepared = null; });
+    setInterval(() => { if (!auth.currentUser && !busy) prefetchLogin(); }, 4 * 60 * 1000);
+
     let busy = false;
     loginButton.addEventListener('click', async () => {
         if (busy) return;
         busy = true; loginButton.disabled = true; loginError.textContent = '';
         try {
-            const { challengeId, options } = await call('login/options');
+            const fresh = prepared && Date.now() - prepared.at < 4 * 60 * 1000 ? prepared : null;
+            prepared = null;
+            const { challengeId, options } = fresh || await call('login/options');
             const response = await lib.startAuthentication({ optionsJSON: options });
             const { customToken } = await call('login/verify', { challengeId, response });
             await auth.signInWithCustomToken(customToken);
@@ -67,6 +82,7 @@
             if (!cancelled(e)) loginError.textContent = 'パスキーでログインできませんでした: ' + message(e);
         } finally {
             busy = false; loginButton.disabled = false;
+            if (!auth.currentUser) prefetchLogin();
         }
     });
 
@@ -86,11 +102,11 @@
             for (const p of passkeys) {
                 const li = document.createElement('li');
                 const text = document.createElement('span');
-                text.textContent = `${p.label}（登録 ${fmt(p.createdAt)} / 最終使用 ${fmt(p.lastUsedAt)}）`;
+                text.textContent = `${p.owner || '(旧)'} ・ ${p.label}（登録 ${fmt(p.createdAt)} / 最終使用 ${fmt(p.lastUsedAt)}）`;
                 const del = document.createElement('button');
                 del.type = 'button'; del.textContent = '削除';
                 del.addEventListener('click', async () => {
-                    if (!confirm(`「${p.label}」を削除しますか？この端末ではパスキーでログインできなくなります。`)) return;
+                    if (!confirm(`${p.owner || ''} の「${p.label}」を削除しますか？そのパスキーではログインできなくなります。`)) return;
                     try { await call('delete', { id: p.id }, await auth.currentUser.getIdToken()); refreshList(); }
                     catch (e) { statusEl.textContent = '削除できませんでした: ' + message(e); }
                 });
@@ -102,23 +118,90 @@
         }
     }
 
-    registerButton.addEventListener('click', async () => {
-        const label = prompt('このパスキーの名前（例: 山田 iPhone）', '');
-        if (label === null) return;
-        registerButton.disabled = true; statusEl.textContent = '登録中…';
+    // Googleで本人確認（SOSListのログイン状態には影響しない別インスタンスを使う）
+    async function googleIdToken() {
+        const app = firebase.initializeApp(firebaseConfig, 'passkey-google-' + Date.now());
         try {
-            const token = await auth.currentUser.getIdToken(true);
-            const { challengeId, options } = await call('register/options', {}, token);
-            const response = await lib.startRegistration({ optionsJSON: options });
-            await call('register/verify', { challengeId, response, label }, token);
-            statusEl.textContent = '登録しました。次回から「パスキーでログイン」を使えます。';
-            refreshList();
-        } catch (e) {
-            statusEl.textContent = cancelled(e) ? '登録を取り消しました。'
-                : e?.name === 'InvalidStateError' ? 'この端末には既に登録済みです。'
-                : '登録できませんでした: ' + message(e);
+            const gAuth = app.auth();
+            await gAuth.setPersistence(firebase.auth.Auth.Persistence.NONE);
+            const provider = new firebase.auth.GoogleAuthProvider();
+            provider.setCustomParameters({ prompt: 'select_account' });
+            const result = await gAuth.signInWithPopup(provider);
+            const token = await result.user.getIdToken();
+            const email = result.user.email;
+            await gAuth.signOut().catch(() => {});
+            return { token, email };
         } finally {
-            registerButton.disabled = false;
+            app.delete().catch(() => {});
         }
+    }
+
+    // 登録は2タップ: ①Googleで本人確認（＋準備）→ ②パスキー作成。
+    // iPhoneのSafariはパスキー作成をタップ直後にしか許可しないため、②は通信を挟まず即座に呼び出す。
+    let pending = null; // { g, label, challengeId, options, at }
+
+    async function prepare() {
+        let g;
+        try { g = await googleIdToken(); }
+        catch (e) {
+            if (e?.code === 'auth/popup-closed-by-user' || e?.code === 'auth/cancelled-popup-request') return 'Googleでの本人確認を取り消しました。';
+            if (e?.code === 'auth/popup-blocked') return 'ポップアップがブロックされました。ブラウザでポップアップを許可してから、もう一度押してください。';
+            return 'Googleで本人確認できませんでした: ' + (e?.message || '');
+        }
+        const label = prompt(`${g.email} のパスキーを登録します。\nこの端末の名前（例: iPhone、事務所PC）`, '');
+        if (label === null) return '登録を取り消しました。';
+        try {
+            const { challengeId, options } = await call('register/options', {}, g.token);
+            pending = { g, label, challengeId, options, at: Date.now() };
+            return `本人確認できました（${g.email}）。もう一度ボタンを押してパスキーを作成してください。`;
+        } catch (e) {
+            return '登録できませんでした: ' + message(e);
+        }
+    }
+
+    async function create() {
+        const p = pending; pending = null;
+        try {
+            const response = await lib.startRegistration({ optionsJSON: p.options });
+            await call('register/verify', { challengeId: p.challengeId, response, label: p.label }, p.g.token);
+            return `登録しました（${p.g.email}）。次回から「パスキーでログイン」を使えます。`;
+        } catch (e) {
+            if (cancelled(e)) return '登録を取り消しました。';
+            if (e?.name === 'InvalidStateError') return 'この端末には既に登録済みです。';
+            return '登録できませんでした: ' + message(e);
+        }
+    }
+
+    const buttons = [[firstRegisterButton, loginStatus], [registerButton, statusEl]];
+    const defaultText = new Map(buttons.map(([b]) => [b, b.textContent]));
+    function syncButtons() {
+        for (const [b] of buttons) b.textContent = pending ? `パスキーを作成する（${pending.g.email}）` : defaultText.get(b);
+    }
+    for (const [button, status] of buttons) {
+        button.addEventListener('click', async () => {
+            if (pending && Date.now() - pending.at > 4 * 60 * 1000) pending = null;
+            for (const [b] of buttons) b.disabled = true;
+            if (button === firstRegisterButton) loginError.textContent = '';
+            try {
+                if (pending) { status.textContent = '作成中…'; status.textContent = await create(); }
+                else { status.textContent = 'Googleで本人確認中…'; status.textContent = await prepare(); }
+            } finally {
+                for (const [b] of buttons) b.disabled = false;
+                syncButtons();
+                if (button === registerButton) refreshList();
+            }
+        });
+    }
+
+    // ログイン中の表示に「誰のパスキーか」を添える
+    auth.onAuthStateChanged(async user => {
+        if (!user) return;
+        try {
+            const { claims } = await user.getIdTokenResult();
+            if (claims.passkey && claims.staffEmail && auth.currentUser === user) {
+                const span = document.getElementById('userEmail');
+                span.textContent = `${user.email}（パスキー: ${claims.staffEmail}）`;
+            }
+        } catch (_) {}
     });
 })();

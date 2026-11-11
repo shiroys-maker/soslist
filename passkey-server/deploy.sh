@@ -22,6 +22,19 @@ done
 gcloud iam service-accounts add-iam-policy-binding "$SA" --project "$PROJECT" \
   --member "serviceAccount:$SA" --role roles/iam.serviceAccountTokenCreator >/dev/null
 
+# 1b. パスキー登録時のGoogle本人確認を soslist.niraissc.jp から行えるようにする（承認済みドメインに追加）
+python3 - "$PROJECT" "$(gcloud auth print-access-token)" <<'PY'
+import json, sys, urllib.request
+p, t = sys.argv[1], sys.argv[2]
+h = {"Authorization": "Bearer " + t, "x-goog-user-project": p, "content-type": "application/json"}
+url = f"https://identitytoolkit.googleapis.com/admin/v2/projects/{p}/config"
+doms = json.load(urllib.request.urlopen(urllib.request.Request(url, headers=h)))["authorizedDomains"]
+if "soslist.niraissc.jp" not in doms:
+    body = json.dumps({"authorizedDomains": doms + ["soslist.niraissc.jp"]}).encode()
+    urllib.request.urlopen(urllib.request.Request(url + "?updateMask=authorizedDomains", data=body, headers=h, method="PATCH"))
+    print("承認済みドメインに soslist.niraissc.jp を追加しました")
+PY
+
 # 2. 使い終わったチャレンジを自動削除（TTL）
 gcloud firestore fields ttls update expireAt --collection-group passkeyChallenges --enable-ttl --project "$PROJECT" --async >/dev/null 2>&1 || true
 

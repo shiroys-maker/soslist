@@ -1,0 +1,26 @@
+{
+  "_note": "emailDigest = sha256('sos-list-4d150:' + lowercase Google email). Same list as the 2026-11 bridge cohort.",
+  "sharedEmail": "sos@niraissc.jp",
+  "people": [
+    {
+      "id": "owner",
+      "emailDigest": "118eaeee7540ea74b82f95c6e64aa872db64a739f92a7c9ea813ee27b5a2f017"
+    },
+    {
+      "id": "staff-1",
+      "emailDigest": "7a5f8575638a1431305a1a309645177e967dea979bcbf0cfea948c3e5a1ad499"
+    },
+    {
+      "id": "staff-2",
+      "emailDigest": "e25ad2201438471be8fee4057c03ba59e998d868d097efc42fdcd1927b10b73a"
+    },
+    {
+      "id": "staff-3",
+      "emailDigest": "b1c83a4a0ef2e5228380dbedc58a7eb64c185b77bc03750a1a57034f8ca345ba"
+    },
+    {
+      "id": "staff-4",
+      "emailDigest": "dbed8ca7230b5092f8150b59216fd01875943b2490036c947488643d0f6b98e5"
+    }
+  ]
+}

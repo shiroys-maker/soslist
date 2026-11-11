@@ -1,6 +1,9 @@
-// SOSList passkey server: registers passkeys for a logged-in Firebase user and,
-// on passkey login, returns a Firebase custom token for that same user.
+// SOSList passkey server.
+// - Registration: the person proves who they are with their own Google account (must be on the
+//   allowlist). The passkey is recorded with its owner and logs into the shared SOSList account.
+// - Login: a valid passkey returns a Firebase custom token for the shared account, tagged with the owner.
 // Storage and Firebase Admin are injected so this file can be tested without Google.
+import { createHash } from 'node:crypto';
 import {
   generateRegistrationOptions,
   verifyRegistrationResponse,
@@ -9,7 +12,8 @@ import {
 } from '@simplewebauthn/server';
 
 const CHALLENGE_TTL_MS = 5 * 60 * 1000;
-// Adding a passkey requires a login within this window (password or passkey).
+// Registering requires a fresh Google sign-in; deleting requires a recent SOSList login.
+const RECENT_GOOGLE_SEC = 10 * 60;
 const RECENT_LOGIN_SEC = 15 * 60;
 const MAX_BODY = 64 * 1024;
 
@@ -17,16 +21,40 @@ class HttpError extends Error {
   constructor(status, code) { super(code); this.status = status; this.code = code; }
 }
 
-export function createApp({ store, auth, rpID, rpName = 'SOSList', origins, now = () => Date.now() }) {
-  if (!store || !auth || !rpID || !Array.isArray(origins) || origins.length === 0) throw new Error('config');
+export const emailDigest = (projectId, email) => createHash('sha256').update(projectId + ':' + email.toLowerCase()).digest('hex');
 
-  async function requireUser(req, { recent = false } = {}) {
+export function createApp({ store, auth, rpID, rpName = 'SOSList', origins, projectId, allowlist, now = () => Date.now() }) {
+  if (!store || !auth || !rpID || !Array.isArray(origins) || origins.length === 0 || !projectId
+    || !allowlist?.sharedEmail || !Array.isArray(allowlist.people) || allowlist.people.length === 0) throw new Error('config');
+  const people = new Map(allowlist.people.map(p => [p.emailDigest, p.id]));
+  let sharedUid;
+  async function getSharedUid() {
+    sharedUid ??= (await auth.getUserByEmail(allowlist.sharedEmail)).uid;
+    return sharedUid;
+  }
+
+  async function bearer(req) {
     const m = /^Bearer (.+)$/.exec(req.headers.authorization || '');
     if (!m) throw new HttpError(401, 'LOGIN_REQUIRED');
-    let user;
-    try { user = await auth.verifyIdToken(m[1], true); } catch { throw new HttpError(401, 'LOGIN_REQUIRED'); }
-    if (recent && (now() / 1000 - user.auth_time) > RECENT_LOGIN_SEC) throw new HttpError(403, 'RECENT_LOGIN_REQUIRED');
-    return user;
+    try { return await auth.verifyIdToken(m[1], true); } catch { throw new HttpError(401, 'LOGIN_REQUIRED'); }
+  }
+
+  // A person on the allowlist, freshly signed in with their own Google account.
+  async function requireStaffGoogle(req) {
+    const t = await bearer(req);
+    if (t.firebase?.sign_in_provider !== 'google.com' || t.email_verified !== true || typeof t.email !== 'string') throw new HttpError(403, 'GOOGLE_REQUIRED');
+    const person = people.get(emailDigest(projectId, t.email));
+    if (!person) throw new HttpError(403, 'NOT_ALLOWED');
+    if (now() / 1000 - t.auth_time > RECENT_GOOGLE_SEC) throw new HttpError(403, 'RECENT_LOGIN_REQUIRED');
+    return { person, email: t.email.toLowerCase(), googleUid: t.uid };
+  }
+
+  // Someone logged in to the shared SOSList account (password or passkey).
+  async function requireShared(req, { recent = false } = {}) {
+    const t = await bearer(req);
+    if (t.uid !== await getSharedUid()) throw new HttpError(403, 'NOT_ALLOWED');
+    if (recent && (now() / 1000 - t.auth_time) > RECENT_LOGIN_SEC) throw new HttpError(403, 'RECENT_LOGIN_REQUIRED');
+    return t;
   }
 
   async function takeChallenge(id, purpose, uid) {
@@ -38,23 +66,24 @@ export function createApp({ store, auth, rpID, rpName = 'SOSList', origins, now 
 
   const routes = {
     async 'register/options'(req) {
-      const user = await requireUser(req, { recent: true });
-      const existing = await store.listCredentials(user.uid);
+      const g = await requireStaffGoogle(req);
+      const existing = (await store.listCredentials(await getSharedUid())).filter(c => c.person === g.person);
       const options = await generateRegistrationOptions({
         rpName, rpID,
-        userName: user.email || user.uid,
-        userID: new TextEncoder().encode(user.uid),
+        userName: g.email,
+        userDisplayName: `SOSList (${g.email})`,
+        userID: new TextEncoder().encode(g.person),
         attestationType: 'none',
         excludeCredentials: existing.map(c => ({ id: c.id, transports: c.transports })),
         authenticatorSelection: { residentKey: 'required', userVerification: 'required' },
       });
-      const challengeId = await store.createChallenge({ purpose: 'register', uid: user.uid, challenge: options.challenge, expiresAt: now() + CHALLENGE_TTL_MS });
+      const challengeId = await store.createChallenge({ purpose: 'register', uid: g.googleUid, challenge: options.challenge, expiresAt: now() + CHALLENGE_TTL_MS });
       return { challengeId, options };
     },
 
     async 'register/verify'(req, body) {
-      const user = await requireUser(req, { recent: true });
-      const c = await takeChallenge(body.challengeId, 'register', user.uid);
+      const g = await requireStaffGoogle(req);
+      const c = await takeChallenge(body.challengeId, 'register', g.googleUid);
       let v;
       try {
         v = await verifyRegistrationResponse({ response: body.response, expectedChallenge: c.challenge, expectedOrigin: origins, expectedRPID: rpID, requireUserVerification: true });
@@ -63,13 +92,14 @@ export function createApp({ store, auth, rpID, rpName = 'SOSList', origins, now 
       const { credential, credentialDeviceType, credentialBackedUp } = v.registrationInfo;
       const label = String(body.label || '').trim().slice(0, 40) || '名称なし';
       await store.putCredential({
-        id: credential.id, uid: user.uid, label,
+        id: credential.id, uid: await getSharedUid(), person: g.person, owner: g.email, label,
         publicKey: Buffer.from(credential.publicKey).toString('base64url'),
         counter: credential.counter, transports: credential.transports || [],
         deviceType: credentialDeviceType, backedUp: credentialBackedUp,
         createdAt: now(), lastUsedAt: null,
       });
-      return { registered: true, id: credential.id, label };
+      console.log(JSON.stringify({ event: 'passkey_registered', person: g.person }));
+      return { registered: true, id: credential.id, label, owner: g.email };
     },
 
     async 'login/options'() {
@@ -94,20 +124,24 @@ export function createApp({ store, auth, rpID, rpName = 'SOSList', origins, now 
       if (!v.verified) throw new HttpError(401, 'VERIFY_FAILED');
       // userHandle (if sent) must match the stored owner.
       const handle = body.response?.response?.userHandle;
-      if (handle && Buffer.from(handle, 'base64url').toString('utf8') !== cred.uid) throw new HttpError(401, 'VERIFY_FAILED');
+      if (handle && Buffer.from(handle, 'base64url').toString('utf8') !== cred.person) throw new HttpError(401, 'VERIFY_FAILED');
+      // Removed from the allowlist -> passkey stops working immediately.
+      if (![...people.values()].includes(cred.person) || cred.uid !== await getSharedUid()) throw new HttpError(401, 'UNKNOWN_PASSKEY');
       await store.updateCredential(cred.id, { counter: v.authenticationInfo.newCounter, lastUsedAt: now() });
-      const customToken = await auth.createCustomToken(cred.uid, { passkey: true });
+      console.log(JSON.stringify({ event: 'passkey_login', person: cred.person }));
+      const customToken = await auth.createCustomToken(cred.uid, { passkey: true, staff: cred.person, staffEmail: cred.owner });
       return { customToken };
     },
 
     async 'list'(req) {
-      const user = await requireUser(req);
+      const user = await requireShared(req);
       const list = await store.listCredentials(user.uid);
-      return { passkeys: list.map(c => ({ id: c.id, label: c.label, createdAt: c.createdAt, lastUsedAt: c.lastUsedAt })) };
+      list.sort((a, b) => (a.owner || '').localeCompare(b.owner || '') || a.createdAt - b.createdAt);
+      return { passkeys: list.map(c => ({ id: c.id, label: c.label, owner: c.owner, createdAt: c.createdAt, lastUsedAt: c.lastUsedAt })) };
     },
 
     async 'delete'(req, body) {
-      const user = await requireUser(req, { recent: true });
+      const user = await requireShared(req, { recent: true });
       if (typeof body.id !== 'string') throw new HttpError(400, 'BAD_REQUEST');
       const cred = await store.getCredential(body.id);
       if (!cred || cred.uid !== user.uid) throw new HttpError(404, 'NOT_FOUND');
