@@ -9,7 +9,8 @@ service firebase.storage {
         && (request.auth.token.firebase.sign_in_provider == 'password'
           || (request.auth.token.firebase.sign_in_provider == 'custom' && request.auth.token.get('local', false) == true
             && hashing.sha256(request.auth.token.get('localKey', '')).toHexString().lower() in [
-              '237b7e79b7999499815fff072132a748acd7dbd740e484098a86b6dc59afe2ec'  // MacBook Air (2)
+              '237b7e79b7999499815fff072132a748acd7dbd740e484098a86b6dc59afe2ec',  // MacBook Air (2)
+          '4b14327173ddc525fcd88b56594066d56dd8a91789843cc10ffd8aabb3ecd27d'   // Mac mini
             ])
           || (request.auth.token.firebase.sign_in_provider == 'custom' && request.auth.token.get('passkey', false) == true
             && request.time < timestamp.value(request.auth.token.auth_time * 1000) + duration.value(6, 'h')))

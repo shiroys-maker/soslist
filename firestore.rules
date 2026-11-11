@@ -23,7 +23,8 @@ service cloud.firestore {
         && request.auth.token.firebase.sign_in_provider == 'custom'
         && request.auth.token.get('local', false) == true
         && hashing.sha256(request.auth.token.get('localKey', '')).toHexString().lower() in [
-          '237b7e79b7999499815fff072132a748acd7dbd740e484098a86b6dc59afe2ec'  // MacBook Air (2)
+          '237b7e79b7999499815fff072132a748acd7dbd740e484098a86b6dc59afe2ec',  // MacBook Air (2)
+          '4b14327173ddc525fcd88b56594066d56dd8a91789843cc10ffd8aabb3ecd27d'   // Mac mini
         ];
     }
     function readerUid() { return request.auth.uid in ['MsMNpta5iBfNnXh0sXGiAsIQKw22', 'jpnoE4ygk5ZqR8rsaJnzRSy5poA3']; }
