@@ -11,8 +11,13 @@ cd "${0:A:h}"
 # 1. 専用サービスアカウント（Firestore読み書き + Firebaseユーザー参照 + ログイン用トークン署名のみ）
 gcloud iam service-accounts describe "$SA" --project "$PROJECT" >/dev/null 2>&1 \
   || gcloud iam service-accounts create "$SA_NAME" --project "$PROJECT" --display-name "SOSList passkey server"
+# 作成直後はGoogle側への反映に数十秒かかるため、成功するまで再試行する
 for role in roles/datastore.user roles/firebaseauth.viewer; do
-  gcloud projects add-iam-policy-binding "$PROJECT" --member "serviceAccount:$SA" --role "$role" --condition None >/dev/null
+  for i in {1..12}; do
+    gcloud projects add-iam-policy-binding "$PROJECT" --member "serviceAccount:$SA" --role "$role" --condition None >/dev/null 2>&1 && break
+    [[ $i == 12 ]] && { echo "権限の付与に失敗しました: $role"; exit 1; }
+    echo "サービスアカウントの反映待ち… ($i)"; sleep 10
+  done
 done
 gcloud iam service-accounts add-iam-policy-binding "$SA" --project "$PROJECT" \
   --member "serviceAccount:$SA" --role roles/iam.serviceAccountTokenCreator >/dev/null
