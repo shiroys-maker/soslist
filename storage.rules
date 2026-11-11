@@ -1,11 +1,16 @@
 rules_version = '2';
+// Approved temporary containment, 2026-10-17 JST.
+// 2026-11-11: passkey custom-token sessions (passkey=true) are accepted like password sessions.
 service firebase.storage {
   match /b/{bucket}/o {
-    // PDFの読み取りは認証済みユーザーのみ。
-    // 書き込みは Admin SDK（openai-processor / repair-missing-pdfs）経由のみで、
-    // Admin SDK はルールを経由しないためクライアント書き込みは全面拒否。
+    function knownReader() {
+      return request.auth != null
+        && (request.auth.token.firebase.sign_in_provider == 'password'
+          || (request.auth.token.firebase.sign_in_provider == 'custom' && request.auth.token.get('passkey', false) == true))
+        && request.auth.uid in ['MsMNpta5iBfNnXh0sXGiAsIQKw22', 'jpnoE4ygk5ZqR8rsaJnzRSy5poA3'];
+    }
     match /{allPaths=**} {
-      allow read: if request.auth != null;
+      allow read: if knownReader();
       allow write: if false;
     }
   }
