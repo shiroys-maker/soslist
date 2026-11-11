@@ -9,8 +9,9 @@ import { createApp } from './app.mjs';
 
 const projectId = process.env.GOOGLE_CLOUD_PROJECT || 'sos-list-4d150';
 initializeApp({ projectId });
-const db = getFirestore();
-// Clients cannot read these collections: firestore.rules denies everything except appointments.
+// Dedicated database: the service account is granted access to this database only,
+// so the passkey server cannot read patient data in the (default) database.
+const db = getFirestore(process.env.FIRESTORE_DB || 'soslist-passkey');
 const challenges = db.collection('passkeyChallenges');
 const credentials = db.collection('passkeyCredentials');
 
