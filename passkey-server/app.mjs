@@ -127,7 +127,6 @@ export function createApp({ store, auth, rpID, rpName = 'SOSList', origins, now 
     };
     if (req.method === 'OPTIONS') { res.writeHead(204, cors); return res.end(); }
     const route = (req.url || '').split('?')[0].replace(/^\/+/, '');
-    if (req.method === 'GET' && route === 'healthz') return send(200, { ok: true });
     if (req.method !== 'POST' || !Object.hasOwn(routes, route)) return send(404, { error: 'NOT_FOUND' });
     if (!cors['access-control-allow-origin']) return send(403, { error: 'ORIGIN_DENIED' });
     try {

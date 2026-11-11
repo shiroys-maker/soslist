@@ -31,4 +31,5 @@ gcloud run deploy sos-passkey --project "$PROJECT" --region "$REGION" --source .
   --memory 256Mi --cpu 1 --max-instances 2 --concurrency 20 --timeout 30 \
   --set-env-vars RP_ID=soslist.niraissc.jp,ORIGINS=https://soslist.niraissc.jp
 
-curl -fsS "https://sos-passkey-455081821929.asia-northeast1.run.app/healthz" && echo " ← OK"
+# 注: Cloud Run は末尾が z のパス(/healthz)を予約しているため login/options で確認する
+curl -fsS -X POST -H "Origin: https://soslist.niraissc.jp" "https://sos-passkey-455081821929.asia-northeast1.run.app/login/options" >/dev/null && echo "OK"
