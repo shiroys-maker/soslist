@@ -63,7 +63,7 @@ private struct ASBOCDMetadata {
 
 final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler, NSWindowDelegate {
     private var window: NSWindow!
-    private var webView: WKWebView!
+    var webView: WKWebView!
     private var pdfDownloads: [String: URLSessionDataTask] = [:]
     private let pdfSession: URLSession = {
         let config = URLSessionConfiguration.ephemeral
@@ -91,6 +91,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             return
         }
 
+        if CommandLine.arguments.contains("--ai-settings-smoke") {
+            guard let file = ProcessInfo.processInfo.environment["SOSLIST_AI_SETTINGS_FILE"], file.hasPrefix("/private/tmp/") else { exit(2) }
+            webView = makeWebView()
+            window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 900, height: 750), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+            window.contentView = webView; window.makeKeyAndOrderFront(nil)
+            let test = "<button id='ai-settings-open'>設定</button><script>" + (try! String(contentsOf: Bundle.main.resourceURL!.appendingPathComponent("local-web/local/ai-settings.js"))) + "</script>"
+            webView.loadHTMLString(test, baseURL: nil)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.runAISettingsSmoke() }
+            return
+        }
         webView = makeWebView()
 
         window = NSWindow(
@@ -115,7 +125,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         }
         isCDMonitoringEnabled = UserDefaults.standard.bool(forKey: cdMonitoringDefaultsKey)
         applyCDMonitoringState(isCDMonitoringEnabled, resetProcessedVolumes: false)
-        ensureDailyBriefDirectories()
+        // Reading the Summary configuration can wait on filesystem access.
+        // It must not block the appointment UI or native handoff buttons at launch.
+        DispatchQueue.global(qos: .utility).async { [self] in
+            ensureDailyBriefDirectories()
+        }
     }
 
     private func runCodexScheduledSummaryAndTerminate() {
@@ -142,6 +156,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        .terminateNow
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -223,6 +241,73 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                 return
             }
             openQtcTool(tool: tool, contractNumber: contractNumber)
+            return
+        }
+
+        if message.name == "aiSettingsSmokeResult", CommandLine.arguments.contains("--ai-settings-smoke"), let data = message.body as? [String: Any], let file = ProcessInfo.processInfo.environment["SOSLIST_AI_SETTINGS_FILE"], file.hasPrefix("/private/tmp/") {
+            try? JSONSerialization.data(withJSONObject: data).write(to: URL(fileURLWithPath: file + ".result.json"), options: .atomic)
+            exit(data["ok"] as? Bool == true ? 0 : 1)
+        }
+        // パスワード不要の自動ログイン: この Mac の認証で Firebase カスタムトークンを作り、メイン画面にだけ返す。
+        if message.name == "localLogin" {
+            guard message.frameInfo.isMainFrame, message.frameInfo.request.url?.isFileURL == true,
+                  let view = message.webView, view === webView else { return }
+            let script = Bundle.main.resourceURL!.appendingPathComponent("local-web/local/login/local-token.cjs")
+            DispatchQueue.global(qos: .userInitiated).async {
+                let process = Process(), output = Pipe()
+                process.executableURL = URL(fileURLWithPath: dailyBriefNodePath)
+                process.arguments = [script.path]
+                process.environment = self.makeDailyBriefEnvironment()
+                process.standardOutput = output
+                process.standardError = FileHandle.nullDevice
+                var reply = "{\"error\":\"FAILED\",\"message\":\"ログイン処理を開始できませんでした。\"}"
+                do {
+                    try process.run()
+                    let data = output.fileHandleForReading.readDataToEndOfFile()
+                    process.waitUntilExit()
+                    if let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                       let json = try? JSONSerialization.data(withJSONObject: parsed),
+                       let text = String(data: json, encoding: .utf8) { reply = text }
+                } catch {}
+                DispatchQueue.main.async { view.evaluateJavaScript("window.localLoginReply && window.localLoginReply(\(reply))", completionHandler: nil) }
+            }
+            return
+        }
+        if message.name == "aiSettings" {
+            guard message.frameInfo.isMainFrame, let request = message.body as? [String: Any],
+                  let id = request["id"] as? String, let action = request["action"] as? String,
+                  ["get", "save", "models"].contains(action), let view = message.webView else { return }
+            let script = Bundle.main.resourceURL!.appendingPathComponent("local-web/local/ai/task-settings.cjs")
+            DispatchQueue.global(qos: .userInitiated).async {
+                let process = Process(), output = Pipe(), errors = Pipe(), input = Pipe()
+                process.executableURL = URL(fileURLWithPath: dailyBriefNodePath)
+                process.arguments = [script.path, action]
+                process.environment = self.makeDailyBriefEnvironment()
+                process.standardOutput = output; process.standardError = errors; process.standardInput = input
+                var response: [String: Any] = ["id": id]
+                do {
+                    try process.run()
+                    if action == "save", let value = request["tasks"] {
+                        try input.fileHandleForWriting.write(contentsOf: JSONSerialization.data(withJSONObject: value))
+                    }
+                    try input.fileHandleForWriting.close()
+                    let data = output.fileHandleForReading.readDataToEndOfFile()
+                    let error = errors.fileHandleForReading.readDataToEndOfFile()
+                    process.waitUntilExit()
+                    guard process.terminationStatus == 0 else { throw NSError(domain: "AISettings", code: 1, userInfo: [NSLocalizedDescriptionKey: String(data: error, encoding: .utf8) ?? "設定を取得できません。"]) }
+                    response["value"] = try JSONSerialization.jsonObject(with: data)
+                } catch { response["error"] = error.localizedDescription }
+                if let data = try? JSONSerialization.data(withJSONObject: response), let json = String(data: data, encoding: .utf8) {
+                    DispatchQueue.main.async { view.evaluateJavaScript("window.aiSettingsReply(\(json))", completionHandler: nil) }
+                }
+            }
+            return
+        }
+
+        if message.name == "openDBQProcessor" {
+            guard message.frameInfo.isMainFrame, let payload = message.body as? [String: Any],
+                  let docId = payload["docId"] as? String, !docId.isEmpty else { return }
+            openDBQProcessor(payload)
             return
         }
 
@@ -468,6 +553,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         configuration.userContentController.add(self, name: "closeDetailsWindow")
         configuration.userContentController.add(self, name: "openQtcTool")
         configuration.userContentController.add(self, name: "runUtilityTool")
+        configuration.userContentController.add(self, name: "aiSettingsSmokeResult")
+        configuration.userContentController.add(self, name: "aiSettings")
+        configuration.userContentController.add(self, name: "localLogin")
+        configuration.userContentController.add(self, name: "openDBQProcessor")
         configuration.userContentController.add(self, name: "printHTML")
         configuration.userContentController.add(self, name: "openExternalURL")
         configuration.userContentController.add(self, name: "loadPdfBytes")
@@ -1525,6 +1614,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         }
     }
 
+    private func openDBQProcessor(_ appointment: [String: Any]) {
+        let applicationURL = URL(fileURLWithPath: "/Applications/DBQ Processor.app", isDirectory: true)
+        guard FileManager.default.fileExists(atPath: applicationURL.path) else {
+            let alert = NSAlert()
+            alert.messageText = "DBQ Processorが見つかりません"
+            alert.informativeText = "/Applications/DBQ Processor.app をインストールしてください。"
+            alert.runModal()
+            return
+        }
+        do {
+            let directory = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/SOSList Local/DBQHandoff", isDirectory: true)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+            let requestURL = directory.appendingPathComponent(UUID().uuidString + ".dbqrequest")
+            let data = try JSONSerialization.data(withJSONObject: ["version": 1, "createdAt": Date().timeIntervalSince1970, "appointment": appointment])
+            guard data.count < 3_000_000 else { throw NSError(domain: appName, code: 2001, userInfo: [NSLocalizedDescriptionKey: "予約メモが大きすぎます。"] ) }
+            try data.write(to: requestURL, options: .atomic)
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: requestURL.path)
+            let configuration = NSWorkspace.OpenConfiguration()
+            configuration.activates = true
+            NSWorkspace.shared.open([requestURL], withApplicationAt: applicationURL, configuration: configuration) { _, error in
+                if let error {
+                    try? FileManager.default.removeItem(at: requestURL)
+                    DispatchQueue.main.async { NSApp.presentError(error) }
+                }
+            }
+        } catch { NSApp.presentError(error) }
+    }
+
     private func runUtilityTool(named tool: String, details: [String: Any]?, sourceWebView: WKWebView?) {
         guard tool == "va-records" else {
             return
@@ -1556,6 +1673,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let markdownFilename = vaRecordMarkdownFilename(details: details)
         let markdownURL = folderURL.appendingPathComponent(markdownFilename)
         try markdown.write(to: markdownURL, atomically: true, encoding: .utf8)
+        let claimFilename = markdownFilename == "Audiology.md" ? "Claim-Aud.md" : "Claim-Gen.md"
+        let claimURL = folderURL.appendingPathComponent(claimFilename)
+        try buildClaimMarkdown(details: details).write(to: claimURL, atomically: true, encoding: .utf8)
         return folderName
     }
 
@@ -1597,6 +1717,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let visitDate = sanitizeMarkdownInline(stringValue(details["visitDate"]))
         let referenceUrl = sanitizeMarkdownInline(stringValue(details["referenceUrl"]))
         let notes = stringValue(details["notes"])
+        let claimDetail = stringValue(details["claimDetail"])
         let services = ((details["services"] as? [String]) ?? []).map { sanitizeMarkdownInline($0) }
         let referralDests = (details["referralDests"] as? [String]) ?? []
 
@@ -1623,8 +1744,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         ## 検査内容
         \(serviceLines)
 
+        ## Claim detail
+        \(claimDetail.isEmpty ? "なし" : claimDetail)
+
         ## メモ
         \(notesBlock)
+        """
+    }
+
+    private func buildClaimMarkdown(details: [String: Any]) -> String {
+        let claimantName = sanitizeMarkdownInline(stringValue(details["claimantName"]))
+        let contractNumber = sanitizeMarkdownInline(stringValue(details["contractNumber"]))
+        let appointmentDate = formattedAppointmentDate(details["appointmentDateTimeMs"])
+        let claimDetail = stringValue(details["claimDetail"])
+
+        return """
+        # Claim Details
+
+        - 氏名: \(claimantName)
+        - 契約番号: \(contractNumber)
+        - 予約日時: \(appointmentDate)
+
+        ## Claim detail
+        \(claimDetail.isEmpty ? "なし" : claimDetail)
         """
     }
 

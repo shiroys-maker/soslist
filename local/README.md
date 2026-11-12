@@ -8,6 +8,8 @@ Web版（公開サイト `soslist.niraissc.jp` = ルートの `index.html` / `sc
   リポジトリルートから `python3 -m http.server 8123` などで配信し
   `http://127.0.0.1:8123/local/index.html` を開く（`file://` 直開きはFirebase認証不可）。
 - `details.html` / `details.js` は予約詳細の別ウィンドウ。ネイティブアプリでは
+  一覧のスナップショットを直接渡して表示し、ブラウザ用localStorageには保存しない。
+  過去の詳細キャッシュでlocalStorageが満杯でもネイティブ詳細は表示できる。
   `saveDetails` ブリッジ経由で保存し、ブラウザ配信時は localStorage の
   storageイベントでメインウィンドウに保存を依頼する。
 
@@ -31,17 +33,72 @@ cd local/mac-app
 
 ### Summary flow
 
+Manual and scheduled Summary generation both use `daily-brief/run-codex-summary.sh`.
+It explicitly selects `gpt-6-astra` / `high` for the joint `brief.md` and
+`podcast-script.txt` generation, independently of the user's global Codex settings.
+The later pronunciation-only conversion uses `gpt-6.1-sol` / `medium`.
+
 - `作成` is handled only by the native app.
-- The app runs `daily-brief/generate-brief.js` directly for the selected date.
-- `brief.md` and `podcast-script.txt` are generated through the API flow already used by `daily-brief`.
-- Audio is synthesized automatically through the configured local engine, currently AivisSpeech.
+- The app runs `daily-brief/run-codex-summary.sh` for the selected date.
+- Codex generates `brief.md` and `podcast-script.txt`; `generate-brief.js --finalize-prepared` then performs the existing post-processing.
+- Audio is synthesized automatically through the configured engine, currently Gemini TTS.
 - Progress is pushed back to the main local viewer while the job runs.
 - `表示` still opens the existing Summary only.
 
 ### Connection recovery
 
-Local-only `connection.js` displays server/cache/offline state and last server receipt time. Startup date lookup falls back to today after 8 seconds; a late result cannot replace the selected date. A listener waiting 15 seconds retries with exponential backoff (at most five automatic retries). Terminal permission/auth/query errors require user action. Online/foreground return and the Reconnect button recreate the listener without reloading the page or discarding detail edits. An idle listener is not considered broken merely because no appointments changed.
+Local-only `connection.js` displays server/cache/offline state and last server receipt time. Startup date lookup falls back to today after 8 seconds; a late result cannot replace the selected date. A listener waiting 15 seconds retries with exponential backoff (five fast retries, then once per minute). Terminal permission/auth/query errors require user action. Online/foreground return and the Reconnect button recreate the listener without reloading the page or discarding detail edits. Click/focus checks can renew a listener after 60 seconds without server confirmation, at most once per minute and never while a connection attempt is in progress. This is a background freshness check, not evidence that an idle listener is broken. Reconnection keeps the displayed rows available until the next snapshot.
 
 The diagnostic log stores at most 200 timestamp/event/error-code entries in localStorage, without appointment data or raw error messages. “診断ログ保存” exports JSON using the native save panel. These changes do not address a blocked WebKit UI thread.
 
 Run recovery regression checks: `node --test local/tests/connection.test.cjs`.
+
+### Claim詳細
+
+検査内容の文字または「Claim詳細」をクリックすると、大きなClaim detail編集画面が開く。
+`appointments.claimDetail` は改行を保持した文字列。検査内容 `services` はService Bill由来の表示専用で、ここでは変更しない。
+保存はトランザクションで同時編集を検出し、失敗時は入力を保持する。メモ `notes` は従来どおり独立。
+開く際は一覧で取得済みのメモリ上のデータを使い、データベースへの問い合わせなしで表示する。一覧データがない場合は再接続を案内する。
+
+予約詳細の `Folder` ボタンは、VA Records内の従来の個人フォルダへ次の組を保存する。
+
+- General: `General.md` と `Claim-Gen.md`
+- Audiology: `Audiology.md` と `Claim-Aud.md`
+
+Claimファイルには氏名・契約番号・予約日時と `claimDetail` の全文を改行を保持して書き出す（未入力時は「なし」）。
+再度押すと該当する組を更新する。従来の予約詳細ファイルの内容と、もう一方の検査種別のファイルは維持する。
+
+既存データの移行は `ops/migrate-claim-detail.cjs` を使用する（既定対象: 予約日2026-09-15 JST以降）。
+`--preview PRIVATE_PLAN_PATH FIREBASE_ADMIN_MODULE_PATH` で私有領域へ変更前全データと計画を保存し、
+同じ引数の `--apply` で対象不変確認・原子的更新・全件再読込検証を実行する。
+検査名の括弧は維持し、DBQ/Opinionラベルの直後にある末尾のClaim括弧のみ移す。
+計画・バックアップには個人情報を含むためリポジトリに置かない。
+
+### Immediate interaction and delayed saves
+
+`interaction.js` applies only to Local. Name/details, date, phone, referral, visit-date,
+PDF metadata, and DBQ handoff use the rendered appointment snapshot immediately,
+without waiting for Firestore or IndexedDB. Background listener updates refresh the
+list; they never refill an already-open editor. Opening a record outside the current
+filter uses a server read with an 8-second deadline and explicit failure feedback.
+
+Saves show progress immediately and a warning after 8 seconds. A slow write is **not**
+reported as failed or retried automatically: Firestore can still acknowledge it later.
+The appointment/field lock remains until success or failure, including if the list
+replaces a toggle button. Modal controls are disabled during saves; failures preserve
+input and enable an explicit retry. Detail-window timers are request-scoped, and late
+acknowledgements preserve any newer draft text. No page reload is used.
+
+Verify with `node --test local/tests/*.test.cjs`. The interaction tests use synthetic
+records and stalled reads/writes, including late acknowledgements and duplicate clicks.
+
+Name, date, phone, PDF and age actions also accept clicks on the surrounding cell
+padding, not only on the text-sized button. Keyboard button activation is unchanged.
+
+### QTC収集UIの休止（2026-10-03）
+
+「取得」「再開」「停止」、予約行の収集UI、収集AI設定とネイティブ起動配線を撤去しました。専用コードと旧テストは `../Legacy/evidence-review/` に保持し、ビルド対象・同梱対象から外しています。AIモデル一覧でも使用する `local/evidence-review/app-server.cjs` と `codex-path.cjs` は共有部品として残しています。
+
+予約一覧、PDF閲覧、手動Claim詳細・メモ保存、紹介状作成・保存・印刷、DBQ Processor受け渡し、Summary、XR/CD・Audiogram・カナ・TTSの機能は維持します。患者データ、EvidenceReview復旧記録、設定・資格情報、個人Codexスキルは削除・移行しません。移行後の収集はCodexチャットの `qtc-evidence-review` を明示的に開始します。
+
+範囲・復元手順は [APP-AUTOMATION-RETIREMENT.md](../docs/APP-AUTOMATION-RETIREMENT.md) を参照。テストは `node --test local/tests/*.test.cjs local/ai/*.test.cjs`。本番アプリ起動にはCD監視等の既存機能があるため、この撤去の検証では起動していません。

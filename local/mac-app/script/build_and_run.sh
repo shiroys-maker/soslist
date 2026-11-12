@@ -32,7 +32,7 @@ done
 
 BUILD_SHA="$(git -C "$REPO_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 
-if pgrep -x "$APP_NAME" >/dev/null 2>&1; then
+if { [ "$DO_INSTALL" -eq 1 ] || [ "$DO_RUN" -eq 1 ]; } && pgrep -x "$APP_NAME" >/dev/null 2>&1; then
   pkill -x "$APP_NAME" || true
   sleep 1
 fi
@@ -48,8 +48,17 @@ cp "$BIN_PATH" "$APP_DIR/Contents/MacOS/$APP_NAME"
 
 # ランタイムに必要なファイルだけをバンドルする
 # （config.js・mac-app/ソース・README等を同梱しない）
-for f in index.html script.js connection.js style.css details.html details.js; do
+for f in index.html script.js connection.js interaction.js style.css details.html details.js; do
   cp "$LOCAL_SOURCE_DIR/$f" "$WEB_RESOURCES_DIR/local/"
+done
+cp -R "$LOCAL_SOURCE_DIR/ai" "$WEB_RESOURCES_DIR/local/"
+cp "$LOCAL_SOURCE_DIR/ai-settings.js" "$WEB_RESOURCES_DIR/local/"
+mkdir -p "$WEB_RESOURCES_DIR/local/login"
+cp "$LOCAL_SOURCE_DIR/login/local-token.cjs" "$WEB_RESOURCES_DIR/local/login/"
+mkdir -p "$WEB_RESOURCES_DIR/local/evidence-review"
+# Shared AI catalog transport only; retired collection code is never packaged.
+for f in app-server.cjs codex-path.cjs; do
+  cp "$LOCAL_SOURCE_DIR/evidence-review/$f" "$WEB_RESOURCES_DIR/local/evidence-review/"
 done
 for f in core.js ui.css ui.js pdf-viewer.js pdf-viewer.css; do
   cp "$SHARED_SOURCE_DIR/$f" "$WEB_RESOURCES_DIR/shared/"
@@ -89,7 +98,7 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
-  <string>1.0</string>
+  <string>1.1.0</string>
   <key>CFBundleVersion</key>
   <string>${BUILD_SHA}</string>
   <key>SOSListBuildSHA</key>
@@ -102,11 +111,20 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-# ad-hoc署名（無署名だと初回起動でGatekeeperに弾かれることがある）
-codesign --force --deep --sign - "$APP_DIR" 2>/dev/null || true
+# File Provider由来のFinder付加情報をコピーせず、一時領域で署名する。
+# 完成品は恒久ビルド先と /Applications に戻す。
+SIGN_DIR="$(mktemp -d /private/tmp/soslist-local-sign.XXXXXX)"
+trap 'rm -rf "$SIGN_DIR"' EXIT
+SIGNED_APP_DIR="$SIGN_DIR/$APP_NAME.app"
+ditto --norsrc --noextattr "$APP_DIR" "$SIGNED_APP_DIR"
+codesign --force --deep --sign - "$SIGNED_APP_DIR"
+codesign --verify --deep --strict "$SIGNED_APP_DIR"
+rm -rf "$APP_DIR"
+ditto --norsrc --noextattr "$SIGNED_APP_DIR" "$APP_DIR"
 
 if [ "$DO_INSTALL" -eq 1 ]; then
-  ditto "$APP_DIR" "/Applications/$APP_NAME.app.new"
+  ditto --norsrc --noextattr "$SIGNED_APP_DIR" "/Applications/$APP_NAME.app.new"
+  codesign --verify --deep --strict "/Applications/$APP_NAME.app.new"
   rm -rf "/Applications/$APP_NAME.app"
   mv "/Applications/$APP_NAME.app.new" "/Applications/$APP_NAME.app"
   echo "installed: /Applications/$APP_NAME.app (build $BUILD_SHA)"

@@ -1,3 +1,13 @@
+// Public viewer keeps its existing reads; Local supplies immediate list snapshots.
+function readInteractionAppointment(docId) {
+    if (typeof window !== 'undefined' && window.sosInteraction) return window.sosInteraction.read(docId);
+    return db.collection('appointments').doc(docId).get();
+}
+function saveInteraction(key, root, operation) {
+    if (typeof window !== 'undefined' && window.sosInteraction) return window.sosInteraction.save(key, root, operation);
+    return operation();
+}
+
 // soslist 共通コア
 // Web版(/script.js)とローカル版(/local/script.js)の両方から読み込まれる。
 // 各ターゲットのscript.jsは、このファイルの後に読み込まれ、
@@ -353,13 +363,13 @@ function isAwaitingResults(data, now = new Date()) {
     });
 }
 
-function setupRealtimeListener() {
+function setupRealtimeListener({ preserveRows = false } = {}) {
     const viewIsCurrent = captureSensitiveViewSession();
     if (!viewIsCurrent()) return;
     if (unsubscribe) {
         unsubscribe();
     }
-    displayedAppointments.clear();
+    if (!preserveRows) displayedAppointments.clear();
     const localDateStr = dateFilter.value;
     if (!localDateStr) return;
     // JSTの日付を明示的に指定
@@ -372,9 +382,9 @@ function setupRealtimeListener() {
     else query = query.where('appointmentDateTime', '>=', filterDate).orderBy('appointmentDateTime').limit(APPOINTMENT_PAGE_LIMIT);
     // No row limit within the requested two-month window: don't omit pending referrals.
     let active = true, latestSnapshot, refreshTimer;
-    tableBody.innerHTML = `<tr><td colspan="${SOSLIST_TARGET.deleteColumn ? 12 : 11}" class="appointments-empty">読み込み中…</td></tr>`;
+    if (!preserveRows) tableBody.innerHTML = `<tr><td colspan="${SOSLIST_TARGET.deleteColumn ? 12 : 11}" class="appointments-empty">読み込み中…</td></tr>`;
     const pendingMobileList = SOSLIST_TARGET.mobileUI ? document.getElementById('mobileAppointmentsList') : null;
-    if (pendingMobileList) pendingMobileList.innerHTML = '<p class="mobile-empty">読み込み中…</p>';
+    if (pendingMobileList && !preserveRows) pendingMobileList.innerHTML = '<p class="mobile-empty">読み込み中…</p>';
     const renderSnapshot = querySnapshot => {
           if (!active) return;
           const previousFocus = window.sosListUI?.captureFocus();
@@ -477,6 +487,7 @@ function setupRealtimeListener() {
                   ? `
                       <td class="col-actions">
                         <button class="delete-btn" aria-label="削除">🗑️</button>
+                        ${SOSLIST_TARGET.dbqProcessor ? '<button type="button" class="dbq-btn" aria-label="DBQ Processorを開く">DBQ</button>' : ''}
                       </td>`
                   : '';
 
@@ -558,26 +569,29 @@ function setupRealtimeListener() {
 async function toggleAppointmentStatus(target, docId, field, destKey = null) {
     const viewIsCurrent = captureSensitiveViewSession();
     if (!viewIsCurrent()) return;
-    if (target.disabled) return;
+    const operationKey = `status:${docId}:${destKey || ''}:${field}`;
+    if (target.disabled || (typeof window !== 'undefined' && window.sosInteraction?.isPending(operationKey))) return;
     const previousFocus = typeof window !== 'undefined' ? window.sosListUI?.captureFocus() : null;
     target.disabled = true;
     target.setAttribute('aria-busy', 'true');
     try {
-        const ref = db.collection('appointments').doc(docId);
-        const doc = await ref.get();
-        if (!viewIsCurrent()) return;
-        if (!doc.exists) throw new Error('Appointment not found');
-        const data = doc.data();
-        const destIndex = destKey ? determineReferralDests(data.services || [], null, data).indexOf(destKey) : -1;
-        const current = destKey
-            ? getReferralStateValue(data, destKey, field, field, destIndex) === true
-            : data[field] === true;
-        const key = destKey ? `referrals.${destKey}.${field}` : field;
-        await ref.update({ [key]: !current });
-        if (!viewIsCurrent()) return;
-        target.setAttribute('aria-pressed', String(!current));
-        target.classList.toggle('is-active', !current);
-        target.textContent = field === 'isShown' ? (!current ? '✅' : '未') : `${field === 'isReceived' ? '受診' : '完了'}${!current ? '✓' : ''}`;
+        await saveInteraction(operationKey, null, async () => {
+            const ref = db.collection('appointments').doc(docId);
+            const doc = await readInteractionAppointment(docId);
+            if (!viewIsCurrent()) return;
+            if (!doc.exists) throw new Error('Appointment not found');
+            const data = doc.data();
+            const destIndex = destKey ? determineReferralDests(data.services || [], null, data).indexOf(destKey) : -1;
+            const current = destKey
+                ? getReferralStateValue(data, destKey, field, field, destIndex) === true
+                : data[field] === true;
+            const key = destKey ? `referrals.${destKey}.${field}` : field;
+            await ref.update({ [key]: !current });
+            if (!viewIsCurrent()) return;
+            target.setAttribute('aria-pressed', String(!current));
+            target.classList.toggle('is-active', !current);
+            target.textContent = field === 'isShown' ? (!current ? '✅' : '未') : `${field === 'isReceived' ? '受診' : '完了'}${!current ? '✓' : ''}`;
+        });
     } catch (error) {
         console.error('状態の更新に失敗しました:', error);
         alert('状態を更新できませんでした。もう一度お試しください。');
@@ -605,7 +619,10 @@ function buildServicesPreviewHTML(services, displayText, hasClaimDetails = false
     const badges = `<span class="service-labels">${labels.map(label => `<span>${label}</span>`).join('')}</span>`;
     const text = escapeHtml(displayText || '検査内容なし');
     const editButton = hasClaimDetails ? '<button type="button" class="services-cell service-edit" aria-haspopup="dialog">Claim詳細</button>' : '';
-    const serviceText = (className) => hasClaimDetails
+    // Web: the service text itself opens Claim詳細. Local (plainServiceText): keep the
+    // text non-interactive, because WebKit cannot reliably line-clamp a button; the
+    // dedicated Claim詳細 button opens the editor there.
+    const serviceText = (className) => hasClaimDetails && !(typeof SOSLIST_TARGET !== 'undefined' && SOSLIST_TARGET.plainServiceText)
         ? `<button type="button" class="services-cell service-claim-open ${className}" title="Claim詳細を開く" aria-haspopup="dialog">${text}</button>`
         : `<span class="${className}">${text}</span>`;
     if (displayText.length <= 110) return `${badges}${serviceText('service-text')}${editButton}`;
@@ -631,7 +648,7 @@ function startLogoutTimer() {
 function handleViewPdf(docId) {
     return window.sosPdfViewer.open(async () => {
         const sourceError = message => Object.assign(new Error(message), { pdfSourceError: true });
-        const doc = await db.collection('appointments').doc(docId).get();
+        const doc = await readInteractionAppointment(docId);
         if (!doc.exists) throw sourceError('データベースにレコードが見つかりません。');
         const fileName = doc.data().originalFileName;
         if (!fileName) throw sourceError('このレコードにPDFファイルは関連付けられていません。');
@@ -647,7 +664,7 @@ function handleViewPdf(docId) {
 function openEditModal(docId) {
     const viewIsCurrent = captureSensitiveViewSession();
     if (!viewIsCurrent()) return;
-  db.collection('appointments').doc(docId).get().then(doc => {
+  readInteractionAppointment(docId).then(doc => {
         if (!viewIsCurrent()) return;
     if (!doc.exists) return;
     const data = doc.data();
@@ -1029,7 +1046,7 @@ function generateNewInvoiceHTML(audiologyRecords, dayRateList, from, to) {
 function openPhoneEditModal(docId) {
     const viewIsCurrent = captureSensitiveViewSession();
     if (!viewIsCurrent()) return;
-    db.collection('appointments').doc(docId).get().then(doc => {
+    readInteractionAppointment(docId).then(doc => {
         if (!viewIsCurrent()) return;
         if (!doc.exists) {
             alert('データが見つかりません');
@@ -1058,9 +1075,9 @@ function savePhone() {
 
     const newPhone = phoneInput.value.trim();
 
-    db.collection('appointments').doc(editingPhoneDocId).update({
+    return saveInteraction(`phone:${editingPhoneDocId}`, editPhoneModal, () => db.collection('appointments').doc(editingPhoneDocId).update({
         japanCellPhone: newPhone
-    })
+    }))
     .then(() => {
         console.log('電話番号を更新しました。');
         closePhoneEditModal();
@@ -1130,6 +1147,27 @@ function getCodexReferralRouting(data) {
     if (routing.destinations.some(dest => dest !== 'LAB' &&
         (typeof routing.purposes[dest] !== 'string' || !routing.purposes[dest].trim()))) return null;
     return routing;
+}
+
+// Refresh generated wording at display time; saved referral purposes still win below.
+function codexReferralPurpose(routing, destination) {
+    const original = routing.purposes[destination];
+    const assignments = routing.assignments || [];
+    const sources = routing.sourceServices;
+    if (assignments.length !== sources.length ||
+        new Set(assignments.map(a => a.serviceIndex)).size !== sources.length ||
+        assignments.some(a => !Number.isInteger(a.serviceIndex) || a.serviceIndex < 0 || a.serviceIndex >= sources.length)) return original;
+    const owned = assignments.filter(a => a.destination === destination);
+    if (!owned.length || owned.some(a => typeof a.examJa !== 'string' || !a.examJa.trim())) return original;
+    let hasOrtho = false;
+    const exams = owned.map(a => {
+        if (a.category !== 'orthopedic_xray') return a.examJa;
+        hasOrtho = true;
+        const code = routing.sourceCptCodes.length === sources.length ? routing.sourceCptCodes[a.serviceIndex] : '';
+        const exam = normalizeXrayExamJa(a.examJa, sources[a.serviceIndex], code);
+        return exam;
+    });
+    return hasOrtho ? [...new Set(exams)].join('、') + 'の依頼' : original;
 }
 
 function buildReferralReviewHTML(data) {
@@ -1293,9 +1331,12 @@ async function fetchNameKana(nameEn) {
     const normalizedName = String(nameEn || '').trim();
     if (!normalizedName || !canUseLocalNameKanaAPI()) return '';
 
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 30000);
     try {
         const response = await fetch('http://127.0.0.1:19876/api/name-kana', {
             method: 'POST',
+            signal: controller.signal,
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name: normalizedName })
         });
@@ -1303,20 +1344,30 @@ async function fetchNameKana(nameEn) {
         const data = await response.json();
         return String(data.kana || '').trim();
     } catch (error) {
-        console.warn('カタカナ氏名の自動入力に失敗しました:', error);
         return '';
+    } finally {
+        clearTimeout(timer);
     }
 }
 
+let shokaijyoKanaRequest = 0;
 function autofillShokaijyoKana(nameEn) {
     const viewIsCurrent = captureSensitiveViewSession();
     if (!viewIsCurrent()) return;
-    fetchNameKana(nameEn).then(kana => {
-        if (!viewIsCurrent() || !kana) return;
-        shokaijyoSheetContainer.querySelectorAll('[name="name_kana"]').forEach(input => {
-            if (!input.value.trim()) input.value = kana;
-        });
+    const request = ++shokaijyoKanaRequest;
+    const inputs = [...shokaijyoSheetContainer.querySelectorAll('[name="name_kana"]')];
+    const edited = new WeakSet();
+    const listeners = inputs.map(input => {
+        const listener = () => edited.add(input);
+        input.addEventListener('input', listener);
+        return [input, listener];
     });
+    fetchNameKana(nameEn).then(kana => {
+        if (!viewIsCurrent() || !kana || request !== shokaijyoKanaRequest) return;
+        inputs.forEach(input => {
+            if (input.isConnected && !edited.has(input) && !input.value.trim()) input.value = kana;
+        });
+    }).finally(() => listeners.forEach(([input, listener]) => input.removeEventListener('input', listener)));
 }
 
 function normalizeServiceTokens(services) {
@@ -1356,6 +1407,55 @@ function normalizeServiceTokens(services) {
     return tokens;
 }
 
+// Keep these pure helpers identical to shared/core.js in SOSList.
+// Cervical/lumbar COMPLETE labels follow the requested clinic wording.
+// Explicit source counts win. Missing counts receive practical body-specific defaults,
+// as requested by the clinician; minimum CPT definitions do not prescribe extra views.
+function xrayViewLabel(service, cptCode = '') {
+    const words = { ONE: 1, TWO: 2, THREE: 3, FOUR: 4, FIVE: 5, SIX: 6, SEVEN: 7, EIGHT: 8, NINE: 9 };
+    const raw = String(service || '').toUpperCase().replace(/\b(ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE)\b/g, word => words[word]);
+    const explicit = raw.match(/\b(?:(MINIMUM(?: OF)?|AT LEAST)\s+)?([1-9])\s*(?:(?:-|–|\/|OR|TO)\s*([1-9])\s*|(OR MORE|AND MORE|\+)\s*)?(?:VIEWS?|PROJECTIONS?)\b/);
+    if (explicit) return explicit[2] + (explicit[3] ? `～${explicit[3]}` : '') + '方向' + (explicit[1] || explicit[4] ? '以上' : '');
+    const body = raw.replace(/[^A-Z0-9 ]/g, ' ').replace(/\s+/g, ' ');
+    const cervical = /\bCERVICAL\b|\bC SPINE\b|\bNECK\b/.test(body);
+    const lumbar = /\bLUMBAR\b|\bLUMBOSACRAL\b|\bL SPINE\b/.test(body);
+    // Small, verified table; match the body as well as a code from the same row.
+    const definitions = [
+        [/^(72040|72050|72052)$/, cervical, { 72040: '2方向', 72050: '4方向', 72052: '6方向' }],
+        [/^(72100|72110|72114)$/, lumbar, { 72100: '2方向', 72110: '4方向', 72114: '6方向' }],
+        [/^(73560|73562|73564)$/, /\bKNEE\b/.test(body), { 73560: '2方向', 73562: '3方向', 73564: '4方向' }],
+        [/^73030$/, /\bSHOULDER\b/.test(body), { 73030: '2方向' }],
+        [/^(73070|73080)$/, /\bELBOW\b/.test(body), { 73070: '2方向', 73080: '3方向' }],
+        [/^(73120|73130)$/, /\bHAND\b/.test(body), { 73120: '2方向', 73130: '3方向' }],
+        [/^(73600|73610)$/, /\bANKLE\b/.test(body), { 73600: '2方向', 73610: '3方向' }],
+        [/^(73620|73630)$/,  /\bFOOT\b/.test(body), { 73620: '2方向', 73630: '3方向' }],
+    ];
+    const code = String(cptCode || '').toUpperCase().match(/^(\d{5})(?:[- ]?(?:R|L|RT|LT))?$/)?.[1] || '';
+    for (const [pattern, matchesBody, views] of definitions) {
+        if (matchesBody && pattern.test(code)) return views[code];
+    }
+    if (/\bCOMPLETE\b/.test(body)) {
+        if (cervical || lumbar) return '4方向';
+        if (/\bSHOULDER\b/.test(body)) return '2方向';
+        if (/\bKNEE\b/.test(body)) return '4方向';
+        return '3方向';
+    }
+    if (/\bLIMITED\b/.test(body)) return '2方向';
+    if (/\b(?:FINGER|THUMB|TOE)\b/.test(body)) return '3方向';
+    if (/\bPELVIS\b/.test(body)) return '1方向';
+    return '2方向';
+}
+
+function normalizeXrayExamJa(examJa, service, cptCode = '') {
+    const semanticCount = String(examJa).match(/[1-9１-９]+(?:\s*[～〜~–－\-/・]\s*[1-9１-９]+)?\s*方向(?:以上)?/);
+    const hasOrderCount = /\b(?:COMPLETE|LIMITED|VIEWS?|PROJECTIONS?)\b/i.test(service) || /^\d{5}/.test(cptCode);
+    const label = !hasOrderCount && semanticCount ? semanticCount[0] : xrayViewLabel(service, cptCode);
+    if (!label) return examJa;
+    return String(examJa).replace(/方向数要確認/g, '').replace(/[0-9０-９]+(?:\s*[～〜~–－\-/・]\s*[0-9０-９]+)?\s*(?:方向|撮影方向)(?:以上|以下)?|全方向/g, '')
+        .replace(/[（(]\s*[)）]/g, '').trim() + label;
+}
+
+
 function translateOrthoXrayItem(rawItem, projection) {
     const raw = String(rawItem || '').toUpperCase().replace(/[^A-Z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
     if (!raw) return '';
@@ -1379,14 +1479,14 @@ function translateOrthoXrayItem(rawItem, projection) {
         [/\bTOE\b/, '足趾'],
         [/CERVICAL SPINE|\bC SPINE\b|\bNECK\b/, '頸椎'],
         [/THORACIC SPINE|\bT SPINE\b/, '胸椎'],
-        [/LUMBAR SPINE|\bL SPINE\b|\bBACK\b/, '腰椎'],
+        [/LUMBAR SPINE|LUMBOSACRAL|\bL SPINE\b|\bBACK\b/, '腰椎'],
         [/\bPELVIS\b/, '骨盤']
     ];
     const match = partMap.find(([pattern]) => pattern.test(raw));
     const part = match ? match[1] : raw.replace(/\b(RIGHT|LEFT|BILATERAL|LIMITED|COMPLETE|X RAY|XRAY|RADIOGRAPH|VIEWS?)\b/g, '').trim();
     if (!part) return '';
 
-    const direction = projection === 'complete' ? '3方向' : (projection === 'limited' ? '2方向' : '');
+    const direction = xrayViewLabel(`${rawItem} ${projection || ''}`);
     return `${side}${part}レントゲン${direction}`;
 }
 
@@ -1397,14 +1497,16 @@ function extractOrthoXraysJp(services) {
     const ORTHO_PLAIN_XRAY = /SHOULDER|CLAVICLE|HUMERUS|ELBOW|FOREARM|WRIST|HAND|FINGER|THUMB|HIP|FEMUR|KNEE|TIBIA|FIBULA|ANKLE|FOOT|TOE|CERVICAL SPINE|\bC SPINE\b|\bNECK\b|THORACIC SPINE|\bT SPINE\b|LUMBAR SPINE|\bL SPINE\b|\bBACK\b|\bPELVIS\b/i;
 
     for (let i = 0; i < arr.length; i++) {
-        const item = arr[i];
+        let item = arr[i];
         if (FACIAL_HEAD.test(item)) continue;
+        if (/^(?:(?:MINIMUM(?: OF)?|AT LEAST)\s+)?[1-9].*\b(?:VIEWS?|PROJECTIONS?)$/i.test(arr[i + 1] || '')) item += `, ${arr[++i]}`;
 
         if (/^(LIMITED|COMPLETE)$/i.test(arr[i + 1] || '')) {
             const projection = /^COMPLETE$/i.test(arr[i + 1]) ? 'complete' : 'limited';
-            const translated = translateOrthoXrayItem(item, projection);
+            let description = `${item}, ${arr[++i]}`;
+            if (/^(?:(?:MINIMUM(?: OF)?|AT LEAST)\s+)?[1-9].*\b(?:VIEWS?|PROJECTIONS?)$/i.test(arr[i + 1] || '')) description += `, ${arr[++i]}`;
+            const translated = translateOrthoXrayItem(description, projection);
             if (translated) xrays.push(translated);
-            i += 1;
             continue;
         }
 
@@ -1499,7 +1601,7 @@ function buildSheetHTML(patientData, destKey, saved, classification, editable = 
         if (e.has_ecg)        items.push('心電図');
     }
     const routing = getCodexReferralRouting(patientData);
-    const codexPurpose = routing?.destinations.includes(destKey) ? routing.purposes[destKey] : '';
+    const codexPurpose = routing?.destinations.includes(destKey) ? codexReferralPurpose(routing, destKey) : '';
     const defaultPurpose = codexPurpose || (items.length > 0 ? items.join('、') + 'の依頼' : '検査依頼');
 
     let defaultClinical = '';
@@ -1603,7 +1705,7 @@ function saveShokaijyo() {
     const get = name => { const el = sheet.querySelector(`[name="${name}"]`); return el ? el.value : ''; };
     const selectedGender = sheet.querySelector('.sex-option.selected');
     const fieldPath = `referrals.${shokaijyoEditingDest}`;
-    db.collection('appointments').doc(shokaijyoEditingDocId).update({
+    return saveInteraction(`referral:${shokaijyoEditingDocId}:${shokaijyoEditingDest}`, shokaijyoModal, () => db.collection('appointments').doc(shokaijyoEditingDocId).update({
         [`${fieldPath}.name_kana`]: get('name_kana'),
         [`${fieldPath}.name_en`]: get('name_en'),
         [`${fieldPath}.gender`]: selectedGender ? selectedGender.dataset.gender : 'M',
@@ -1616,7 +1718,7 @@ function saveShokaijyo() {
         [`${fieldPath}.clinical`]: get('clinical'),
         [`${fieldPath}.message`]: get('message'),
         [`${fieldPath}.savedAt`]: firebase.firestore.FieldValue.serverTimestamp()
-    })
+    }))
     .then(() => closeShokaijyoModal())
     .catch(err => { console.error(err); alert('保存に失敗しました'); });
 }
@@ -1719,7 +1821,7 @@ function openVisitDateModal(docId, destKey = null) {
         visitTimeInput.value = '09:00';
     }
 
-    db.collection('appointments').doc(docId).get().then(doc => {
+    readInteractionAppointment(docId).then(doc => {
         if (!viewIsCurrent()) return;
         if (!doc.exists) {
             visitDateModal.style.display = 'flex';
@@ -1738,8 +1840,9 @@ function openVisitDateModal(docId, destKey = null) {
         document.body.classList.add('modal-open');
     }).catch(err => {
         console.error(err);
-        visitDateModal.style.display = 'flex';
-        document.body.classList.add('modal-open');
+        visitDateEditingDocId = null;
+        visitDateEditingDest = null;
+        alert('データを取得できませんでした。再接続後に開き直してください。');
     });
 }
 
@@ -1764,7 +1867,7 @@ function saveVisitDate() {
         ? { [`referrals.${visitDateEditingDest}.visitDate`]: visitDateValue }
         : { visitDate: visitDateValue };
 
-    db.collection('appointments').doc(visitDateEditingDocId).update(updatePayload)
+    return saveInteraction(`visit:${visitDateEditingDocId}:${visitDateEditingDest}`, visitDateModal, () => db.collection('appointments').doc(visitDateEditingDocId).update(updatePayload))
         .then(() => closeVisitDateModal())
         .catch(err => { console.error(err); alert('保存に失敗しました'); });
 }

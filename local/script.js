@@ -4,8 +4,10 @@
 const SOSLIST_TARGET = {
     mobileUI: false,                              // モバイルUIなし
     deleteColumn: true,                           // 削除ボタン列あり
+    dbqProcessor: true,                           // DBQ Processor を起動
+    plainServiceText: true,                       // 検査内容は折りたたみ可能な通常テキスト（Claim詳細ボタンで開く）
     perReferralStatus: true,                      // 紹介先ごとに受診日・受・済を管理
-    servicesCellClass: 'col-services services-cell', // 検査内容セルは編集可
+    servicesCellClass: 'col-services services-cell', // 検査内容クリックでClaim詳細を開く
     referralHeaderDateMode: 'visitDate',
     stampSrc: '../stamp.png'
 };
@@ -13,10 +15,8 @@ const SOSLIST_TARGET = {
 // --- DOM要素の取得 ---
 const loginContainer = document.getElementById('login-container');
 const mainAppContainer = document.getElementById('main-app-container');
-const loginButton = document.getElementById('loginButton');
-const logoutButton = document.getElementById('logoutButton');
-const loginEmailInput = document.getElementById('loginEmail');
-const loginPasswordInput = document.getElementById('loginPassword');
+const loginStatus = document.getElementById('loginStatus');
+const loginRetryButton = document.getElementById('loginRetryButton');
 const loginError = document.getElementById('loginError');
 const userEmailSpan = document.getElementById('userEmail');
 const tableBody = document.querySelector("#appointmentsTable tbody");
@@ -46,11 +46,11 @@ const searchButton = document.getElementById('searchButton');
 const searchResultsModal = document.getElementById('searchResultsModal');
 const searchResultsList = document.getElementById('searchResultsList');
 const closeSearchResultsButton = document.getElementById('closeSearchResultsButton');
-// 検査内容編集モーダル用の要素取得
-const editServicesModal = document.getElementById('editServicesModal');
-const servicesTextarea = document.getElementById('servicesTextarea');
-const confirmServicesEditBtn = document.getElementById('confirmServicesEdit');
-const cancelServicesEditBtn = document.getElementById('cancelServicesEdit');
+// Claim詳細モーダル
+const claimDetailModal = document.getElementById('claimDetailModal');
+const claimDetailTextarea = document.getElementById('claimDetailTextarea');
+const saveClaimDetailBtn = document.getElementById('saveClaimDetail');
+const cancelClaimDetailBtn = document.getElementById('cancelClaimDetail');
 // 電話番号編集モーダル用の要素取得
 const editPhoneModal = document.getElementById('editPhoneModal');
 const phoneInput = document.getElementById('phoneInput');
@@ -74,7 +74,10 @@ const cancelVisitDateBtn  = document.getElementById('cancelVisitDateBtn');
 // --- グローバル変数 ---
 let logoutTimer;
 let editingDateTimeDocId = null;
-let editingServicesDocId = null;
+let editingClaimDetailDocId = null;
+let originalClaimDetail = '';
+let claimDetailSaving = false;
+let claimDetailReturnFocus = null;
 let editingPhoneDocId = null;
 let unsubscribe;
 const CD_MONITOR_ENABLED_KEY = 'soslist-cd-monitor-enabled';
@@ -139,7 +142,7 @@ function updateSummaryStatus(message, tone = 'neutral') {
     }
 }
 
-function openSummaryPopup(mode = 'generate') {
+function openSummaryPopup(mode = 'view') {
     if (!summaryDateInput?.value) {
         alert('Summeryの日付を選んでください。');
         return;
@@ -175,7 +178,7 @@ function handleSummaryGenerate() {
 
     const nativeGenerateHandler = window.webkit?.messageHandlers?.startSummaryGeneration;
     if (!nativeGenerateHandler) {
-        openSummaryPopup('generate');
+        updateSummaryStatus('新規作成はSOSList Localアプリから行ってください。');
         return;
     }
 
@@ -276,6 +279,7 @@ auth.onAuthStateChanged(user => {
 
         startLogoutTimer();
     } else {
+        displayedAppointments.clear();
         setResultsWaitingMode(false, false);
         window.sosPdfViewer?.close();
         window.sosConnection.stop();
@@ -291,29 +295,43 @@ auth.onAuthStateChanged(user => {
 window.addEventListener('storage', handleDetailStorageEvent);
 
 // --- イベントリスナー ---
-loginButton.addEventListener('click', () => {
-    const email = loginEmailInput.value;
-    const password = loginPasswordInput.value;
-    auth.signInWithEmailAndPassword(email, password)
-        .catch(error => {
-            loginError.textContent = `ログインに失敗しました: ${error.message}`;
-        });
-});
-
-logoutButton.addEventListener('click', () => {
-    auth.signOut();
-});
-
-loginEmailInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-        loginButton.click();
+// --- 自動ログイン（パスワード不要） ---
+// アプリ本体がこの Mac の認証でログイン用トークンを作る（local/login/local-token.cjs）。
+let localLoginBusy = false;
+function requestLocalLogin() {
+    if (localLoginBusy || auth.currentUser) return;
+    const handler = window.webkit?.messageHandlers?.localLogin;
+    loginError.textContent = '';
+    loginRetryButton.hidden = true;
+    if (!handler) {
+        loginStatus.textContent = '';
+        loginError.textContent = 'SOSList Local アプリから開いてください。';
+        return;
     }
-});
-
-loginPasswordInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-        loginButton.click();
+    localLoginBusy = true;
+    loginStatus.textContent = '接続中…';
+    handler.postMessage({});
+}
+window.localLoginReply = async reply => {
+    try {
+        if (!reply?.token) throw new Error(reply?.message || 'ログイン用トークンを取得できませんでした。');
+        await auth.signInWithCustomToken(reply.token);
+    } catch (error) {
+        loginStatus.textContent = '';
+        loginError.textContent = `接続できませんでした: ${error.message}`;
+        loginRetryButton.hidden = false;
+    } finally {
+        localLoginBusy = false;
     }
+};
+loginRetryButton.addEventListener('click', requestLocalLogin);
+// 以前のパスワードでのログインが残っていれば、自動ログインへ切り替える
+auth.onAuthStateChanged(async user => {
+    if (!user) { requestLocalLogin(); return; }
+    try {
+        const { claims } = await user.getIdTokenResult();
+        if (claims.local !== true && auth.currentUser === user) await auth.signOut();
+    } catch (_) {}
 });
 
 dateFilter.addEventListener('change', () => {
@@ -336,7 +354,7 @@ tableBody.addEventListener('click', (e) => {
     const docId = tr.dataset.id;
     if (!docId) return;
 
-    if (target.classList.contains('name-cell')) {
+    if (target.closest('.name-cell, .col-name')) {
         openDetailsModal(docId);
         return;
     }
@@ -344,12 +362,13 @@ tableBody.addEventListener('click', (e) => {
         toggleAppointmentStatus(target, docId, 'isShown');
         return;
     }
-    if (target.closest('.date-cell')) {
+    if (target.closest('.date-cell, .col-date')) {
         openEditModal(docId);
         return;
     }
-    if (target.classList.contains('services-cell')) {
-        openServicesEditModal(docId);
+    if (target.closest('.services-cell')) {
+        e.preventDefault();
+        openClaimDetailModal(docId);
         return;
     }
     const referralTarget = target.closest('.referral-dest');
@@ -373,8 +392,21 @@ tableBody.addEventListener('click', (e) => {
         toggleAppointmentStatus(completedTarget, docId, 'isCompleted', completedTarget.dataset.dest || null);
         return;
     }
-    if (target.classList.contains('contract-cell')) {
+    if (target.closest('.contract-cell, .col-contract')) {
         handleViewPdf(docId);
+        return;
+    }
+    const dbqButton = target.closest('.dbq-btn');
+    if (dbqButton) {
+        const handler = window.webkit?.messageHandlers?.openDBQProcessor;
+        if (!handler) { alert('DBQ ProcessorはSOSList Localアプリから開いてください。'); return; }
+        dbqButton.disabled = true;
+        // Use the rendered record without waiting for network or IndexedDB.
+        readInteractionAppointment(docId).then(doc => {
+            if (!doc.exists) throw new Error('予約を読み込めません。「再接続」後に開き直してください。');
+            handler.postMessage(buildDetailsPayload(docId, doc.data()));
+        }).catch(error => alert(error.message || 'DBQ Processorを開けませんでした。'))
+            .finally(() => { dbqButton.disabled = false; });
         return;
     }
     const deleteButton = target.closest('.delete-btn');
@@ -382,16 +414,18 @@ tableBody.addEventListener('click', (e) => {
         handleDeleteButtonClick(deleteButton, docId);
         return;
     }
-    if (target.classList.contains('phone-cell')) {
+    if (target.closest('.phone-cell, .col-phone')) {
         openPhoneEditModal(docId);
         return;
     }
-    if (target.classList.contains('age-cell')) {
+    const ageTarget = target.closest('.age-cell') || target.closest('.col-age')?.querySelector('.age-cell');
+    if (ageTarget) {
+        if (window.sosInteraction?.isPending(`age:${docId}`)) return;
         const docRef = db.collection('appointments').doc(docId);
-        const isPink = target.classList.toggle('pink');
-        docRef.update({ isAgePink: isPink }).catch(error => {
+        const isPink = ageTarget.classList.toggle('pink');
+        saveInteraction(`age:${docId}`, null, () => docRef.update({ isAgePink: isPink })).catch(error => {
             // 書き込み失敗時は先行して切り替えた表示を元に戻す
-            target.classList.toggle('pink', !isPink);
+            ageTarget.classList.toggle('pink', !isPink);
             console.error('性別フラグの更新エラー:', error);
             alert('性別フラグの更新に失敗しました。');
         });
@@ -421,7 +455,7 @@ confirmEditBtn.addEventListener('click', () => {
         processedAt: processedAt // 処理日時を記録（タイムスタンプ判定用）
     };
     
-    db.collection('appointments').doc(editingDateTimeDocId).update(dataToUpdate)
+    saveInteraction(`date:${editingDateTimeDocId}`, editModal, () => db.collection('appointments').doc(editingDateTimeDocId).update(dataToUpdate))
       .then(() => closeEditModal())
       .catch(error => {
           console.error('更新エラー:', error);
@@ -433,11 +467,14 @@ cancelEditBtn.addEventListener('click', closeEditModal);
 printInvoiceButton.addEventListener('click', printInvoice);
 summaryPrevDateButton?.addEventListener('click', () => jumpToAdjacentSummaryReservationDate(-1));
 summaryNextDateButton?.addEventListener('click', () => jumpToAdjacentSummaryReservationDate(1));
-generateSummaryButton?.addEventListener('click', handleSummaryGenerate);
+if (generateSummaryButton) {
+    generateSummaryButton.hidden = !window.webkit?.messageHandlers?.startSummaryGeneration;
+    generateSummaryButton.addEventListener('click', handleSummaryGenerate);
+}
 showSummaryButton?.addEventListener('click', handleSummaryShow);
 cdMonitorToggleButton?.addEventListener('click', toggleCDMonitor);
-confirmServicesEditBtn.addEventListener('click', saveServices);
-cancelServicesEditBtn.addEventListener('click', closeServicesEditModal);
+saveClaimDetailBtn.addEventListener('click', saveClaimDetail);
+cancelClaimDetailBtn.addEventListener('click', closeClaimDetailModal);
 confirmPhoneEditBtn.addEventListener('click', savePhone);
 cancelPhoneEditBtn.addEventListener('click', closePhoneEditModal);
 saveShokaijyoBtn.addEventListener('click', saveShokaijyo);
@@ -468,21 +505,21 @@ activityEvents.forEach(eventName => { window.addEventListener(eventName, resetLo
 // 保存形式: "JONES, JONATHAN"（姓, 名、大文字）
 // 対応: 姓のみ / 名のみ / 姓名 / 名姓 / カンマあり / 大文字小文字不問
 function openDetailsModal(docId) {
-    db.collection('appointments').doc(docId).get().then(doc => {
+    readInteractionAppointment(docId).then(doc => {
         if (!doc.exists) {
             alert('データが見つかりません');
             return;
         }
 
         const payload = buildDetailsPayload(docId, doc.data());
-        localStorage.setItem(`${DETAIL_PAYLOAD_PREFIX}${docId}`, JSON.stringify(payload));
-
-        const detailsUrl = `details.html#id=${encodeURIComponent(docId)}`;
+        // Native popups receive the snapshot directly; browser storage can be full.
         if (window.webkit?.messageHandlers?.openDetailsWindow) {
             window.webkit.messageHandlers.openDetailsWindow.postMessage(payload);
             return;
         }
 
+        localStorage.setItem(`${DETAIL_PAYLOAD_PREFIX}${docId}`, JSON.stringify(payload));
+        const detailsUrl = `details.html#id=${encodeURIComponent(docId)}`;
         const newWindow = window.open('', '_blank', 'popup=yes,width=1280,height=920');
         if (!newWindow) {
             alert('予約詳細ウィンドウを開けませんでした。');
@@ -516,13 +553,21 @@ function buildDetailsPayload(docId, data) {
         visitDate: data.visitDate || '',
         referenceUrl: data.referenceUrl || '',
         notes: data.notes || '',
+        claimDetail: data.claimDetail || '',
         services: Array.isArray(data.services) ? data.services : [],
         referralDests,
         referrals: sanitizedReferrals,
-        appointmentDateTimeMs: data.appointmentDateTime?.toDate
-            ? data.appointmentDateTime.toDate().getTime()
-            : null
+        appointmentDateTimeMs: normalizeAppointmentDateTimeMs(data.appointmentDateTime)
     };
+}
+
+function normalizeAppointmentDateTimeMs(value) {
+    const date = value?.toDate ? value.toDate()
+        : value && typeof value.seconds === 'number' ? new Date(value.seconds * 1000)
+        : typeof value === 'string' ? new Date(value)
+        : value instanceof Date ? value : null;
+    const milliseconds = date?.getTime();
+    return Number.isFinite(milliseconds) && milliseconds > 0 ? milliseconds : null;
 }
 
 function handleDetailStorageEvent(event) {
@@ -559,10 +604,10 @@ function handleDetailSaveRequest(rawValue) {
 
     handledDetailSaveRequests.add(request.requestId);
 
-    db.collection('appointments').doc(request.docId).update({
+    saveInteraction(`notes:${request.docId}`, null, () => db.collection('appointments').doc(request.docId).update({
         notes: request.notes || '',
         referenceUrl: request.referenceUrl || ''
-    })
+    }))
         .then(() => {
             const payloadKey = `${DETAIL_PAYLOAD_PREFIX}${request.docId}`;
             const existingPayload = localStorage.getItem(payloadKey);
@@ -605,10 +650,10 @@ window.__sosApplyDetailsSave = function(request) {
         }
     };
 
-    db.collection('appointments').doc(request.docId).update({
+    saveInteraction(`notes:${request.docId}`, null, () => db.collection('appointments').doc(request.docId).update({
         notes: request.notes || '',
         referenceUrl: request.referenceUrl || ''
-    })
+    }))
         .then(() => reply('success', '保存しました。'))
         .catch((error) => {
             console.error('details保存エラー:', error);
@@ -701,50 +746,77 @@ function clearPendingDeleteState(docId) {
     pendingDeleteButtons.delete(docId);
 }
 
-function openServicesEditModal(docId) {
-    db.collection('appointments').doc(docId).get().then(doc => {
-        if (!doc.exists) {
-            alert('データが見つかりません');
-            return;
-        }
-        const data = doc.data();
-        const currentServices = (data.services || []).join(', ');
-        servicesTextarea.value = currentServices;
-        
-        editingServicesDocId = docId;
-        editServicesModal.style.display = 'flex';
+function openClaimDetailModal(docId) {
+    if (editingClaimDetailDocId) return;
+    try {
+        // No database request, including IndexedDB, on the opening path.
+        // The save transaction still checks for conflicting server edits.
+        const data = displayedAppointments.get(docId);
+        if (!data) throw new Error('一覧のデータが見つかりません。');
+        originalClaimDetail = data.claimDetail || '';
+        claimDetailTextarea.value = originalClaimDetail;
+        const date = normalizeAppointmentDateTimeMs(data.appointmentDateTime);
+        document.getElementById('claimDetailIdentity').textContent = [
+            data.claimantName, data.contractNumber,
+            date ? new Intl.DateTimeFormat('ja-JP', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Asia/Tokyo' }).format(new Date(date)) : ''
+        ].filter(Boolean).join(' ｜ ');
+        document.getElementById('claimDetailServices').textContent = (data.services || []).join(', ');
+        document.getElementById('claimDetailStatus').textContent = '';
+        editingClaimDetailDocId = docId;
+        claimDetailReturnFocus = document.activeElement;
+        claimDetailModal.style.display = 'flex';
         document.body.classList.add('modal-open');
-    }).catch(error => {
-        console.error('検査内容編集モーダルの表示エラー:', error);
-        alert('データの取得に失敗しました。');
-    });
+        claimDetailTextarea.focus({ preventScroll: true });
+    } catch (error) {
+        console.error('Claim詳細の表示エラー:', error);
+        alert('Claim詳細を取得できませんでした。再接続後に開き直してください。');
+    }
 }
 
-function closeServicesEditModal() {
-    editServicesModal.style.display = 'none';
-    editingServicesDocId = null;
+function closeClaimDetailModal() {
+    if (claimDetailSaving) return;
+    if (claimDetailTextarea.value !== originalClaimDetail && !confirm('Claim詳細の変更を保存せずに閉じますか？')) return;
+    claimDetailModal.style.display = 'none';
+    editingClaimDetailDocId = null;
     document.body.classList.remove('modal-open');
+    const opener = claimDetailReturnFocus;
+    claimDetailReturnFocus = null;
+    if (opener && opener.isConnected && typeof opener.focus === 'function') opener.focus({ preventScroll: true });
 }
 
-function saveServices() {
-    if (!editingServicesDocId) return;
-
-    const newServicesString = servicesTextarea.value;
-    const newServicesArray = newServicesString.split(',')
-                                            .map(s => s.trim())
-                                            .filter(s => s !== '');
-
-    db.collection('appointments').doc(editingServicesDocId).update({
-        services: newServicesArray
-    })
-    .then(() => {
-        console.log('検査内容を更新しました。');
-        closeServicesEditModal();
-    })
-    .catch(error => {
-        console.error('検査内容の更新エラー:', error);
-        alert('検査内容の更新に失敗しました。');
-    });
+async function saveClaimDetail() {
+    if (!editingClaimDetailDocId || claimDetailSaving) return;
+    const ref = db.collection('appointments').doc(editingClaimDetailDocId);
+    const value = claimDetailTextarea.value;
+    claimDetailSaving = true;
+    saveClaimDetailBtn.disabled = cancelClaimDetailBtn.disabled = claimDetailTextarea.disabled = true;
+    const statusLabel = document.getElementById('claimDetailStatus');
+    statusLabel.textContent = '保存中…';
+    try {
+        // Do not overwrite a newer edit made in another window/device.
+        const saveTransaction = () => db.runTransaction(async transaction => {
+            const current = await transaction.get(ref);
+            if (!current.exists) throw new Error('予約が削除されています。');
+            const saved = current.data().claimDetail || '';
+            if (saved !== originalClaimDetail && saved !== value) {
+                throw new Error('別の画面でClaim詳細が更新されています。入力内容をコピーしてから開き直してください。');
+            }
+            transaction.update(ref, { claimDetail: value });
+        });
+        await (typeof window !== 'undefined' && window.sosInteraction ? window.sosInteraction.save(`claim:${editingClaimDetailDocId}`, null, () => saveTransaction()) : saveTransaction());
+        const displayed = displayedAppointments.get(editingClaimDetailDocId);
+        if (displayed) displayedAppointments.set(editingClaimDetailDocId, { ...displayed, claimDetail: value });
+        originalClaimDetail = value;
+        statusLabel.textContent = '保存しました';
+        claimDetailSaving = false;
+        closeClaimDetailModal();
+    } catch (error) {
+        console.error('Claim詳細の保存エラー:', error);
+        statusLabel.textContent = error.message || '保存できませんでした。入力内容は保持されています。';
+    } finally {
+        claimDetailSaving = false;
+        saveClaimDetailBtn.disabled = cancelClaimDetailBtn.disabled = claimDetailTextarea.disabled = false;
+    }
 }
 
 // ===== 紹介先 分類ロジック =====
@@ -752,7 +824,7 @@ function saveServices() {
 function openShokaijyoModal(docId, destKey) {
     if (!REFERRAL_FULL[destKey]) return;
 
-    db.collection('appointments').doc(docId).get().then(doc => {
+    readInteractionAppointment(docId).then(doc => {
         if (!doc.exists) return;
         const data = doc.data();
         const saved = data.referrals && data.referrals[destKey];

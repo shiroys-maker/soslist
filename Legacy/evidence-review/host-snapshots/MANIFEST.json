@@ -1,0 +1,27 @@
+{
+  "BookOriginalHEAD": "1c812091c7b6c7ae90b4083396071dde02683cb5",
+  "MiniOriginalHEAD": "256d190c953527bc86bf1e567bbef94de1fe3246",
+  "MiniSnapshotHEAD": "bf597e21301d9b39530d9349650b3d53781bba57",
+  "canonicalRunnerSameBothHosts": true,
+  "canonicalReporter": "Mini device-aware version; no active runtime dependency",
+  "originalWorkingFiles": [
+    {
+      "path": "Legacy/evidence-review/host-snapshots/macbook-1c81209/local/evidence-review/runner.cjs",
+      "sha256": "fb7b21a478f303a948ae74ed12208b54ca7432dea1c84347c7b8e683bb16e2bc"
+    },
+    {
+      "path": "Legacy/evidence-review/host-snapshots/macbook-1c81209/local/evidence-review/anonymous-reporter.cjs",
+      "sha256": "12f9e5ede0c7d5c021027e322aa0622371dda2ee6ea8214dacf5fab238658147"
+    },
+    {
+      "path": "Legacy/evidence-review/host-snapshots/mac-mini-256d190/local/evidence-review/runner.cjs",
+      "sha256": "fb7b21a478f303a948ae74ed12208b54ca7432dea1c84347c7b8e683bb16e2bc"
+    },
+    {
+      "path": "Legacy/evidence-review/host-snapshots/mac-mini-256d190/local/evidence-review/anonymous-reporter.cjs",
+      "sha256": "76f7dcf04c721826ca7924f3fd0f3cd8108c9564305247f9e489e0400dd45d52"
+    }
+  ],
+  "originalSourceChanged": false,
+  "newSummaryNeedsRetiredRunnerOrReporter": false
+}

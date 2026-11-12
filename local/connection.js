@@ -1,17 +1,13 @@
 // Local viewer connection recovery. Logs contain no appointment data or error messages.
 (() => {
-    const panel = document.createElement('div');
-    panel.id = 'connection-status';
-    panel.innerHTML = '<span role="status" aria-live="polite"></span> <button type="button">再接続</button> <button type="button">診断ログ保存</button>';
-    document.getElementById('main-app-container').prepend(panel);
-    const label = panel.querySelector('span');
-    const buttons = panel.querySelectorAll('button');
+    const reconnectButton = document.getElementById('reconnectButton');
     const key = 'soslist-connection-log-v1';
     let logs = [];
     try { logs = JSON.parse(localStorage.getItem(key) || '[]'); } catch (_) {}
     if (!Array.isArray(logs)) logs = [];
     let active = false, generation = 0, authGeneration = 0;
     let deadline, retryTimer, attempts = 0, lastSuccess = null;
+    let lastCheck = 0, terminalError = false;
     const clearTimers = () => { clearTimeout(deadline); clearTimeout(retryTimer); deadline = null; retryTimer = null; };
     function log(event, code = '') {
         logs.push({ time: new Date().toISOString(), event, code });
@@ -19,29 +15,37 @@
         try { localStorage.setItem(key, JSON.stringify(logs)); } catch (_) {}
     }
     function show(message) {
-        label.textContent = message + (lastSuccess ? `（最終受信 ${lastSuccess.toLocaleTimeString('ja-JP')}）` : '');
+        reconnectButton.title = '再接続: ' + message + (lastSuccess ? `（最終受信 ${lastSuccess.toLocaleTimeString('ja-JP')}）` : '');
     }
     function retry(reason, code = '') {
         clearTimers();
         log(reason, code);
         if (!active) return;
         if (['permission-denied', 'unauthenticated', 'failed-precondition', 'invalid-argument'].includes(code)) {
+            terminalError = true;
             show(`読み込みエラー: ${code}。ログイン状態を確認して再接続してください。`);
             return;
         }
         if (!navigator.onLine) { show('オフラインです。接続の復帰を待っています。'); return; }
-        if (attempts >= 5) { show('接続を回復できませんでした。「再接続」を押してください。'); return; }
-        const delay = Math.min(30000, 1000 * 2 ** attempts++);
+        const delay = attempts >= 5 ? 60000 : Math.min(30000, 1000 * 2 ** attempts++);
         show(`接続を確認しています。${delay / 1000}秒後に再試行します。`);
-        retryTimer = setTimeout(() => { if (active) setupRealtimeListener(); }, delay);
+        retryTimer = setTimeout(() => { if (active) setupRealtimeListener({ preserveRows: true }); }, delay);
     }
     function reconnect() {
         if (!active) return;
-        attempts = 0;
+        attempts = 0; terminalError = false; lastCheck = Date.now();
         log('manual-or-resume-reconnect');
-        setupRealtimeListener();
+        setupRealtimeListener({ preserveRows: true });
     }
     window.sosConnection = {
+        check(force = false) {
+            if (!active || !navigator.onLine || terminalError || deadline || retryTimer) return;
+            const now = Date.now();
+            if (now - lastCheck < 60000) return;
+            if (!force && lastSuccess && now - lastSuccess.getTime() < 60000) return;
+            lastCheck = now;
+            reconnect();
+        },
         begin() {
             clearTimers();
             const token = ++generation;
@@ -67,7 +71,7 @@
             if (active && token === generation) retry('listen-error', error.code || 'unknown');
         },
         async start() {
-            active = true; attempts = 0;
+            active = true; attempts = 0; terminalError = false; lastCheck = 0; lastSuccess = null;
             const session = ++authGeneration;
             const initialDate = formatDateInputValue(new Date());
             dateFilter.value = initialDate;
@@ -90,14 +94,7 @@
         },
         stop() { active = false; generation++; authGeneration++; clearTimers(); log('logout'); }
     };
-    buttons[0].addEventListener('click', reconnect);
-    buttons[1].addEventListener('click', () => {
-        const nativeSave = window.webkit?.messageHandlers?.saveConnectionLog;
-        if (nativeSave) { nativeSave.postMessage(JSON.stringify(logs, null, 2)); return; }
-        const url = URL.createObjectURL(new Blob([JSON.stringify(logs, null, 2)], { type: 'application/json' }));
-        const link = document.createElement('a'); link.href = url; link.download = 'soslist-connection-log.json'; link.click();
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-    });
+    reconnectButton.addEventListener('click', reconnect);
     window.addEventListener('offline', () => { if (active) { clearTimers(); deadline = null; show('オフラインです。接続の復帰を待っています。'); log('offline'); } });
     window.addEventListener('online', reconnect);
     document.addEventListener('visibilitychange', () => {

@@ -1,7 +1,7 @@
 # Codex referral classification
 
 The live SOSPDF folder action is managed as `soslist-uploader` in `~/Projects/apps.tsv`.
-Its source is `/Users/shungohiroyasu/soslist/openai-processor`, **not this repository's older `openai-processor` watcher**. The live importer README documents configuration, dry runs and explicit reclassification.
+Its source is `/Users/shungohiroyasu/soslist/openai-processor`, not a watcher in this repository (the obsolete API watcher was removed on 2026-09-30). The live importer README documents configuration, dry runs and explicit reclassification.
 
 On new PDF imports, Codex extracts the appointment and identifies each service category using `routing-policy.txt` in that live source directory. Firestore `appointments.referralRouting` contains version 1, provider `codex`, sourceServices/sourceCptCodes, service assignments, destinations, Japanese draft purposes and reviewRequired.
 
