@@ -32,6 +32,7 @@ let sensitiveViewsAllowed = true;
 function setSensitiveViewsAllowed(allowed) {
     sensitiveViewGeneration++;
     sensitiveViewsAllowed = allowed === true;
+    knownReservationWindows.length = 0;
 }
 function captureSensitiveViewSession() {
     const generation = sensitiveViewGeneration;
@@ -179,26 +180,72 @@ function resetLogoutTimer() {
     startLogoutTimer();
 }
 
-async function jumpToAdjacentReservationDate(direction) {
-    const viewIsCurrent = captureSensitiveViewSession();
-    if (!viewIsCurrent()) return;
-    if (!dateFilter.value) {
-        return;
-    }
+// Reservation dates seen in loaded list windows. A window starting at `from`
+// holds every appointment on or after it, up to `to` (its last date when the
+// 300-row page is full), so ◀▶ can answer instantly without a network round trip.
+const APPOINTMENT_PAGE_LIMIT = 300;
+const ADJACENT_DATE_TIMEOUT_MS = 3000;
+const knownReservationWindows = [];
 
-    try {
-        const targetDate = await findAdjacentReservationDate(dateFilter.value, direction);
-        if (!viewIsCurrent()) return;
-        if (!targetDate) {
-            return;
-        }
-        dateFilter.value = targetDate;
-        dateFilter.dispatchEvent(new Event('change'));
-    } catch (error) {
-        console.error('予約日ジャンプエラー:', error);
-    }
+function rememberReservationDates(fromYmd, querySnapshot) {
+    const dates = new Set();
+    let count = 0;
+    querySnapshot.forEach(doc => {
+        count++;
+        const date = getCorrectedAppointmentDate(doc.data());
+        if (date) dates.add(formatDateInTokyo(date));
+    });
+    const sorted = [...dates].filter(d => d >= fromYmd).sort();
+    const to = count >= APPOINTMENT_PAGE_LIMIT ? (sorted[sorted.length - 1] || fromYmd) : '9999-12-31';
+    const index = knownReservationWindows.findIndex(w => w.from === fromYmd);
+    const entry = { from: fromYmd, to, dates: sorted.filter(d => d <= to) };
+    if (index >= 0) knownReservationWindows[index] = entry;
+    else knownReservationWindows.push(entry);
 }
 
+function findKnownAdjacentDate(baseYmd, direction) {
+    let best = null;
+    for (const w of knownReservationWindows) {
+        if (baseYmd < w.from || baseYmd > w.to) continue;
+        const hit = direction < 0
+            ? w.dates.filter(d => d < baseYmd).pop()
+            : w.dates.find(d => d > baseYmd);
+        if (hit && (!best || (direction < 0 ? hit > best : hit < best))) best = hit;
+    }
+    return best;
+}
+
+function shiftYmd(baseYmd, days) {
+    const date = new Date(`${baseYmd}T12:00:00+09:00`);
+    date.setTime(date.getTime() + days * 86400000);
+    return formatDateInTokyo(date);
+}
+
+// Each click reads the current value; a slow lookup is dropped if the user moved on.
+async function stepReservationDate(input, direction, apply) {
+    const viewIsCurrent = captureSensitiveViewSession();
+    const baseYmd = input?.value;
+    if (!viewIsCurrent() || !baseYmd) return;
+    let target = findKnownAdjacentDate(baseYmd, direction);
+    if (!target) {
+        try {
+            target = await findAdjacentReservationDate(baseYmd, direction);
+        } catch (error) {
+            console.warn('予約日ジャンプ: 前後の予約日を取得できないため1日移動します', error?.code || error);
+        }
+        if (target === undefined) target = shiftYmd(baseYmd, direction);
+    }
+    if (!viewIsCurrent() || !target || input.value !== baseYmd) return;
+    input.value = target;
+    apply?.();
+}
+
+function jumpToAdjacentReservationDate(direction) {
+    return stepReservationDate(dateFilter, direction, () => dateFilter.dispatchEvent(new Event('change')));
+}
+
+// Returns the adjacent date, null when the server confirms there is none, or
+// undefined when only an untrustworthy cache answer (or nothing) arrived in time.
 async function findAdjacentReservationDate(baseYmd, direction) {
     const currentDate = new Date(`${baseYmd}T00:00:00`);
     if (Number.isNaN(currentDate.getTime())) {
@@ -212,12 +259,18 @@ async function findAdjacentReservationDate(baseYmd, direction) {
     const boundaryDate = isPrevious ? startOfDay : endOfDay;
     const sortDirection = isPrevious ? 'desc' : 'asc';
 
-    const querySnapshot = await db.collection("appointments")
-        .where("appointmentDateTime", comparisonOperator, boundaryDate)
-        .orderBy("appointmentDateTime", sortDirection)
-        .limit(1)
-        .get();
+    let timer;
+    const querySnapshot = await Promise.race([
+        db.collection("appointments")
+            .where("appointmentDateTime", comparisonOperator, boundaryDate)
+            .orderBy("appointmentDateTime", sortDirection)
+            .limit(1)
+            .get(),
+        new Promise(resolve => { timer = setTimeout(() => resolve(null), ADJACENT_DATE_TIMEOUT_MS); })
+    ]).finally(() => clearTimeout(timer));
 
+    // Without persistence the memory cache only holds the visible window.
+    if (!querySnapshot || querySnapshot.metadata?.fromCache) return undefined;
     if (querySnapshot.empty) {
         return null;
     }
@@ -225,29 +278,14 @@ async function findAdjacentReservationDate(baseYmd, direction) {
     const targetAppointment = querySnapshot.docs[0].data();
     const targetDate = getCorrectedAppointmentDate(targetAppointment);
     if (!targetDate) {
-        return null;
+        return undefined;
     }
 
     return formatDateInTokyo(targetDate);
 }
 
-async function jumpToAdjacentSummaryReservationDate(direction) {
-    const viewIsCurrent = captureSensitiveViewSession();
-    if (!viewIsCurrent()) return;
-    if (!summaryDateInput?.value) {
-        return;
-    }
-
-    try {
-        const targetDate = await findAdjacentReservationDate(summaryDateInput.value, direction);
-        if (!viewIsCurrent()) return;
-        if (!targetDate) {
-            return;
-        }
-        summaryDateInput.value = targetDate;
-    } catch (error) {
-        console.error('Summary 予約日ジャンプエラー:', error);
-    }
+function jumpToAdjacentSummaryReservationDate(direction) {
+    return stepReservationDate(summaryDateInput, direction);
 }
 
 let resultsWaitingOnly = false;
@@ -331,7 +369,7 @@ function setupRealtimeListener() {
     const waitingMode = resultsWaitingOnly;
     let query = db.collection('appointments');
     if (waitingMode) query = query.where('appointmentDateTime', '>', resultsWaitingCutoff(new Date())).orderBy('appointmentDateTime');
-    else query = query.where('appointmentDateTime', '>=', filterDate).orderBy('appointmentDateTime').limit(300);
+    else query = query.where('appointmentDateTime', '>=', filterDate).orderBy('appointmentDateTime').limit(APPOINTMENT_PAGE_LIMIT);
     // No row limit within the requested two-month window: don't omit pending referrals.
     let active = true, latestSnapshot, refreshTimer;
     tableBody.innerHTML = `<tr><td colspan="${SOSLIST_TARGET.deleteColumn ? 12 : 11}" class="appointments-empty">読み込み中…</td></tr>`;
@@ -506,6 +544,7 @@ function setupRealtimeListener() {
     const stopSnapshot = query.onSnapshot(...(connection ? [{ includeMetadataChanges: true }] : []), querySnapshot => {
           if (!active || (connection && !connection.snapshot(connectionToken, querySnapshot))) return;
           latestSnapshot = querySnapshot;
+          if (!waitingMode && !querySnapshot.metadata?.fromCache) rememberReservationDates(localDateStr, querySnapshot);
           renderSnapshot(querySnapshot);
           if (waitingMode && !refreshTimer) refreshTimer = setInterval(() => renderSnapshot(latestSnapshot), 30000);
       }, error => {
