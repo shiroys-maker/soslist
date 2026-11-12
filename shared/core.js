@@ -1170,13 +1170,26 @@ function codexReferralPurpose(routing, destination) {
     return hasOrtho ? [...new Set(exams)].join('、') + 'の依頼' : original;
 }
 
+// Hearing and vision screens are performed onsite under the clinic policy, also inside
+// general/SHA appointments; an import may still have left them as REVIEW.
+const ONSITE_SCREEN_SERVICE = /AUDIOMETR|HEARING\s+SCREEN|TYMPANOMETR|ACOUSTIC\s+REFLEX|VISUAL\s+ACUITY\s+SCREEN/i;
+const ONSITE_SCREEN_CPT = /^(?:9255[0-7]|9256[78]|99173)$/;
+function isOnsiteScreenAssignment(routing, assignment) {
+    const service = routing.sourceServices[assignment.serviceIndex];
+    const cpt = routing.sourceCptCodes.length === routing.sourceServices.length
+        ? routing.sourceCptCodes[assignment.serviceIndex] : '';
+    return ONSITE_SCREEN_SERVICE.test(String(service || '')) || ONSITE_SCREEN_CPT.test(String(cpt || '').trim());
+}
+
 function buildReferralReviewHTML(data) {
     if (!data?.referralRouting) return '';
     const routing = getCodexReferralRouting(data);
     if (routing && !routing.reviewRequired) return '';
+    const reviews = routing ? (routing.assignments || []).filter(a => a.destination === 'REVIEW') : [];
+    const pending = reviews.filter(a => !isOnsiteScreenAssignment(routing, a));
+    if (routing && reviews.length && !pending.length) return '';
     const reasons = routing
-        ? (routing.assignments || []).filter(a => a.destination === 'REVIEW')
-            .map(a => `${routing.sourceServices[a.serviceIndex] || ''}: ${a.reason || ''}`).join('\n')
+        ? pending.map(a => `${routing.sourceServices[a.serviceIndex] || ''}: ${a.reason || ''}`).join('\n')
         : '検査内容またはCPTコードが変わったため、紹介先を再確認してください。';
     return `<span class="referral-review" style="display:block;color:#92400e;font-size:11px;white-space:normal" title="${escapeHtml(reasons)}">紹介先要確認</span>`;
 }

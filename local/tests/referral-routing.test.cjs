@@ -231,3 +231,27 @@ test('only supported provider and schema versions can supply generated referral 
   assert.equal(ctx.getCodexReferralRouting(data),null);
   assert.match(ctx.buildReferralReviewHTML(data),/紹介先要確認/);
 });
+
+test('onsite hearing and vision screens marked REVIEW do not raise the review notice', () => {
+  const services = ['VISUAL ACUITY SCREEN', 'PURE TONE AUDIOMETRY, AIR', 'Gen Med SHA Requiring 6-10 DBQs'];
+  const data = { ...fixture(), services, cptCode: ['99173', '92552', '99456'] };
+  data.referralRouting = { version: 1, provider: 'openai-api', sourceServices: [...services], sourceCptCodes: [...data.cptCode],
+    destinations: [], purposes: {}, reviewRequired: true, assignments: [
+      { serviceIndex: 0, destination: 'NONE', category: 'onsite', reason: '院内実施' },
+      { serviceIndex: 1, destination: 'REVIEW', category: 'review', reason: '一般/SHA予約内の聴力検査の実施先を確認' },
+      { serviceIndex: 2, destination: 'NONE', category: 'onsite', reason: '院内診察' },
+    ] };
+  assert.equal(ctx.buildReferralReviewHTML(data), '');
+  assert.deepEqual(Array.from(ctx.determineReferralDests(data.services, null, data)), []);
+  // Matched by CPT even when the service wording is unfamiliar.
+  data.services[1] = data.referralRouting.sourceServices[1] = 'SCREENING TEST, AIR ONLY';
+  assert.equal(ctx.buildReferralReviewHTML(data), '');
+  // A genuinely unresolved service in the same appointment still asks for review, listing only that service.
+  data.services.push('MRI brain'); data.referralRouting.sourceServices.push('MRI brain');
+  data.cptCode.push('70551'); data.referralRouting.sourceCptCodes.push('70551');
+  data.referralRouting.assignments.push({ serviceIndex: 3, destination: 'REVIEW', category: 'review', reason: '紹介先未設定' });
+  const review = ctx.buildReferralReviewHTML(data);
+  assert.match(review, /紹介先要確認/);
+  assert.match(review, /MRI brain: 紹介先未設定/);
+  assert.doesNotMatch(review, /AIR ONLY/);
+});
