@@ -120,6 +120,8 @@
 
     // Googleで本人確認（SOSListのログイン状態には影響しない別インスタンスを使う）
     async function googleIdToken() {
+        // 新しい版の準備ができていればそちらを使う（タップ直後に同期的に開くため await を挟まない）
+        if (window.SOS_PASSKEY_GOOGLE) return window.SOS_PASSKEY_GOOGLE.signIn();
         const app = firebase.initializeApp(firebaseConfig, 'passkey-google-' + Date.now());
         try {
             const gAuth = app.auth();
