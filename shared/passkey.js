@@ -26,8 +26,22 @@
         }
     } catch (_) { /* ストレージ不可でも続行 */ }
 
+    // パスワードでのログインは廃止済み。以前のパスワードログインが端末に残っていたら終了させる。
+    auth.onAuthStateChanged(async user => {
+        if (!user) return;
+        try {
+            const { claims } = await user.getIdTokenResult();
+            if (auth.currentUser !== user || claims.passkey) return;
+            document.getElementById('logoutButton').click();
+            loginError.textContent = 'パスワードでのログインは終了しました。「パスキーでログイン」を押してください。';
+        } catch (_) {}
+    });
+
     const supported = !!(lib && lib.browserSupportsWebAuthn());
-    if (!supported) return;
+    if (!supported) {
+        loginError.textContent = 'このブラウザはパスキーに対応していません。最新の Safari / Chrome / Edge で開いてください。';
+        return;
+    }
     loginArea.hidden = false;
 
     const MESSAGES = {

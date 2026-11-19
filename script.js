@@ -15,10 +15,7 @@ const SUMMARY_MIRROR_DOC_PREFIX = 'dailyBrief_';
 // --- DOM要素の取得 ---
 const loginContainer = document.getElementById('login-container');
 const mainAppContainer = document.getElementById('main-app-container');
-const loginButton = document.getElementById('loginButton');
 const logoutButton = document.getElementById('logoutButton');
-const loginEmailInput = document.getElementById('loginEmail');
-const loginPasswordInput = document.getElementById('loginPassword');
 const loginError = document.getElementById('loginError');
 const userEmailSpan = document.getElementById('userEmail');
 const tableBody = document.querySelector("#appointmentsTable tbody");
@@ -274,7 +271,6 @@ function clearSensitiveUi() {
     }
     for (const input of document.querySelectorAll('.modal input, .modal textarea, .modal select')) input.value = '';
     searchInput.value = '';
-    loginPasswordInput.value = '';
     userEmailSpan.textContent = '';
     detailsModal.dataset.editingId = '';
     editingDateTimeDocId = editingPhoneDocId = null;
@@ -305,15 +301,6 @@ auth.onAuthStateChanged(user => {
 });
 
 // --- イベントリスナー ---
-loginButton.addEventListener('click', () => {
-    const email = loginEmailInput.value;
-    const password = loginPasswordInput.value;
-    auth.signInWithEmailAndPassword(email, password)
-        .catch(error => {
-            loginError.textContent = `ログインに失敗しました: ${error.message}`;
-        });
-});
-
 logoutButton.addEventListener('click', async () => {
     setSensitiveViewsAllowed(false);
     clearSensitiveUi();
@@ -321,18 +308,6 @@ logoutButton.addEventListener('click', async () => {
     try { await auth.signOut(); }
     catch (_) {
         loginError.textContent = 'ログアウトを完了できませんでした。画面の再表示は停止しました。端末を他の人へ渡さず、ページを再読み込みしてログアウトをやり直してください。';
-    }
-});
-
-loginEmailInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-        loginButton.click();
-    }
-});
-
-loginPasswordInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-        loginButton.click();
     }
 });
 

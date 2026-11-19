@@ -7,8 +7,12 @@ rules_version = '2';
 //    (no create/delete, no other fields, no dailyBrief_ documents). Password and SOSList Local sessions unchanged.
 service cloud.firestore {
   match /databases/{database}/documents {
+    // 2026-11-19: password login ended for the shared sos@ account (web uses passkeys, SOSList Local uses
+    // localSession). Only the read-only local@ account may still use a password, for the local QTC tools
+    // (~/Documents/QTC_server ImageReport.html / audiogram.html).
     function passwordSession() {
-      return request.auth != null && request.auth.token.firebase.sign_in_provider == 'password';
+      return request.auth != null && request.auth.token.firebase.sign_in_provider == 'password'
+        && request.auth.uid == 'MsMNpta5iBfNnXh0sXGiAsIQKw22';
     }
     function passkeySession() {
       return request.auth != null
@@ -78,7 +82,7 @@ service cloud.firestore {
 
     match /appointments/{docId} {
       allow read: if (passwordSession() || localSession() || passkeySession()) && readerUid();
-      allow write: if (passwordSession() || localSession()) && writerUid();
+      allow write: if localSession() && writerUid();
       allow update: if passkeySession() && writerUid() && !docId.matches('^dailyBrief_.*') && webEditOk();
     }
     match /{document=**} {

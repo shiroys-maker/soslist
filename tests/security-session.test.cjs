@@ -22,13 +22,13 @@ test('document IDs are escaped in both layouts without changing the data key',()
  h.listeners.at(-1)({forEach:fn=>fn({id,data:()=>({...doc().data(),appointmentDateTime:{toDate:()=>new Date('2026-10-17T00:00:00Z')}})})});
  for(const name of ['table','mobileAppointmentsList']){assert(!h.node(name).innerHTML.includes('<img src=x'));assert(h.node(name).innerHTML.includes('&quot;&gt;&lt;img'))}assert(vm.runInContext('displayedAppointments.has('+JSON.stringify(id)+')',h.ctx));
 });
-test('logout removes displayed records, modal contents, passwords and audio sources',()=>{
+test('logout removes displayed records, modal contents and audio sources',()=>{
  const h=harness(),audio=new Element();audio.src='synthetic://audio';h.node('summaryModalBody').children=[audio];
  for(const id of ['summaryModal','detailsModal','shokaijyoModal'])h.node(id).style.display='flex';
  for(const id of ['table','mobileAppointmentsList','details-content-container','searchResultsList','shokaijyoSheetContainer'])h.node(id).innerHTML='SYNTHETIC';h.logout();
  for(const id of ['summaryModal','detailsModal','shokaijyoModal'])assert.equal(h.node(id).style.display,'none');
  for(const id of ['table','mobileAppointmentsList','details-content-container','searchResultsList','shokaijyoSheetContainer'])assert.equal(h.node(id).innerHTML,'');
- assert.equal(h.node('notesTextarea').value,'');assert.equal(h.node('loginPassword').value,'');assert(audio.paused&&audio.loaded);assert.equal(audio.src,undefined);assert(h.node('pdf').closed);
+ assert.equal(h.node('notesTextarea').value,'');assert(audio.paused&&audio.loaded);assert.equal(audio.src,undefined);assert(h.node('pdf').closed);
 });
 test('late modal reads cannot reopen views after logout or a new session',async()=>{
  for(const [method,args,modal] of [['openDetailsModal',['synthetic'],'detailsModal'],['openShokaijyoModal',['synthetic','KIN'],'shokaijyoModal'],['openEditModal',['synthetic'],'editModal'],['openPhoneEditModal',['synthetic'],'editPhoneModal'],['openVisitDateModal',['synthetic','KIN'],'visitDateModal']]){
