@@ -140,11 +140,20 @@
     // iPhoneのSafariはパスキー作成をタップ直後にしか許可しないため、②は通信を挟まず即座に呼び出す。
     let pending = null; // { g, label, challengeId, options, at }
 
+    // LINE・Gmail等のアプリ内ブラウザではGoogleの本人確認画面から結果が戻らないことがある
+    const inAppBrowser = () => /\bLine\/|FBAN|FBAV|Instagram|MicroMessenger|GSA\/|\bwv\)/i.test(navigator.userAgent || '');
+    const IN_APP_MESSAGE = 'アプリ内のブラウザ（LINE等）ではGoogleでの本人確認ができません。右下（または右上）のメニューから「Safariで開く」（Androidは「ブラウザで開く」）を選び、そこで登録してください。';
+
     async function prepare() {
+        if (inAppBrowser()) return IN_APP_MESSAGE;
         let g;
         try { g = await googleIdToken(); }
         catch (e) {
-            if (e?.code === 'auth/popup-closed-by-user' || e?.code === 'auth/cancelled-popup-request') return 'Googleでの本人確認を取り消しました。';
+            if (e?.code === 'auth/popup-closed-by-user' || e?.code === 'auth/cancelled-popup-request') {
+                if (inAppBrowser()) return IN_APP_MESSAGE;
+                return 'Googleでの本人確認が完了しませんでした（' + e.code + '）。Googleの画面を閉じずに最後まで進めてください。'
+                    + 'それでも同じ表示になる場合は、Safari（またはChrome）でこのページを直接開き、「パスキー」ボタンからもう一度お試しください。';
+            }
             if (e?.code === 'auth/popup-blocked') return 'ポップアップがブロックされました。ブラウザでポップアップを許可してから、もう一度押してください。';
             return 'Googleで本人確認できませんでした: ' + (e?.message || '');
         }
