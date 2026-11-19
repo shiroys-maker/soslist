@@ -157,8 +157,8 @@
             if (e?.code === 'auth/popup-blocked') return 'ポップアップがブロックされました。ブラウザでポップアップを許可してから、もう一度押してください。';
             return 'Googleで本人確認できませんでした: ' + (e?.message || '');
         }
-        const label = prompt(`${g.email} のパスキーを登録します。\nこの端末の名前（例: iPhone、事務所PC）`, '');
-        if (label === null) return '登録を取り消しました。';
+        // 名前は任意。キャンセルされても登録は続ける（名前なしで登録）
+        const label = prompt(`${g.email} のパスキーを登録します。\nこの端末の名前（例: iPhone、事務所PC）。空欄のままOKでも構いません。`, '') || '';
         try {
             const { challengeId, options } = await call('register/options', {}, g.token);
             pending = { g, label, challengeId, options, at: Date.now() };
@@ -175,7 +175,7 @@
             await call('register/verify', { challengeId: p.challengeId, response, label: p.label }, p.g.token);
             return `登録しました（${p.g.email}）。次回から「パスキーでログイン」を使えます。`;
         } catch (e) {
-            if (cancelled(e)) return '登録を取り消しました。';
+            if (cancelled(e)) return 'パスキーの作成が完了しませんでした（' + (e?.name || '') + '）。Face IDの画面で「続ける」を押してください。もう一度ボタンを押すとやり直せます。';
             if (e?.name === 'InvalidStateError') return 'この端末には既に登録済みです。';
             return '登録できませんでした: ' + message(e);
         }
