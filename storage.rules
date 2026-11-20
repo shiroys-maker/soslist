@@ -1,6 +1,8 @@
 rules_version = '2';
 // Approved temporary containment, 2026-10-17 JST.
-// 2026-11-11: passkey sessions expire 6 hours after sign-in (auth_time).
+// 2026-11-20: the 6-hour auth_time check is enforced in firestore.rules only. In Storage the same
+//   timestamp expression denied every passkey request in production (Rules test API passed), so
+//   PDFs could not open. A PDF can only be found after reading Firestore, which still has the limit.
 // 2026-11-11: passkey custom-token sessions (passkey=true) are accepted like password sessions.
 // 2026-11-19: password sessions accepted only for the read-only local@ account (local QTC tools).
 service firebase.storage {
@@ -13,8 +15,7 @@ service firebase.storage {
               '237b7e79b7999499815fff072132a748acd7dbd740e484098a86b6dc59afe2ec',  // MacBook Air (2)
           '4b14327173ddc525fcd88b56594066d56dd8a91789843cc10ffd8aabb3ecd27d'   // Mac mini
             ])
-          || (request.auth.token.firebase.sign_in_provider == 'custom' && request.auth.token.get('passkey', false) == true
-            && request.time < timestamp.value(request.auth.token.auth_time * 1000) + duration.value(6, 'h')))
+          || (request.auth.token.firebase.sign_in_provider == 'custom' && request.auth.token.get('passkey', false) == true))
         && request.auth.uid in ['MsMNpta5iBfNnXh0sXGiAsIQKw22', 'jpnoE4ygk5ZqR8rsaJnzRSy5poA3'];
     }
     match /{allPaths=**} {
